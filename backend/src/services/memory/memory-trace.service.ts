@@ -122,7 +122,7 @@ export async function resolveConceptIdSafe(
 }
 
 /** FSRS 统一保留率（#8 legacy 退役）：trace 有 FSRS 状态用 FSRS，否则 fsrsStateFromLegacy 推导 */
-function fsrsRetentionOfTrace(
+export function fsrsRetentionOfTrace(
   trace: {
     fsrsStability: number | null;
     fsrsDifficulty: number | null;

@@ -1614,6 +1614,9 @@ export const adminVirtualLearnersApi = {
       verbosity?: string;
       enthusiasm?: string;
       confusionStyle?: string;
+      patience?: string;
+      questionStyle?: string;
+      emotionalRange?: string;
     };
     notes?: string;
   }) => {

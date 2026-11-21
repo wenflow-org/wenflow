@@ -40,6 +40,7 @@ function makeDeps(overrides: Partial<RetentionProbeDeps> = {}) {
     updateProjection: async (key, payload) => {
       rows.set(key, { projectionKey: key, payload });
     },
+    loadLessonQuestions: async () => [],
     generateQuestion: async (input) => ({
       question: `${input.conceptName} 的新情境题？`,
       type: 'single_choice',
@@ -147,8 +148,8 @@ describe('RetentionProbeService.scheduleForSession', () => {
 });
 
 describe('RetentionProbeService.answer', () => {
-  async function dueProbe() {
-    const { deps, rows, evidence, failed, passedReviews } = makeDeps();
+  async function dueProbe(overrides: Partial<RetentionProbeDeps> = {}, expectedViews = 1) {
+    const { deps, rows, evidence, failed, passedReviews } = makeDeps(overrides);
     const service = new RetentionProbeService(deps);
     await service.scheduleForSession({
       userId: 'u1',
@@ -162,12 +163,46 @@ describe('RetentionProbeService.answer', () => {
     const probe = JSON.parse(row.payload) as RetentionProbeRecord;
     const dueAt = new Date(probe.scheduledAt);
     const views = await service.listDue('u1', { now: dueAt, limit: 1 });
-    expect(views).toHaveLength(1);
+    expect(views).toHaveLength(expectedViews);
     // 公开视图不含答案键
-    expect(JSON.stringify(views[0])).not.toContain('correctOptionIds');
-    expect(JSON.stringify(views[0])).not.toContain('expectedKeywords');
-    return { service, row, probe, dueAt, evidence, failed, passedReviews };
+    expect(JSON.stringify(views)).not.toContain('correctOptionIds');
+    expect(JSON.stringify(views)).not.toContain('expectedKeywords');
+    return { service, rows, row, probe, dueAt, evidence, failed, passedReviews };
   }
+
+  it('把原题面传给出题方，拒绝重复题，不写判分证据', async () => {
+    const loadLessonQuestions = jest.fn().mockResolvedValue(['请识别这个前提？']);
+    const generateQuestion = jest.fn().mockResolvedValue({
+      question: '请识别这个前提。', type: 'short_answer', conceptName: '识别隐含前提', expectedKeywords: ['条件'],
+    });
+    const { service, probe, dueAt, evidence, failed } = await dueProbe({ loadLessonQuestions, generateQuestion }, 0);
+    expect(loadLessonQuestions).toHaveBeenCalledWith('s1', 'u1');
+    expect(generateQuestion).toHaveBeenCalledWith(expect.objectContaining({ priorQuestions: ['请识别这个前提？'] }));
+    await expect(service.answer('u1', probe.id, '条件', { now: dueAt })).rejects.toThrow('RETENTION_PROBE_QUESTION_NOT_READY');
+    expect(evidence).toEqual([]);
+    expect(failed).toEqual([]);
+  });
+
+  it('无法核对原题时不出题，也不对学员扣分', async () => {
+    const generateQuestion = jest.fn();
+    const { service, probe, dueAt, evidence, failed } = await dueProbe({
+      loadLessonQuestions: async () => null, generateQuestion,
+    }, 0);
+    await expect(service.answer('u1', probe.id, 'A', { now: dueAt })).rejects.toThrow('RETENTION_PROBE_QUESTION_NOT_READY');
+    expect(generateQuestion).not.toHaveBeenCalled();
+    expect(evidence).toEqual([]);
+    expect(failed).toEqual([]);
+  });
+
+  it('存量坏题不会参与计分，也不会在提交时被替换', async () => {
+    const { service, rows, row, probe, dueAt, evidence, failed } = await dueProbe();
+    const stored = JSON.parse(rows.get(row.projectionKey)!.payload) as RetentionProbeRecord;
+    stored.question!.correctOptionIds = ['A', 'B'];
+    rows.set(row.projectionKey, { ...row, payload: JSON.stringify(stored) });
+    await expect(service.answer('u1', probe.id, 'A', { now: dueAt })).rejects.toThrow('RETENTION_PROBE_QUESTION_NOT_READY');
+    expect(evidence).toEqual([]);
+    expect(failed).toEqual([]);
+  });
 
   it('答错 → failed、写 retention:probe:result 证据并触发 canonical 降级', async () => {
     const { service, probe, dueAt, evidence, failed } = await dueProbe();

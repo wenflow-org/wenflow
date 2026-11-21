@@ -110,7 +110,10 @@ afterEach(() => {
   mountedWrappers.splice(0).forEach((w) => w.unmount());
 });
 
-describe('AdminConsole 导航冒烟', () => {
+/* 全量跑批时本文件与其它 344 个文件并行，asyncPage 的动态 chunk 挂载实测被拖到 13.7s
+   （隔离运行约 7s），已经贴到旧 15s waitFor 上限——这是「全量红、单跑绿」的根因，不是功能回归。
+   给该文件留出确定性的余量：describe 级超时 45s，重点 waitFor 放到 30s。 */
+describe('AdminConsole 导航冒烟', { timeout: 45_000 }, () => {
   beforeEach(async () => {
     // store 为模块级单例：清掉上一用例残留的跨页动线，避免污染本次挂载
     intent.scene = 'overview';
@@ -189,7 +192,7 @@ describe('AdminConsole 导航冒烟', () => {
     expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
     expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc' });
     // 详情组件走 asyncPage（delay:200），等待异步 chunk 挂载；全量跑批时机器慢，放宽超时
-    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 30000 });
   });
 
   it('深链 ?view=skill&id= 打开 Skill 详情二级页（设计页已平铺进本页，2026-10-15）', async () => {
@@ -198,7 +201,7 @@ describe('AdminConsole 导航冒烟', () => {
     expect(router.currentRoute.value.query).toMatchObject({ view: 'skill', id: 'teaching-turn' });
     expect(subPage.value).toMatchObject({ view: 'skill', id: 'teaching-turn' });
     // 详情组件走 asyncPage（delay:200），等异步 chunk 挂载；渲染的是 Skill 详情页本体（根 .mk-page.skd）
-    await vi.waitFor(() => expect(wrapper.find('.mk-page.skd').exists()).toBe(true), { timeout: 15000 });
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.skd').exists()).toBe(true), { timeout: 30000 });
     // 外壳保留：侧栏导航在
     expect(wrapper.find('nav[aria-label="管理导航"]').exists()).toBe(true);
   });
@@ -208,7 +211,7 @@ describe('AdminConsole 导航冒烟', () => {
   it('详情页内焦点在输入框时 Esc 只退出输入，第二次才退出详情', async () => {
     const { wrapper } = await mountConsole('/admin/people?view=user&id=user_abc');
     await settle();
-    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 30000 });
     const input = document.createElement('input');
     document.body.appendChild(input);
     input.focus();
@@ -230,7 +233,7 @@ describe('AdminConsole 导航冒烟', () => {
     await settle();
     await vi.waitFor(
       () => expect(wrapper.find('.mshell__content > .mk-page').exists()).toBe(true),
-      { timeout: 10000 }
+      { timeout: 20000 }
     );
     const listPage = wrapper.find('.mshell__content > .mk-page').element as HTMLElement;
     Object.defineProperty(listPage, 'scrollTop', { configurable: true, writable: true, value: 420 });
@@ -257,7 +260,7 @@ describe('AdminConsole 导航冒烟', () => {
     await settle();
     await vi.waitFor(
       () => expect(wrapper.find('.mshell__content > .mk-page').exists()).toBe(true),
-      { timeout: 10000 }
+      { timeout: 20000 }
     );
     const listPage = wrapper.find('.mshell__content > .mk-page').element as HTMLElement;
     Object.defineProperty(listPage, 'scrollTop', { configurable: true, writable: true, value: 420 });
@@ -356,7 +359,7 @@ describe('AdminConsole 导航冒烟', () => {
     await settle();
     expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
     expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc' });
-    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 30000 });
   });
 
   it('深链 ?view=card-import（无 id）仍打开导入卡二级页', async () => {
@@ -368,7 +371,7 @@ describe('AdminConsole 导航冒烟', () => {
     expect(subPage.value).toMatchObject({ view: 'card-import', id: 'new' });
     // 断言渲染的是导入表单本身，而不是回退后的卡墙：
     // 卡墙页只有「卡墙 共 20 张」，不会有导入页的 hero 标题与拖放区
-    await vi.waitFor(() => expect(wrapper.text()).toContain('导入卡文档'), { timeout: 15000 });
+    await vi.waitFor(() => expect(wrapper.text()).toContain('导入卡文档'), { timeout: 30000 });
     expect(wrapper.text()).toContain('拖入或点击选择');
   });
 

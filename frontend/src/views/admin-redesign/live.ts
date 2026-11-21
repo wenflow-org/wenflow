@@ -1980,11 +1980,24 @@ export async function liveCreateVirtual(data: {
   const profile: Record<string, unknown> = data.personaSeed
     ? { ...data.personaSeed, background: data.story || data.personaSeed.background }
     : { background: data.story }
+  // A1：traits 是独立列，模拟器只读列；别只把它留在 profile JSON 里（否则所有人同一腔调）。
+  const traitsRaw = data.personaSeed?.personalityTraits
+  const personalityTraits = traitsRaw && typeof traitsRaw === 'object'
+    ? traitsRaw as {
+        verbosity?: string
+        enthusiasm?: string
+        confusionStyle?: string
+        patience?: string
+        questionStyle?: string
+        emotionalRange?: string
+      }
+    : undefined
   const res = await adminVirtualLearnersApi.createVirtualLearner({
     name: data.name,
     learningGoal: (data.goal || '').trim(),
     notes: data.note?.trim() ? `${data.note.trim()} · ${data.story}` : data.story,
-    profile
+    profile,
+    ...(personalityTraits ? { personalityTraits } : {})
   })
   const created = res.data?.data ?? res.data ?? {}
   const createdId = String(

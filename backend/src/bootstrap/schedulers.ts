@@ -16,6 +16,8 @@ import { DurableEventConsumerRegistry } from '../events/consumer-registry';
 import { DurableOutboxWorker } from '../events/outbox.worker';
 import { handleLearnerEvent, LEARNER_EVENT_TYPES } from '../events/learner-event-consumer';
 import { LESSON_ENRICHMENT_EVENT_TYPE } from '../events/lesson-enrichment-event';
+import { PATH_QUALITY_REVIEW_EVENT_TYPE } from '../events/path-quality-review-event';
+import { observePathQualityReview } from '../services/learning/generation/path-review-observer';
 import { lessonKnowledgeEnrichmentConsumer } from '../services/learner/LessonKnowledgeEnrichmentConsumer';
 import { reviewCompletedConsumer } from '../services/learner/ReviewCompletedConsumer';
 import { learnerProfileService } from '../services/learner/LearnerProfileService';
@@ -73,6 +75,19 @@ export async function runVirtualLabStartupRecovery(): Promise<void> {
 const ENRICHMENT_EVENT_TYPES: ReadonlySet<DurableEventType> = new Set([LESSON_ENRICHMENT_EVENT_TYPE]);
 
 /**
+ * 路径质量评审泳道（2026-11-21）：模型评审是 10s+ 级 LLM 调用，不能占住学习者有序泳道，
+ * 也不能与课后增强互相排队。独立泳道只拾取 `path:quality-review`，并发执行。
+ */
+const PATH_REVIEW_EVENT_TYPES: ReadonlySet<DurableEventType> = new Set([PATH_QUALITY_REVIEW_EVENT_TYPE]);
+const PATH_REVIEW_LANE_CONCURRENCY = 2;
+
+/** 主泳道排除的后台 LLM 事件（两条独立泳道各自持有） */
+const BACKGROUND_LLM_EVENT_TYPES: ReadonlySet<DurableEventType> = new Set([
+  LESSON_ENRICHMENT_EVENT_TYPE,
+  PATH_QUALITY_REVIEW_EVENT_TYPE,
+]);
+
+/**
  * 课后增强泳道的并发度（#144）。
  *
  * 一次增强是 10–20s 的 LLM 调用：串行时第 N 个收课的用户要等前面 N-1 次跑完（线性积压）。
@@ -110,14 +125,23 @@ export function startOutboxWorker(): DurableOutboxWorker {
   durableConsumers.register([LESSON_ENRICHMENT_EVENT_TYPE], (event) =>
     lessonKnowledgeEnrichmentConsumer.handleEnrichmentEvent(event));
 
-  // 主泳道：串行，保持批内同用户队头语义；排除增强事件（增强另有泳道，不抢同一行）
+  // 路径质量评审（2026-11-21）：与 learner 线、课后增强都分开的独立泳道。
+  durableConsumers.register([PATH_QUALITY_REVIEW_EVENT_TYPE], (event) => observePathQualityReview(event));
+
+  // 主泳道：串行，保持批内同用户队头语义；排除后台 LLM 事件（增强/路径评审各有泳道，不抢同一行）
   const worker = new DurableOutboxWorker(durableConsumers, {
-    excludeEventTypes: ENRICHMENT_EVENT_TYPES,
+    excludeEventTypes: BACKGROUND_LLM_EVENT_TYPES,
   });
   // 增强泳道：只拾取增强事件，并发执行；唤醒由主泳道转发、关闭由主泳道一并停
   worker.attachSecondary(new DurableOutboxWorker(durableConsumers, {
     includeEventTypes: ENRICHMENT_EVENT_TYPES,
     concurrency: ENRICHMENT_LANE_CONCURRENCY,
+    ownsWakeListener: false,
+  }));
+  // 路径评审泳道：只拾取 path:quality-review，并发执行；失败只影响评审状态，不影响路径
+  worker.attachSecondary(new DurableOutboxWorker(durableConsumers, {
+    includeEventTypes: PATH_REVIEW_EVENT_TYPES,
+    concurrency: PATH_REVIEW_LANE_CONCURRENCY,
     ownsWakeListener: false,
   }));
   worker.start();

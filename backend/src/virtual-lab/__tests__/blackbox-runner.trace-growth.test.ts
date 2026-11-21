@@ -240,6 +240,25 @@ describe('#176-1 黑盒轨迹增长治理', () => {
     expect(stored.blackbox.learnerPrivateStateTrace).toHaveLength(120)
   }, 120000)
 
+  it('原子累计阶段覆盖，保留被压缩的中段并跳过回执重放', async () => {
+    const runner: any = new BlackboxVirtualLearnerRunner();
+    const holder = installSession(runner, makeSession());
+    const append = (stage: string, key?: string) => runner.persist(holder.current, JSON.parse(holder.current.stageResults), {
+      observation: { stage, visibleMessages: [], availableActions: ['chat'] }, control: {},
+    }, key);
+    for (let i = 0; i < 20; i++) await append('goal');
+    await append('path', 'path-receipt');
+    await append('path', 'path-receipt');
+    for (let i = 0; i < 181; i++) await append('teaching');
+    const state = JSON.parse(holder.current.stageResults);
+    expect(state.blackbox.publicTrace.some((entry: Trace) => entry.observation.stage === 'path')).toBe(false);
+    const { summary } = runner.buildSharedAuditTrace(holder.current, state);
+    expect(summary.stageCoverageSource).toBe('full-trace');
+    expect(summary.stageCoverage.path).toBe(true);
+    expect(summary.observedStageCounts.path).toBe(1);
+    expect(summary.publicTraceCount).toBe(202);
+  });
+
   it('私有状态轨迹的序号也走单调计数器（不再取 publicTrace.length）', async () => {
     const runner: any = new BlackboxVirtualLearnerRunner()
     const legacy: Trace[] = Array.from({ length: 400 }, (_, i) => ({

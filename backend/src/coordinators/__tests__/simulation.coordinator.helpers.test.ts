@@ -704,6 +704,15 @@ describe('misc pure helpers', () => {
       personalityTraits: {},
       knowledgeLevel: 'beginner'
     })
+
+    // A1（2026-11-21）：列空时回退 profile JSON 内的 traits（老数据/创建链路常见形状）
+    const nested = parseProfileData({
+      id: 'p3',
+      userId: 'u3',
+      profile: '{"personalityTraits":{"verbosity":"terse","questionStyle":"none"}}',
+      learningGoal: 'learn'
+    } as unknown as VirtualLearnerProfileRow)
+    expect(nested.personalityTraits).toEqual({ verbosity: 'terse', questionStyle: 'none' })
   })
 })
 

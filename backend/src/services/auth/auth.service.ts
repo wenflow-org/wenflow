@@ -325,6 +325,12 @@ class AuthService {
       return;
     }
 
+    const configuredOrigin = process.env.FRONTEND_URL?.trim() || process.env.FRONTEND_BASE_URL?.trim();
+    const resetUrl = new URL('/reset-password', configuredOrigin || 'http://localhost:5173');
+    if (!['http:', 'https:'].includes(resetUrl.protocol) || resetUrl.username || resetUrl.password) {
+      throw new Error('FRONTEND_URL 必须为有效的 HTTP(S) 地址');
+    }
+
     // 使该用户既有未使用重置令牌全部失效
     await prisma.password_reset_tokens.updateMany({
       where: { userId: user.id, usedAt: null },
@@ -339,10 +345,10 @@ class AuthService {
       data: { userId: user.id, tokenHash, expiresAt }
     });
 
-    const baseUrl = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
+    resetUrl.searchParams.set('token', token);
     await getPasswordResetMailProvider().sendPasswordReset({
       toName: user.name,
-      resetUrl: `${baseUrl}/reset-password?token=${token}`,
+      resetUrl: resetUrl.href,
       expiresInMinutes: Math.round(RESET_TOKEN_TTL_MS / 60000)
     });
 

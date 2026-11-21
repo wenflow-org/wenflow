@@ -23,7 +23,8 @@ import { executeSkill, auxSkillDefinitionMap } from '../../skills';
 import { normalizeConceptKey } from '../memory/memory-trace.service';
 import type { LessonReport } from '../ai-teaching/lesson-contract';
 import { parseExitTicketSubmission } from '../ai-teaching/lesson-contract';
-import { judgeCheckpointAnswer } from '../ai-teaching/teaching-checkpoint';
+import { isDuplicateCheckpointQuestion, judgeCheckpointAnswer } from '../ai-teaching/teaching-checkpoint';
+import { parseAssessmentQuestion, type AssessmentQuestion } from '../../utils/assessment-question';
 import { reviewCompletedConsumer } from './ReviewCompletedConsumer';
 import type { DurableDomainEvent } from '../../events/contracts';
 
@@ -38,13 +39,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const PLACEHOLDER_RE = /^concept-\d+$/i;
 
-export interface RetentionProbeQuestion {
-  question: string;
-  type: 'single_choice' | 'multi_choice' | 'short_answer';
+export interface RetentionProbeQuestion extends AssessmentQuestion {
   conceptName: string;
-  options?: Array<{ id: string; text: string }>;
-  correctOptionIds?: string[];
-  expectedKeywords?: string[];
 }
 
 export interface RetentionProbeResult {
@@ -119,11 +115,13 @@ export interface RetentionProbeDeps {
   listProjections: (userId: string) => Promise<Array<{ projectionKey: string; payload: string }>>;
   createProjection: (row: { projectionKey: string; userId: string; pathId: string | null; payload: string }) => Promise<void>;
   updateProjection: (projectionKey: string, payload: string) => Promise<void>;
+  loadLessonQuestions: (sessionId: string, userId: string) => Promise<string[] | null>;
   generateQuestion: (input: {
     subject: string;
     topic: string;
     taskTitle: string;
     conceptName: string;
+    priorQuestions: string[];
   }) => Promise<RetentionProbeQuestion | null>;
   writeEvidence: (input: {
     probe: RetentionProbeRecord;
@@ -257,41 +255,33 @@ export function toRetentionProbePublicView(probe: RetentionProbeRecord): Retenti
 
 function coerceQuestion(raw: any, conceptName: string): RetentionProbeQuestion | null {
   const out = raw?.output ?? raw;
-  const question = typeof out?.question === 'string' ? out.question.trim() : '';
-  if (!question) return null;
-  const declared = typeof out?.conceptName === 'string' ? out.conceptName.trim() : '';
-  const name = normalizeConceptKey(declared) === normalizeConceptKey(conceptName)
-    ? declared
-    : conceptName;
-  const options = Array.isArray(out?.options)
-    ? out.options
-        .filter((option: any) => option && typeof option.id === 'string' && typeof option.text === 'string')
-        .slice(0, 4)
-        .map((option: any) => ({ id: option.id.trim(), text: option.text.trim() }))
-    : [];
-  const optionIds = new Set(options.map((option) => option.id));
-  const wantsChoice = out?.type === 'single_choice' || out?.type === 'multi_choice';
-  const type: RetentionProbeQuestion['type'] = wantsChoice && options.length >= 2 ? out.type : 'short_answer';
-  const correctOptionIds: string[] = type !== 'short_answer' && Array.isArray(out?.correctOptionIds)
-    ? Array.from(new Set(out.correctOptionIds
-        .filter((id: any) => typeof id === 'string' && optionIds.has(id.trim()))
-        .map((id: string) => id.trim())))
-    : [];
-  const expectedKeywords = type === 'short_answer' && Array.isArray(out?.expectedKeywords)
-    ? out.expectedKeywords
-        .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
-        .map((keyword: string) => keyword.trim().slice(0, 40))
-        .slice(0, 3)
-    : [];
-  if (type !== 'short_answer' && correctOptionIds.length === 0) return null;
-  if (type === 'short_answer' && expectedKeywords.length === 0) return null;
-  return {
-    question,
-    type,
-    conceptName: name,
-    ...(type !== 'short_answer' ? { options, correctOptionIds } : {}),
-    ...(type === 'short_answer' ? { expectedKeywords } : {}),
-  };
+  const question = parseAssessmentQuestion(out);
+  if (!question || normalizeConceptKey(out.conceptName) !== normalizeConceptKey(conceptName)) return null;
+  return { ...question, conceptName };
+}
+
+/** null 表示无法核对原题。有效的课堂状态可以没有出过题。 */
+export function readLessonQuestions(value: string | null): string[] | null {
+  if (!value) return null;
+  try {
+    const state = JSON.parse(value);
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return null;
+    const artifacts = state.sessionArtifacts;
+    const checkpoints = state.checkpointHistory ?? [];
+    const tickets = artifacts?.exitTicketHistory ?? [];
+    if (!Array.isArray(checkpoints) || !Array.isArray(tickets)) return null;
+    const rows = [...checkpoints, ...tickets, state.pendingCheckpoint, artifacts?.pendingCheckpoint, artifacts?.exitTicket]
+      .filter((row, index) => index < checkpoints.length + tickets.length || row != null);
+    const questions = rows.map((row) => typeof row?.question === 'string' ? row.question.trim() : '');
+    if (questions.some((question) => !question)) return null;
+    return [...new Set(questions)];
+  } catch {
+    return null;
+  }
+}
+
+function isRepeatedLessonQuestion(priorQuestions: string[], question: AssessmentQuestion): boolean {
+  return isDuplicateCheckpointQuestion(priorQuestions.map((prior) => ({ question: prior })), question.question);
 }
 
 const defaultDeps: RetentionProbeDeps = {
@@ -321,6 +311,10 @@ const defaultDeps: RetentionProbeDeps = {
       data: { payload, version: { increment: 1 } },
     });
   },
+  loadLessonQuestions: async (sessionId, userId) => {
+    const lesson = await prisma.teaching_sessions.findFirst({ where: { id: sessionId, userId }, select: { teachingState: true } });
+    return readLessonQuestions(lesson?.teachingState ?? null);
+  },
   generateQuestion: async (input) => {
     const definition = auxSkillDefinitionMap['teaching-retention-probe'];
     if (!definition) return null;
@@ -329,7 +323,7 @@ const defaultDeps: RetentionProbeDeps = {
       topic: input.topic,
       taskTitle: input.taskTitle,
       coreKcs: [{ name: input.conceptName, hasIndependentEvidence: true }],
-      recentDialogue: [],
+      recentDialogue: input.priorQuestions.slice(-8).map((content) => ({ role: 'assistant', content })),
     } as any);
     if (result?.success === false) {
       throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'RETENTION_PROBE_FAILED');
@@ -572,17 +566,23 @@ export class RetentionProbeService {
 
   /** 懒生成题目：失败返回 null（不阻断其它探针）；成功即落库，后续读取不再重复调 LLM。 */
   private async ensureQuestion(probe: RetentionProbeRecord, now: Date): Promise<RetentionProbeRecord | null> {
-    if (probe.question && typeof probe.question.question === 'string' && probe.question.question.trim()) {
-      return probe;
-    }
     try {
-      const question = await this.deps.generateQuestion({
+      const priorQuestions = await this.deps.loadLessonQuestions(probe.sessionId, probe.userId);
+      if (priorQuestions === null) return null;
+      if (probe.question) {
+        const question = coerceQuestion(probe.question, probe.label);
+        // A question already shown to the learner cannot be replaced while grading their answer.
+        return question && !isRepeatedLessonQuestion(priorQuestions, question) ? { ...probe, question } : null;
+      }
+      const draft = await this.deps.generateQuestion({
         subject: probe.subject || '通用',
         topic: probe.topic || probe.label,
         taskTitle: probe.taskTitle || probe.label,
         conceptName: probe.label,
+        priorQuestions,
       });
-      if (!question) return null;
+      const question = coerceQuestion(draft, probe.label);
+      if (!question || isRepeatedLessonQuestion(priorQuestions, question)) return null;
       const updated: RetentionProbeRecord = {
         ...probe,
         question,

@@ -1,7 +1,7 @@
 export const learnerAgentRuntimeDefinition = {
   id: 'profile-agent',
   displayName: 'Learner State Agent',
-  description: 'Goal/lesson 事件 -> 证据投影 -> 清画像缓存（含快照缓存失效） -> 快照重算 ->（仅 lesson:completed）登记课后知识增强事件 的学习者主链编排（真实执行体：outbox 消费者在 bootstrap/schedulers.ts:108 注册，序列见 events/learner-event-consumer.ts:48-82；课后增强不在本链上 await，由独立泳道 bootstrap/schedulers.ts:110-111 消费）。',
+  description: 'Goal/lesson 事件 -> 证据投影 -> 清画像缓存（含快照缓存失效） -> 快照重算 ->（仅 lesson:completed）登记课后知识增强事件 的学习者主链编排（真实执行体：outbox 消费者在 bootstrap/schedulers.ts:123 注册，序列见 events/learner-event-consumer.ts:48-82；课后增强不在本链上 await，由独立泳道 bootstrap/schedulers.ts:125-126 消费）。',
   category: 'agent',
   steps: [
     {

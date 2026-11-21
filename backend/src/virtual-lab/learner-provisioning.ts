@@ -19,6 +19,7 @@ import { executeSkill } from '../skills';
 import { virtualLearnerPersonaDesignerDefinition } from '../skills/simulation-persona-designer';
 import { virtualLearnerScenarioDesignerDefinition } from '../skills/simulation-scenario-designer';
 import { ensureCardKey } from '../services/virtual-lab/card-import.service';
+import { buildSamplingDirectives, type SamplingDirectives } from './learner-sampling';
 import { logger } from '../utils/logger';
 
 // -------------------------------------------------------
@@ -130,6 +131,16 @@ export interface GeneratePersonaOptions {
   existingNameHint?: string;
   /** 覆盖 existingPersonaSeed 的 background/notes（batch-job 传 cohort） */
   existingBackground?: string;
+  /**
+   * 分层采样坐标（C3，2026-11-21）：批量实验传入递增序号，由代码掷出
+   * availableTime/techComfort/learningStyle/cognitiveLoadTolerance/motivationType 组合；
+   * 不传时用随机序号（单次生成）。
+   */
+  samplingIndex?: number;
+  /** 显式指定采样结果（优先级高于 samplingIndex；测试/回放用） */
+  samplingDirectives?: SamplingDirectives;
+  /** 是否强制传统学生样本（不传则由抽样序号决定） */
+  sampleType?: 'student' | 'general';
 }
 
 export async function generateAndApplyPersona(
@@ -151,9 +162,17 @@ export async function generateAndApplyPersona(
     ...(opts.existingBackground ? { background: opts.existingBackground, notes: opts.existingBackground } : {}),
   };
 
+  // C3（2026-11-21）：分层采样在代码里掷坐标；提示词只围绕坐标构造人物。
+  const samplingDirectives = opts.samplingDirectives
+    || buildSamplingDirectives(
+      opts.samplingIndex ?? Math.floor(Math.random() * 12),
+      { student: opts.sampleType === 'student' ? true : opts.sampleType === 'general' ? false : undefined }
+    );
+
   const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
     preferredLevels: opts.preferredLevels || (profile.knowledgeLevel ? [profile.knowledgeLevel] : undefined),
     existingPersonaSeed,
+    samplingDirectives,
     // P2-26：键名必须是 recentPersonaHints——persona designer 只读该键（index.ts buildUserPayload），
     // 旧实现挂 recentScenarioHints 被静默丢弃，sampleType='student' 的批量实验指令永不生效。
     ...(opts.studentHints?.length ? { recentPersonaHints: opts.studentHints } : {}),
@@ -175,9 +194,17 @@ export async function generateAndApplyPersona(
     await prisma.users.update({ where: { id: profile.userId }, data: { name: nameFromSeed } }).catch(() => {});
   }
 
+  // A1（2026-11-21）：personalityTraits 是独立列，模拟器只读列。此前只写 profile JSON，
+  // 导致生成的人设 trait 全部丢失、所有学习者退化成同一组默认值。
+  const personaTraits = personaSeed.personalityTraits && typeof personaSeed.personalityTraits === 'object'
+    ? personaSeed.personalityTraits
+    : null;
   await prisma.virtual_learner_profiles.update({
     where: { id: profileId },
-    data: { profile: JSON.stringify({ ...profileData, ...personaSeed }) },
+    data: {
+      profile: JSON.stringify({ ...profileData, ...personaSeed }),
+      ...(personaTraits ? { personalityTraits: JSON.stringify(personaTraits) } : {}),
+    },
   });
 
   logger.info('[learner-provisioning] persona applied', { profileId, nameHint: String(personaSeed.nameHint || '').slice(0, 20) });

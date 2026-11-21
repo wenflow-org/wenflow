@@ -2250,6 +2250,125 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(executeSkill).not.toHaveBeenCalled()
   })
 
+  it('没有累计统计的旧会话只报告保留窗口的覆盖', () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const state: any = {
+      experiment: { mode: 'blackbox-api', experimentId: 'exp1', runId: 'run1' },
+      blackbox: { control: {}, publicTrace: [] }
+    }
+    // 60 条 goal + 1 条 path + 100 条 teaching：首尾各保 60 条时，中间的 path 会被压缩掉。
+    state.blackbox.publicTrace = [
+      ...Array.from({ length: 60 }, () => ({
+        timestamp: '2026-07-14T10:00:00.000Z',
+        observation: { stage: 'goal', visibleMessages: [], availableActions: ['chat'] },
+        control: {}
+      })),
+      {
+        timestamp: '2026-07-14T10:01:00.000Z',
+        observation: { stage: 'path', visibleMessages: [], availableActions: ['start_learning'] },
+        control: {}
+      },
+      ...Array.from({ length: 100 }, () => ({
+        timestamp: '2026-07-14T10:02:00.000Z',
+        observation: { stage: 'teaching', visibleMessages: [], availableActions: ['chat'] },
+        control: {}
+      }))
+    ]
+
+    const { summary } = runner.buildSharedAuditTrace(sessionWith({}), state)
+
+    expect(summary.stageCoverage.goal).toBe(true)
+    expect(summary.stageCoverage.path).toBe(true)
+    expect(summary.stageCoverage.teaching).toBe(true)
+    expect(summary.stageCoverageSource).toBe('retained-window')
+    expect(summary.observedStageCounts.path).toBe(1)
+    expect(summary.inputCoverage.truncated).toBe(true)
+    expect(summary.inputCoverage.coverageComputedBeforeTruncation).toBe(false)
+    expect(summary.inputCoverage.includedPublicTraceCount).toBe(120)
+    expect(summary.inputCoverage.originalPublicTraceCount).toBe(161)
+  })
+
+  it('评审指纹包含实际 ACTIVE prompt/模型；配置变化后不复用旧报告', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    let currentSession: any = {
+      ...sessionWith({ runCompleted: true, terminalReason: 'completed' }),
+      status: 'completed',
+      currentStage: 'completed',
+      createdAt: new Date('2026-07-14T10:00:00.000Z'),
+      completedAt: new Date('2026-07-14T10:10:00.000Z')
+    }
+    const state = JSON.parse(currentSession.stageResults)
+    state.experimentSnapshot = {
+      capturedAt: '2026-07-14T09:59:00.000Z',
+      actorProfile: { learningGoal: '目标', profile: {}, knownConcepts: [], struggleConcepts: [], personalityTraits: {} },
+      story: null,
+      frictionBudget: 'normal',
+      simulators: {
+        goal: {
+          version: '1', promptVersion: 'goal-v1', promptFingerprint: 'goal-fp',
+          temperature: 0.8, maxTokens: 1200,
+          route: { providerId: 'prov', model: 'goal-model' }
+        },
+        teaching: {
+          version: '1', promptVersion: 'teach-v1', promptFingerprint: 'teach-fp',
+          temperature: 0.7, maxTokens: 800,
+          route: { providerId: 'prov', model: 'teach-model' }
+        }
+      }
+    }
+    state.blackbox.publicTrace = [{
+      timestamp: '2026-07-14T10:01:00.000Z',
+      observation: { stage: 'goal', visibleMessages: [{ role: 'platform', content: '公开问题' }], availableActions: ['chat'] },
+      control: {}
+    }]
+    currentSession.stageResults = JSON.stringify(state)
+    runner.getSession = jest.fn(async () => currentSession)
+    ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({
+      id: 'vp1', userId: 'u1', learningGoal: '目标', profile: '{}',
+      knownConcepts: '[]', struggleConcepts: '[]', personalityTraits: '{}'
+    })
+    ;(prisma.virtual_sessions.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      currentSession = { ...currentSession, ...data }
+      return currentSession
+    })
+    ;(executeSkill as jest.Mock).mockResolvedValue({
+      verdict: 'pass',
+      scores: { overall: 90, goalExperience: 90, controlConsistency: 90, boundaryIntegrity: 90, evidenceSufficiency: 90 },
+      findings: [], recommendations: [], evidence: []
+    })
+
+    let activeVersion = 'ref-v1'
+    let activeModel = 'referee-model-a'
+    ;(agentConfigService.getActivePrompt as jest.Mock).mockImplementation(async (agentId: string) =>
+      agentId === 'skill:simulation-referee'
+        ? { version: activeVersion, systemPrompt: `referee prompt ${activeVersion}`, temperature: 0.2, maxTokens: 2400 }
+        : null)
+    ;(getAPIGateway as jest.Mock).mockReturnValue({
+      resolveRoute: jest.fn(async () => ({
+        providerType: 'openai-compatible', providerId: 'prov', endpoint: 'https://example.test/v1',
+        apiKey: 'secret', model: activeModel, temperature: 0.2, maxTokens: 2400
+      }))
+    })
+
+    const first = await runner.referee('vs1', 'admin1')
+    expect(first.reused).toBe(false)
+    expect(first.evaluator).toMatchObject({
+      promptVersion: 'ref-v1',
+      model: 'referee-model-a',
+      agentId: 'skill:simulation-referee'
+    })
+    expect(first.experimentConfig.teaching.model).toBe('teach-model')
+
+    const reused = await runner.referee('vs1', 'admin1')
+    expect(reused.reused).toBe(true)
+
+    activeVersion = 'ref-v2'
+    activeModel = 'referee-model-b'
+    const changed = await runner.referee('vs1', 'admin1')
+    expect(changed.reused).toBe(false)
+    expect(changed.evaluator).toMatchObject({ promptVersion: 'ref-v2', model: 'referee-model-b' })
+  })
+
   it('TIR 反馈上调**本会话** frictionBudget：写读同源（18 号报告观察项·死写修复）', async () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     let currentSession: any = {

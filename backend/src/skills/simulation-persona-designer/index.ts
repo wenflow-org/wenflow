@@ -27,6 +27,7 @@ export const virtualLearnerPersonaDesignerDefinition: SkillDefinition = {
       candidatePersonas: { type: 'array' },
       recentPersonaHints: { type: 'array' },
       existingPersonaSeed: { type: 'object' },
+      samplingDirectives: { type: 'object' },
     },
   },
   outputSchema: {
@@ -217,6 +218,31 @@ function validatePersonaOutput(parsed: any): { valid: boolean; failureReason?: s
     return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: techComfort is invalid' };
   }
 
+  // 声纹样本（2026-11-21）：两句原话是去 AI 腔最关键的成本最低抓手；缺一句就重试。
+  if (normalizeStringArray(personaSeed.voiceSamples).length < 2) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: voiceSamples must contain 2 sentences' };
+  }
+
+  // A1（2026-11-21）：personalityTraits 是模拟器表现层唯一的人设声纹来源。
+  // 缺失时 normalize 会用六项默认值补齐 → 所有学习者说成同一腔调，所以这里必须拒绝并重试。
+  const traits = personaSeed.personalityTraits;
+  if (!traits || typeof traits !== 'object') {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: personalityTraits is required' };
+  }
+  const traitEnums: Record<string, string[]> = {
+    verbosity: ['terse', 'normal', 'verbose'],
+    enthusiasm: ['low', 'normal', 'high'],
+    confusionStyle: ['direct', 'hinting'],
+    patience: ['low', 'normal', 'high'],
+    questionStyle: ['none', 'clarifying', 'challenging'],
+    emotionalRange: ['flat', 'moderate', 'expressive'],
+  };
+  for (const [field, allowed] of Object.entries(traitEnums)) {
+    if (!isAllowedEnum((traits as Record<string, unknown>)[field], allowed)) {
+      return { valid: false, failureReason: `PERSONA_OUTPUT_INVALID: personalityTraits.${field} is invalid` };
+    }
+  }
+
   return { valid: true };
 }
 
@@ -336,6 +362,8 @@ function normalizePersonaOutput(raw: any) {
       emotionalTriggers: emotionalTriggersRaw.length ? emotionalTriggersRaw : ['遇到挫折'],
       failurePatterns: failurePatternsRaw.length ? failurePatternsRaw : ['半途而废'],
       personalityTraits,
+      // 声纹样本（2026-11-21）：两句本人原话，模拟器用它锁住年龄/职业用词与口语节奏。
+      voiceSamples: normalizeStringArray(personaSeed.voiceSamples).slice(0, 2),
       // 与 scenario-designer canonical 字段集对齐（可选，LLM 生成即保留）
       priorAttempts: normalizeString(personaSeed.priorAttempts) || undefined,
       communicationStyle: normalizeString(personaSeed.communicationStyle),
@@ -365,13 +393,19 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
           candidatePersonas: normalizeStringArray(payload?.candidatePersonas),
           recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),
           existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
+          // C3（2026-11-21）：编排层分层采样的硬坐标；提示词只负责围绕它构造自洽人物。
+          samplingDirectives: payload?.samplingDirectives && typeof payload.samplingDirectives === 'object'
+            ? payload.samplingDirectives
+            : undefined,
         };
         if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
           return {
             candidatePersonas: body.candidatePersonas,
             preferredLevels: body.preferredLevels,
             recentPersonaHints: body.recentPersonaHints,
-            existingPersonaSeed: body.existingPersonaSeed,
+            // 保持稳定前缀键序：即使没有已存在种子也显式给 null（缺席会打乱前缀遥测）。
+            existingPersonaSeed: body.existingPersonaSeed ?? null,
+            ...(body.samplingDirectives ? { samplingDirectives: body.samplingDirectives } : {}),
           };
         }
         return body;

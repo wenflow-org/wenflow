@@ -72,6 +72,24 @@ function normalizeVirtualLearnerProfileShape(profile: unknown): Record<string, u
   return data;
 }
 
+/**
+ * A1（2026-11-21）：personalityTraits 是独立列，模拟器只读列。
+ * 创建/更新请求常把整套人设放在 `personaSeed` 里，或直接放在 `profile.personalityTraits`；
+ * 这里把两种形状都收出来，供调用方写列。列本身仍是权威源（读侧 parseProfileData 再兜底）。
+ */
+function resolvePersonalityTraitsFromProfile(profile: unknown): Record<string, unknown> | null {
+  if (!profile || typeof profile !== 'object') return null;
+  const data = profile as Record<string, unknown>;
+  const direct = data.personalityTraits;
+  const nested = data.personaSeed && typeof data.personaSeed === 'object'
+    ? (data.personaSeed as Record<string, unknown>).personalityTraits
+    : null;
+  const candidate = direct && typeof direct === 'object' ? direct : nested;
+  return candidate && typeof candidate === 'object' && Object.keys(candidate as object).length
+    ? (candidate as Record<string, unknown>)
+    : null;
+}
+
 // ===== 原 virtual-learners.ts L149–L186 =====
 /** 卡死判定阈值（与 reclaim 服务同源：VLAB_STALE_SESSION_HOURS，默认 24h），保证「状态条卡死数 = 可回收清单数」 */
 function staleThresholdAt(): Date {
@@ -156,6 +174,10 @@ router.post('/', async (req: Request, res) => {
     // 自建卡也要带 cardKey：没有 key 的卡会被「导出卡库」静默跳过（见 ensureCardKey 注释）。
     // 先定 id 再算 key，保证 key 与档案同生，且同一学习者恒得同一个 key。
     const profileWithCardKey = ensureCardKey(normalizedProfile, profileId, Array.isArray(tags) ? (tags as string[]) : []);
+    // 显式顶层字段优先；否则从 personaSeed / profile 内提取，保证新建学习者不会丢 traits。
+    const effectivePersonalityTraits = personalityTraits && typeof personalityTraits === 'object'
+      ? personalityTraits as Record<string, unknown>
+      : resolvePersonalityTraitsFromProfile(profileWithCardKey);
 
     const email = `virtual_${uuidv4().substring(0, 8)}@test.local`;
     // 虚拟学习者仅供系统编排使用，不提供可共享的登录凭据。
@@ -190,7 +212,7 @@ router.post('/', async (req: Request, res) => {
         simulationPrompt,
         simulationModel,
         simulationTemperature: simulationTemperature || 0.8,
-        personalityTraits: personalityTraits ? JSON.stringify(personalityTraits) : null,
+        personalityTraits: effectivePersonalityTraits ? JSON.stringify(effectivePersonalityTraits) : null,
         tags: tags ? JSON.stringify(tags) : null,
         notes
       }
@@ -662,6 +684,11 @@ router.put('/:id', async (req: Request, res) => {
       if (req.body.profile) {
         const existingProfile = parseJson<Record<string, unknown>>(current.profile, {});
         updateData.profile = JSON.stringify({ ...existingProfile, ...req.body.profile });
+        // A1：profile 里带了 traits（personaSeed 形状或顶层）就同步到列，避免只改 JSON 列永远为空。
+        if (!req.body.personalityTraits) {
+          const traitsFromIncoming = resolvePersonalityTraitsFromProfile(req.body.profile);
+          if (traitsFromIncoming) updateData.personalityTraits = JSON.stringify(traitsFromIncoming);
+        }
       }
       if (typeof req.body.name === 'string' && req.body.name.trim()) {
         await updateUserName(profile.userId, req.body.name.trim());

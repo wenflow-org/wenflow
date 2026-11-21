@@ -12,6 +12,7 @@ export const virtualLearnerPersonaDesignerRuntimeDefinition: RuntimeDefinitionRe
       candidatePersonas: { type: 'array' },
       recentPersonaHints: { type: 'array' },
       existingPersonaSeed: { type: 'object' },
+      samplingDirectives: { type: 'object' },
     },
     required: [],
   },
@@ -27,6 +28,7 @@ export const virtualLearnerPersonaDesignerRuntimeDefinition: RuntimeDefinitionRe
       'candidatePersonas[]',
       'recentPersonaHints[]',
       'existingPersonaSeed',
+      'samplingDirectives',
     ],
     produces: [
       'personaSeed.occupation',

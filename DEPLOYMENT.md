@@ -103,7 +103,11 @@ cd backend
 
 说明：该脚本会检查 Docker/Compose v2，交互式引导补齐 `backend/.env`（JWT_SECRET、Keyring、AI 密钥、管理员账号），适配 nginx 端口与 `FRONTEND_URL`/`CORS_ORIGIN` 后执行 `docker compose up -d --build`。支持环境变量非交互传入（`JWT_SECRET`、`AI_API_KEY`、`SECRET_ENCRYPTION_KEYS` 等），也支持 `NGINX_PORT` 覆盖默认 80 端口。
 
-自定义域名部署：`nginx.docker.conf` 的 `server_name` 需按域名修改后重新构建；反向代理与健康检查细节见下文「常见问题」。
+Compose 默认发布到 `127.0.0.1`，适合本机试用。远程访问请在宿主机用反向代理提供 HTTPS，并转发至 `127.0.0.1:<NGINX_PORT>`。将 `backend/.env` 中的 `FRONTEND_URL` 和 `CORS_ORIGIN` 配置为外部 HTTPS 地址。生产登录使用 Secure Cookie，浏览器必须通过 HTTPS 访问远程入口。
+
+Compose 首次启动会把镜像附带的提示词初始化到持久卷的 `/app/data/prompts`。后续容器重建会保留管理台已发布的文件，镜像附带的新文件会补入，新版本的已有文件需要通过提示词发布流程合入。
+
+路径质量评审在后台运行，不影响正常路径交付。仅在隔离实验环境设置 `VIRTUAL_PATH_REVIEW_EXPERIMENT=1`，用于比较虚拟学员路径的原版和一次返工版；返工版不会覆盖已交付路径。
 
 ---
 

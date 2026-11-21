@@ -1,6 +1,6 @@
 ---
 agentId: skill:simulation-scenario-designer
-coreHash: 5a397f1ca5f6e325b7248a8af2ee16b22113b85dfa34bb6e141b1141e4a1ed34
+coreHash: e01a711048116a4c2d3f6f915d048dc74c67e5aa215a3083e693d1f6205d1796
 coreVersion: 1
 temperature: 0.9
 maxTokens: 64000
@@ -77,7 +77,11 @@ failurePolicy: retry
 · helpSeekingPattern / adversarialPattern / memoryRepairPattern（string）
 · behaviorBoundaries / learningPreferences / failurePatterns（string[]）
 · behavioralProfileSummary（string）一句话总结长期行为风格
-· personalityTraits（object）{ "verbosity", "enthusiasm", "confusionStyle", "patience", "questionStyle", "emotionalRange" }，取值见执行规则
+· personalityTraits（object）{ "verbosity", "enthusiasm", "confusionStyle", "patience", "questionStyle", "emotionalRange" }，取值见执行规则，六个子字段都要有值
+· voiceSamples（string[]，2 句，可选）平时求助/接话一句 + 卡住/烦躁时一句；existingPersonaSeed 已有则原样保留，没有就按人物身份补两句原话
+· selfAwarenessPattern（string，可选）通常怎么意识到自己没懂、会不会主动说出来；existingPersonaSeed 已带则原样保留
+· planningFollowThrough（string，可选）通常怎么做计划、掉队后怎么反应；existingPersonaSeed 已带则原样保留
+· overloadReaction（string，可选）信息一多或步骤太密时的典型可观察反应；与 cognitiveLoadTolerance 分工：这里写行为，不写等级词
 - story · object — 故事切片（服从 persona），子字段：
 · title（string）短标题
 · sourceType（enum）work | life | study | self_management
@@ -88,11 +92,11 @@ failurePolicy: retry
 · misdiagnosis（string）他以为自己的问题是什么，但不一定对
 · pressurePoints / behaviorHooks（string[]）这个故事会优先触发的情绪压力点/典型反应模式
 · problemKnowledge（object）{ "domainFamiliarity": "low|medium|high", "knownConcepts": [], "struggleConcepts": [], "selfAssessment": "", "hiddenGaps": [] }
-· goalSeed（object）{ "domain", "goalType", "surfaceGoal", "realProblem", "primaryBlockType", "recurrence", "blockTypeEvidence", "motivation", "urgencyHint", "constraints": [], "expectedOutcome" }
-· realProblem（string）真正卡住他的是什么，必须包含"具体场景 + 具体障碍"，例如"账号被管理员锁了，他不知道该找谁开"。禁止用"缺乏…能力/认知"这类笼统句式收尾；只有确实缺少可迁移的底层理解/框架、且能说清缺的是什么时，才允许写成能力缺口。若真正卡住他的是操作不熟 / 系统坏了 / 权限被卡 / 情绪过不去，就照实写，不要翻译成"缺乏系统操作能力"。正例："想用公司新版报销系统，但没人告诉他入口在哪，他反复问同事还是走错流程"；反例："缺乏系统操作能力，需要学习相关认知"。
-· primaryBlockType（enum，必填）capability | oneoff_operation | environment_tooling | permission_process | emotion_relationship。含义：capability＝存在可迁移的概念/技能缺口，必须"建立认知结构 + 多步练习"；oneoff_operation＝一次性具体操作/工具用法，学会点哪里即可，十几分钟能解决；environment_tooling＝设备/软件/网络/配置/环境阻塞，修好系统即可；permission_process＝账号/权限/审批/流程/交接/他人配合阻塞；emotion_relationship＝情绪调节/恐惧/面子/焦虑/人际冲突是主要阻塞。判定口径（写死）："哪个阻塞不解决，其它做什么都白搭"就是 primaryBlockType。判定依据必须是故事事实（storyOutline / triggerEvent / hiddenDetails / problemKnowledge / misdiagnosis）；必须先定 primaryBlockType，再写 realProblem，两者必须一致。
-· recurrence（enum）oneoff | recurring：这件事是一次性还是会反复发生——只有反复发生才可能是能力缺口。**必须写 oneoff，不要写 once**（与 goal-conversation 的 understanding.recurrence 同词表；平台会把历史 once 归一成 oneoff）。
-· blockTypeEvidence（string，≤60字）：引用故事里的一句话作为判定依据。
+· goalSeed（object）{ "domain", "goalType", "surfaceGoal", "realProblem", "primaryBlockType", "recurrence", "blockTypeEvidence", "motivation", "urgencyHint", "constraints": [], "expectedOutcome" }。问题类型标注**只写在 goalSeed 内**，不要在 story 顶层再写一遍，避免两处不一致。
+  - goalSeed.realProblem（string）真正卡住他的是什么，必须包含"具体场景 + 具体障碍"，例如"账号被管理员锁了，他不知道该找谁开"。禁止用"缺乏…能力/认知"这类笼统句式收尾；只有确实缺少可迁移的底层理解/框架、且能说清缺的是什么时，才允许写成能力缺口。若真正卡住他的是操作不熟 / 系统坏了 / 权限被卡 / 情绪过不去，就照实写，不要翻译成"缺乏系统操作能力"。正例："想用公司新版报销系统，但没人告诉他入口在哪，他反复问同事还是走错流程"；反例："缺乏系统操作能力，需要学习相关认知"。
+  - goalSeed.primaryBlockType（enum，必填）capability | oneoff_operation | environment_tooling | permission_process | emotion_relationship。含义：capability＝存在可迁移的概念/技能缺口，必须"建立认知结构 + 多步练习"；oneoff_operation＝一次性具体操作/工具用法，学会点哪里即可，十几分钟能解决；environment_tooling＝设备/软件/网络/配置/环境阻塞，修好系统即可；permission_process＝账号/权限/审批/流程/交接/他人配合阻塞；emotion_relationship＝情绪调节/恐惧/面子/焦虑/人际冲突是主要阻塞。判定口径（写死）："哪个阻塞不解决，其它做什么都白搭"就是 primaryBlockType。判定依据必须是故事事实（storyOutline / triggerEvent / hiddenDetails / problemKnowledge / misdiagnosis）；必须先定 primaryBlockType，再写 realProblem，两者必须一致。
+  - goalSeed.recurrence（enum）oneoff | recurring：这件事是一次性还是会反复发生——只有反复发生才可能是能力缺口。**必须写 oneoff，不要写 once**（与 goal-conversation 的 understanding.recurrence 同词表；平台会把历史 once 归一成 oneoff）。
+  - goalSeed.blockTypeEvidence（string，≤60字）：引用故事里的一句话作为判定依据。
 · disclosurePlan（object）{ "opening": 首轮最可能的开场表达 1-2 句, "revelationTriggers": [], "resistancePoints": [], "idealProbe": "" }
 - consistencyNotes · string[] — 2-4 条故事与 persona 的一致性校验点（pressurePoints/behaviorHooks/visibleOpening 与 persona 对应字段如何对齐）
 

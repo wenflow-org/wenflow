@@ -54,8 +54,9 @@ export const STUCK_MASTERY_THRESHOLD = 0.4;
  * 单概念路径结构性只沉淀 1 项）。
  */
 export interface CuratedConceptLists {
-  mastered?: string[] | null;
+  mastered?: Array<string | { name: string; confidence: number }> | null;
   struggling?: string[] | null;
+  transferEvidence?: Array<{ concept: string; kind: string }> | null;
 }
 
 /**
@@ -178,6 +179,8 @@ export interface LearnerMemorySnapshot {
     memoryDelta?: string | null;
     /** 记忆提炼 skill 的自评校准说明 */
     selfCalibration?: string | null;
+    /** 记忆提炼 skill 的结构化校准判决 */
+    selfCalibrationBias?: 'accurate' | 'overestimate' | 'underestimate' | 'unknown' | null;
     /** 本课沉淀的卡点概念（与 known 名单跨表去重） */
     struggleConcepts?: string[];
     /** P2-32：curator 每项 mastered 的 evidence/confidence（记忆池「自己怎么想的」） */
@@ -324,9 +327,24 @@ async function writeProfileConceptsAfterLessonLocked(
     const curatedStruggle = Array.isArray(options.curatedConcepts?.struggling)
       ? options.curatedConcepts!.struggling!
       : [];
-    for (const name of curatedMastered) {
-      const trimmed = typeof name === 'string' ? name.trim() : '';
-      if (trimmed) mastered.add(trimmed);
+    const conceptKey = (name: string) => name.trim().toLowerCase();
+    const withoutTransfer = new Set((options.curatedConcepts?.transferEvidence ?? [])
+      .filter((item) => item.kind === 'none')
+      .map((item) => conceptKey(item.concept)));
+    const pendingKeys = new Set<string>();
+    for (const entry of curatedMastered) {
+      const name = typeof entry === 'string' ? entry.trim() : entry.name.trim();
+      if (!name) continue;
+      if (withoutTransfer.has(conceptKey(name)) || (typeof entry !== 'string'
+        && (!Number.isFinite(entry.confidence) || entry.confidence < MASTERED_CONFIDENCE_THRESHOLD))) {
+        pendingKeys.add(conceptKey(name));
+        struggling.add(name);
+      } else {
+        mastered.add(name);
+      }
+    }
+    for (const name of mastered) {
+      if (pendingKeys.has(conceptKey(name))) mastered.delete(name);
     }
     for (const name of curatedStruggle) {
       const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -338,6 +356,10 @@ async function writeProfileConceptsAfterLessonLocked(
     if (options.selfState) {
       const self = selfExtractLearnerMemory(options.selfState);
       for (const name of self.mastered) {
+        if (pendingKeys.has(conceptKey(name)) || withoutTransfer.has(conceptKey(name))) {
+          struggling.add(name);
+          continue;
+        }
         mastered.add(name);
         struggling.delete(name);
       }
@@ -351,7 +373,8 @@ async function writeProfileConceptsAfterLessonLocked(
       for (const kp of knowledgePoints) {
         const name = String(kp?.name || '').trim();
         if (!name) continue;
-        if (MASTERED_STATUSES.has(kp.status)) mastered.add(name);
+        if (MASTERED_STATUSES.has(kp.status) && !withoutTransfer.has(conceptKey(name))) mastered.add(name);
+        else if (withoutTransfer.has(conceptKey(name))) struggling.add(name);
         else if (STRUGGLE_STATUSES.has(kp.status) && !mastered.has(name)) struggling.add(name);
       }
     }
@@ -692,6 +715,7 @@ export async function recordCompletedArtifact(input: {
     mastered: MemoryCuratedMasteredItem[];
     struggling: MemoryCuratedStruggleItem[];
     selfCalibration: string;
+    selfCalibrationBias?: 'accurate' | 'overestimate' | 'underestimate' | 'unknown' | null;
   } | null;
 }): Promise<void> {
   if (!input.userId || !input.taskId) return;
@@ -714,6 +738,7 @@ async function recordCompletedArtifactLocked(input: {
     mastered: MemoryCuratedMasteredItem[];
     struggling: MemoryCuratedStruggleItem[];
     selfCalibration: string;
+    selfCalibrationBias?: 'accurate' | 'overestimate' | 'underestimate' | 'unknown' | null;
   } | null;
 }): Promise<void> {
   try {
@@ -767,6 +792,7 @@ async function recordCompletedArtifactLocked(input: {
         })),
       memoryDelta: input.memoryDelta || null,
       selfCalibration: input.memoryCurated?.selfCalibration || null,
+      selfCalibrationBias: input.memoryCurated?.selfCalibrationBias || null,
       completedAt: simulatedNowOr().toISOString(),
     };
     const next = [
@@ -780,7 +806,13 @@ async function recordCompletedArtifactLocked(input: {
     // ② 只写**单向判决**（overconfident / underconfident）——自由文本里的「较准/准确」不足以覆盖
     //    画像默认值 'accurate'，否则「无偏差句」会被批量写成 accurate（回声环的另一种形态）；
     // ③ 仅在判决与现值不同时写回，打破「curator 读该字段 → 产出该句 → 该句写回该字段」的回声闭环。
-    const verdict = parseSelfCalibrationVerdict(input.memoryCurated?.selfCalibration);
+    // 2026-11-21：结构化 bias 优先（100% 确定性）；旧数据没有该字段时才回退散文解析。
+    const structuredBias = input.memoryCurated?.selfCalibrationBias;
+    const verdict = structuredBias === 'overestimate'
+      ? 'overconfident'
+      : structuredBias === 'underestimate'
+        ? 'underconfident'
+        : parseSelfCalibrationVerdict(input.memoryCurated?.selfCalibration);
     const directionalVerdict = verdict === 'overconfident' || verdict === 'underconfident' ? verdict : null;
     if (directionalVerdict && directionalVerdict !== profileData.selfAssessmentAccuracy) {
       profileData.selfAssessmentAccuracy = directionalVerdict;

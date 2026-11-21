@@ -2,6 +2,7 @@ import { callPrompt } from '../../composers/prompt-composer'
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter'
 import { loadPromptFile } from '../../composers/prompt-files/loader'
 import type { SkillDefinition, SkillExecutionResult } from '../protocol'
+import { hasAuditEvidenceValue } from '../virtual-learner-shared/audit-evidence'
 import type {
   ActorAuditEvidenceSource,
   VirtualLearnerActorAuditInput,
@@ -20,10 +21,11 @@ const EVIDENCE_SOURCES: ActorAuditEvidenceSource[] = [
   'experimentSummary'
 ]
 
-function clampScore(value: unknown, fallback = 0) {
-  const score = Number(value)
-  if (!Number.isFinite(score)) return fallback
-  return Math.round(Math.max(0, Math.min(100, score)))
+/** 严格读分：缺字段/非数字/越界 => 无效，integrity 留痕并强制 inconclusive。 */
+function readScore(value: unknown): { value: number | null; valid: boolean } {
+  const score = typeof value === 'number' ? value : Number.NaN
+  if (!Number.isFinite(score) || score < 0 || score > 100) return { value: null, valid: false }
+  return { value: Math.round(score), valid: true }
 }
 
 function text(value: unknown, limit = 1200) {
@@ -40,8 +42,13 @@ function normalizeEvidence(value: unknown, input: VirtualLearnerActorAuditInput)
   return value.flatMap((item: any, position: number) => {
     const source = EVIDENCE_SOURCES.includes(item?.source) ? item.source as ActorAuditEvidenceSource : null
     if (!source) return []
-    const index = item?.index === null || item?.index === undefined ? null : Number(item.index)
+    if (item?.index != null && typeof item.index !== 'number') return []
+    const index = item?.index ?? null
     if (source === 'publicTrace' && (!Number.isInteger(index) || index! < 0 || index! >= input.publicTrace.length)) return []
+    if (source !== 'publicTrace' && index !== null) return []
+    const path = text(item?.path, 180)
+    const root = source === 'publicTrace' ? input.publicTrace[index!] : input[source]
+    if (!path || !hasAuditEvidenceValue(source, root, path)) return []
     const id = text(item?.id, 40) || `AE${position + 1}`
     if (seen.has(id)) return []
     seen.add(id)
@@ -49,7 +56,7 @@ function normalizeEvidence(value: unknown, input: VirtualLearnerActorAuditInput)
       id,
       source,
       index,
-      path: text(item?.path, 180) || source,
+      path,
       timestamp: text(item?.timestamp, 64) || null,
       excerpt: text(item?.excerpt, 500),
       interpretation: text(item?.interpretation, 600)
@@ -60,9 +67,17 @@ function normalizeEvidence(value: unknown, input: VirtualLearnerActorAuditInput)
 export function normalizeActorAuditOutput(parsed: any, input: VirtualLearnerActorAuditInput): VirtualLearnerActorAuditOutput {
   const evidence = normalizeEvidence(parsed?.evidence, input)
   const evidenceIds = new Set(evidence.map(item => item.id))
+  const danglingEvidenceRefs: string[] = []
   const findings = (Array.isArray(parsed?.findings) ? parsed.findings : []).flatMap((item: any, index: number) => {
-    const refs = stringList(item?.evidenceIds).filter(id => evidenceIds.has(id))
-    if (!refs.length) return []
+    const rawRefs = stringList(item?.evidenceIds)
+    const refs = rawRefs.filter(id => evidenceIds.has(id))
+    for (const id of rawRefs) {
+      if (!evidenceIds.has(id)) danglingEvidenceRefs.push(id)
+    }
+    if (!refs.length) {
+      if (!rawRefs.length) danglingEvidenceRefs.push(`finding:${index + 1}:missing-reference`)
+      return []
+    }
     return [{
       code: text(item?.code, 80) || `ACTOR_FINDING_${index + 1}`,
       severity: ['critical', 'major', 'minor', 'info'].includes(item?.severity) ? item.severity : 'minor',
@@ -74,28 +89,61 @@ export function normalizeActorAuditOutput(parsed: any, input: VirtualLearnerActo
     }]
   }).slice(0, 24) as VirtualLearnerActorAuditOutput['findings']
   const findingCodes = new Set(findings.map(item => item.code))
+  const danglingFindingCodes: string[] = []
   const recommendations = (Array.isArray(parsed?.recommendations) ? parsed.recommendations : []).flatMap((item: any) => {
     const action = text(item?.action, 500)
     if (!action) return []
+    const rawCodes = stringList(item?.findingCodes)
+    const validCodes = rawCodes.filter(code => findingCodes.has(code))
+    for (const code of rawCodes) {
+      if (!findingCodes.has(code)) danglingFindingCodes.push(code)
+    }
     return [{
       priority: ['P0', 'P1', 'P2', 'P3'].includes(item?.priority) ? item.priority : 'P2',
       action,
       rationale: text(item?.rationale, 700),
-      findingCodes: stringList(item?.findingCodes).filter(code => findingCodes.has(code))
+      findingCodes: validCodes
     }]
   }).slice(0, 16) as VirtualLearnerActorAuditOutput['recommendations']
 
   const hasStory = !!input.story && Object.keys(input.story).length > 0
   const rawScores = parsed?.scores || {}
+  const required = new Set([
+    'personaConsistency',
+    'frictionCalibration',
+    'stateContinuity',
+    'behaviorPlausibility',
+    'evidenceSufficiency',
+    ...(hasStory ? ['storyConsistency', 'disclosureDiscipline'] : []),
+  ])
+  const missingScores: string[] = []
+  const readRequired = (key: string, fallback: number): number => {
+    const parsedScore = readScore(rawScores[key])
+    if (!parsedScore.valid) {
+      if (required.has(key)) missingScores.push(key)
+      return fallback
+    }
+    return parsedScore.value as number
+  }
   const scores: VirtualLearnerActorAuditOutput['scores'] = {
     overall: 0,
-    personaConsistency: clampScore(rawScores.personaConsistency, 50),
-    storyConsistency: hasStory ? clampScore(rawScores.storyConsistency, 50) : null,
-    disclosureDiscipline: hasStory ? clampScore(rawScores.disclosureDiscipline, 50) : null,
-    frictionCalibration: clampScore(rawScores.frictionCalibration, 50),
-    stateContinuity: clampScore(rawScores.stateContinuity, 50),
-    behaviorPlausibility: clampScore(rawScores.behaviorPlausibility, 50),
-    evidenceSufficiency: clampScore(rawScores.evidenceSufficiency, evidence.length ? 60 : 20)
+    personaConsistency: readRequired('personaConsistency', 50),
+    storyConsistency: hasStory ? readRequired('storyConsistency', 50) : null,
+    disclosureDiscipline: hasStory ? readRequired('disclosureDiscipline', 50) : null,
+    frictionCalibration: readRequired('frictionCalibration', 50),
+    stateContinuity: readRequired('stateContinuity', 50),
+    behaviorPlausibility: readRequired('behaviorPlausibility', 50),
+    evidenceSufficiency: readRequired('evidenceSufficiency', evidence.length ? 60 : 20)
+  }
+  const integrity = {
+    valid: evidence.length > 0 && missingScores.length === 0 && danglingEvidenceRefs.length === 0,
+    missingEvidence: evidence.length === 0,
+    missingScores,
+    danglingEvidenceRefs: [...new Set(danglingEvidenceRefs)],
+    danglingFindingCodes: [...new Set(danglingFindingCodes)],
+  }
+  if (!integrity.valid) {
+    scores.evidenceSufficiency = Math.min(scores.evidenceSufficiency, 45)
   }
   const weighted = [
     [scores.personaConsistency, 20],
@@ -113,7 +161,7 @@ export function normalizeActorAuditOutput(parsed: any, input: VirtualLearnerActo
 
   const hasCritical = findings.some(item => item.severity === 'critical')
   const hasMajor = findings.some(item => item.severity === 'major')
-  const verdict: VirtualLearnerActorAuditOutput['verdict'] = scores.evidenceSufficiency < 50
+  const verdict: VirtualLearnerActorAuditOutput['verdict'] = !integrity.valid || scores.evidenceSufficiency < 50
     ? 'inconclusive'
     : hasCritical || scores.overall < 60
       ? 'invalid'
@@ -121,7 +169,7 @@ export function normalizeActorAuditOutput(parsed: any, input: VirtualLearnerActo
         ? 'credible_with_concerns'
         : 'credible'
 
-  return { verdict, scores, findings, recommendations, evidence }
+  return { verdict, scores, findings, recommendations, evidence, integrity }
 }
 
 export const virtualLearnerActorAuditorDefinition: SkillDefinition = {
@@ -175,6 +223,9 @@ export async function virtualLearnerActorAuditor(input: VirtualLearnerActorAudit
       valid: !!parsed?.scores && Array.isArray(parsed?.findings) && Array.isArray(parsed?.evidence),
       failureReason: 'missing scores/findings/evidence'
     }),
+    softValidateParsedOutput: (parsed) => normalizeActorAuditOutput(parsed, input).integrity?.valid
+      ? { valid: true }
+      : { valid: false, failureReason: '角色审计分数或证据无效。至少引用一项输入中的实际字段，且每条发现都须引用有效证据。' },
     normalizeOutput: normalizeActorAuditOutput,
     mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
       phase: 'completed',
@@ -182,7 +233,7 @@ export async function virtualLearnerActorAuditor(input: VirtualLearnerActorAudit
     }),
     retryStrategy: {
       maxAttempts: 2,
-      onValidationFail: () => '请只输出合法 JSON，并完整包含 scores、findings、recommendations、evidence。'
+      onValidationFail: ({ failureReason }) => `请只输出合法 JSON，并完整包含 scores、findings、recommendations、evidence。上一轮问题：${failureReason}`
     }
   }, input)
 

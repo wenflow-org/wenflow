@@ -160,6 +160,22 @@ describe('writeProfileConceptsAfterLesson', () => {
     });
   });
 
+  it('缺少迁移证据的概念只能待验证，自评高和老师看板不能把它重新写成已掌握', async () => {
+    await writeProfileConceptsAfterLesson('u1', [
+      { name: '剪辑节奏', status: 'mastered', progress: 100 },
+    ], {
+      selfState: { conceptName: '剪辑节奏', conceptualMastery: 0.9, selfReportedTaskDone: true },
+      curatedConcepts: {
+        mastered: [{ name: '剪辑节奏', confidence: 0.9 }, { name: '转场', confidence: 0.8 }],
+        transferEvidence: [{ concept: '剪辑节奏', kind: 'none' }, { concept: '转场', kind: 'new_context' }],
+      },
+    });
+
+    const { data } = mockUpdate.mock.calls[0][0];
+    expect(JSON.parse(data.knownConcepts)).toEqual(['转场']);
+    expect(JSON.parse(data.struggleConcepts)).toEqual(['剪辑节奏']);
+  });
+
   it('已注册概念同时补写稳定 kcId（#94）', async () => {
     mockFindManyTraces.mockResolvedValue([
       { label: '剪辑节奏', conceptKey: '剪辑节奏', conceptId: 'kc_edit_rhythm' },

@@ -159,19 +159,22 @@ const PATH_OUTPUT_FIELDS = [
   'reaction', 'visibleRequestedChanges', 'internalDecision', 'internalConfidence',
 ] as const;
 
+function isPathDecision(value: unknown): value is 'accept' | 'modify' | 'reject' {
+  return value === 'accept' || value === 'modify' || value === 'reject';
+}
+
 function pathFieldProvided(parsed: any, field: string): boolean {
   if (field === 'reaction') return !!safeText(parsed?.reaction);
   if (field === 'visibleRequestedChanges') return Array.isArray(parsed?.visibleRequestedChanges) && parsed.visibleRequestedChanges.length > 0;
-  if (field === 'internalDecision') return !!(parsed?.debug?.internalDecision ?? parsed?.decision);
+  if (field === 'internalDecision') return isPathDecision(parsed?.debug?.internalDecision ?? parsed?.decision);
   if (field === 'internalConfidence') return !!(parsed?.debug?.internalConfidence ?? parsed?.confidence);
   return false;
 }
 
 function normalizeOutput(parsed: any, input: VirtualLearnerPathEvaluatorInput): VirtualLearnerPathEvaluatorOutput {
   const fallback = buildFallback(input);
-  // BUG FIX: prompt 要求模型输出 debug.internalDecision (不是 decision)
   const rawDecision = parsed?.debug?.internalDecision ?? parsed?.decision;
-  const decision = rawDecision === 'modify' || rawDecision === 'reject' ? rawDecision : 'accept';
+  const decision = isPathDecision(rawDecision) ? rawDecision : (fallback.debug?.internalDecision ?? 'accept');
   const requestedChanges = normalizeStringArray(parsed?.visibleRequestedChanges);
   const modifyRequest = sanitizeText(parsed?.modifyRequest || '');
   // 归一化补齐检测：LLM 未输出的字段由代码用 fallback 默认值填充，供审计区分

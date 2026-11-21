@@ -25,6 +25,56 @@ import {
   runAssistedSessionMutation,
   runDayLearning,
 } from './virtual-learners.assisted-shared';
+import {
+  completeOperationReceipt,
+  failOperationReceipt,
+  getOperationReceipt,
+  OperationReceiptInFlightError,
+  OperationReceiptKeyReusedError,
+  operationReceiptRequestHash,
+  reserveOperationReceipt,
+  takeoverOperationReceipt,
+  type OperationReceiptReservation,
+} from '../../services/virtual-lab/operation-receipt.service';
+
+interface AdvanceDayReceiptContext {
+  preDayIndex?: number;
+  plannedIndexes?: number[];
+  simulatedDay?: string;
+  runTasks?: boolean;
+}
+
+/**
+ * advance-day 的 stale 回执对账：只读当前模拟钟（时钟在学习成功后才原子合并）。
+ * - 当前 dayIndex 已达到上次计划的最末日 → 上次副作用已落库，直接收尾、不重跑；
+ * - 否则视为未推进（或按设计「当天未推进=可重试同一天」）→ 交给接管重跑。
+ */
+function reconcileAdvanceDayFromArtifacts(
+  clock: { dayIndex: number },
+  rawContext: unknown,
+): { advancedDayIndexes: number[]; simulatedDay: string; learning: null; reconciled: true } | null {
+  if (!rawContext || typeof rawContext !== 'object') return null;
+  const context = rawContext as AdvanceDayReceiptContext;
+  const planned = Array.isArray(context.plannedIndexes)
+    ? context.plannedIndexes.filter((index): index is number => Number.isFinite(index))
+    : [];
+  if (!planned.length || typeof context.simulatedDay !== 'string') return null;
+  const lastIndex = planned[planned.length - 1];
+  if (Number(clock.dayIndex) < lastIndex) return null;
+  return {
+    advancedDayIndexes: planned,
+    simulatedDay: context.simulatedDay,
+    learning: null,
+    reconciled: true,
+  };
+}
+
+/** advance-day 幂等键：沿用 blackbox/assisted 的 Idempotency-Key 约定；缺省 = 旧行为直通。 */
+function getAdvanceDayCommandId(req: Request): string {
+  const header = typeof req.get === 'function' ? req.get('Idempotency-Key') : undefined;
+  const bodyValue = typeof req.body?.commandId === 'string' ? req.body.commandId : '';
+  return String(header || bodyValue || '').trim();
+}
 
 export function registerAssistedSimulationRoutes(router: Router): void {
 /**
@@ -228,6 +278,26 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
         err.statusCode = 409;
         throw err;
       }
+      const commandId = getAdvanceDayCommandId(req);
+      const receiptKey = {
+        scope: 'assisted-session', scopeId: sessionId, kind: 'advance-day', requestKey: commandId,
+      };
+      // 回放不依赖下一天是否可推进：最后一天的成功结果也必须能安全重取。
+      if (commandId) {
+        const existing = await getOperationReceipt(receiptKey);
+        if (existing && existing.requestHash !== operationReceiptRequestHash({ days, runTasks })) {
+          throw new OperationReceiptKeyReusedError();
+        }
+        if (existing?.status === 'completed' && existing.resultJson) {
+          return { ...JSON.parse(existing.resultJson), reused: true };
+        }
+        if (existing && !existing.resultJson) {
+          const prior = reconcileAdvanceDayFromArtifacts(clock, parseJson(existing.contextJson, {}));
+          if (prior && await completeOperationReceipt({ ...receiptKey, result: prior, allowFailed: true, expectedUpdatedAt: existing.updatedAt })) {
+            return { ...prior, reused: true };
+          }
+        }
+      }
       const plan = planClockAdvance(clock, rawClock, days);
       if (!plan) {
         const why = explainPlanFailure(clock, days);
@@ -241,30 +311,99 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
       const nextClock = { ...(rawClock || {}), enabled: true, ...plan.nextClock };
       const nextStageResults = { ...stageResults, simulationClock: nextClock };
 
-      let learning: { started: boolean; chunks: number; error?: string } | null = null;
-      if (runTasks) {
-        // 模拟日窗口内跑当天学习：写入点（课堂/记忆/指标）用该 asOf，落在模拟日。
-        // 这条绑定同时是**注入侧**的 asOf 来源（#172-5）：时钟要在运行块之后才
-        // mergeSessionStageResults 落库，`getTemporalContext` 若只读库内 clock 会把
-        // 「推进前」的 dayIndex 注入当天课堂。它由模拟钟上下文取本绑定，读侧与写侧同钟。
-        learning = await runWithSimulatedClock(dayWindow.asOf, () =>
-          runDayLearning(sessionId, {
-            lessonsPerDay: clock.lessonsPerDay,
-            stageResults: nextStageResults as unknown as Record<string, unknown>,
-            profileData: profileData as Record<string, unknown>,
-          }),
-        );
+      // durable request receipt（2026-11-21）：同 Idempotency-Key 同请求回放；
+      // stale processing 先按库内模拟钟对账（时钟只在学习成功后原子合并，见下方），
+      // 已推进 → 不重跑；未推进 → 接管重试同一天。
+      const receiptContext = {
+        preDayIndex: clock.dayIndex,
+        plannedIndexes: plan.indexes,
+        simulatedDay: dayWindow.simulatedDay,
+        runTasks,
+      };
+      let receiptActive = false;
+      if (commandId) {
+        let reservation: OperationReceiptReservation = await reserveOperationReceipt({
+          ...receiptKey,
+          request: { days, runTasks },
+          context: receiptContext,
+        });
+        if (reservation.kind === 'replay') {
+          return { ...(reservation.result as Record<string, unknown>), reused: true };
+        }
+        if (reservation.kind === 'in_flight') {
+          throw new OperationReceiptInFlightError(reservation.startedAt);
+        }
+        if (reservation.kind === 'stale') {
+          const reconciled = reconcileAdvanceDayFromArtifacts(clock, reservation.context);
+          if (reconciled) {
+            const completed = await completeOperationReceipt({
+              ...receiptKey,
+              result: reconciled,
+              allowFailed: true,
+              expectedUpdatedAt: reservation.updatedAt,
+            });
+            if (completed) return { ...reconciled, reused: true };
+          }
+          const taken = await takeoverOperationReceipt({
+            ...receiptKey,
+            previousStatus: reservation.previousStatus,
+            expectedUpdatedAt: reservation.updatedAt,
+            context: receiptContext,
+          });
+          if (!taken) {
+            reservation = await reserveOperationReceipt({
+              ...receiptKey,
+              request: { days, runTasks },
+              context: receiptContext,
+            });
+            if (reservation.kind === 'replay') {
+              return { ...(reservation.result as Record<string, unknown>), reused: true };
+            }
+            if (reservation.kind === 'in_flight') {
+              throw new OperationReceiptInFlightError(reservation.startedAt);
+            }
+          }
+        }
+        receiptActive = true;
       }
-      // 只有当天确实上了课（或纯记账 runTasks=false）才推进模拟时钟；未推进 = 该模拟日不被消耗、可重试。
-      // 不再"先推进再回滚"（跑数观察 #4：回滚只回滚时钟、回滚不了当天已写入的课堂/记忆/锚点）。
-      if (!shouldAdvanceSimulationClock({ runTasks, learning })) {
-        return { advancedDayIndexes: [], simulatedDay: dayWindow.simulatedDay, learning, reverted: true };
+
+      try {
+        let learning: { started: boolean; chunks: number; error?: string } | null = null;
+        if (runTasks) {
+          // 模拟日窗口内跑当天学习：写入点（课堂/记忆/指标）用该 asOf，落在模拟日。
+          // 这条绑定同时是**注入侧**的 asOf 来源（#172-5）：时钟要在运行块之后才
+          // mergeSessionStageResults 落库，`getTemporalContext` 若只读库内 clock 会把
+          // 「推进前」的 dayIndex 注入当天课堂。它由模拟钟上下文取本绑定，读侧与写侧同钟。
+          learning = await runWithSimulatedClock(dayWindow.asOf, () =>
+            runDayLearning(sessionId, {
+              lessonsPerDay: clock.lessonsPerDay,
+              stageResults: nextStageResults as unknown as Record<string, unknown>,
+              profileData: profileData as Record<string, unknown>,
+            }),
+          );
+        }
+        // 只有当天确实上了课（或纯记账 runTasks=false）才推进模拟时钟；未推进 = 该模拟日不被消耗、可重试。
+        // 不再"先推进再回滚"（跑数观察 #4：回滚只回滚时钟、回滚不了当天已写入的课堂/记忆/锚点）。
+        if (!shouldAdvanceSimulationClock({ runTasks, learning })) {
+          const reverted = { advancedDayIndexes: [], simulatedDay: dayWindow.simulatedDay, learning, reverted: true };
+          if (receiptActive) {
+            await failOperationReceipt({ ...receiptKey, error: learning?.error || '当天未推进，模拟日未消耗' });
+          }
+          return reverted;
+        }
+        await assertLeaseOwned();
+        // 只有当天确实上了课（或纯记账 runTasks=false）才推进模拟时钟；原子合并，不整列覆盖。
+        await mergeSessionStageResults(sessionId, { simulationClock: nextClock });
+        await assertLeaseOwned();
+        const completed = { advancedDayIndexes: plan.indexes, simulatedDay: dayWindow.simulatedDay, learning };
+        if (receiptActive) {
+          await completeOperationReceipt({ ...receiptKey, result: completed });
+        }
+        return completed;
+      } catch (error) {
+        if (receiptActive) await failOperationReceipt({ ...receiptKey, error });
+        throw error;
       }
-      await assertLeaseOwned();
-      // 只有当天确实上了课（或纯记账 runTasks=false）才推进模拟时钟；原子合并，不整列覆盖。
-      await mergeSessionStageResults(sessionId, { simulationClock: nextClock });
-      await assertLeaseOwned();
-      return { advancedDayIndexes: plan.indexes, simulatedDay: dayWindow.simulatedDay, learning };
     });
 
     const clock = await simulatedDayService.getSimulationClock(sessionId);

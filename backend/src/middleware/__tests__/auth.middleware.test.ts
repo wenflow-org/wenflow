@@ -16,10 +16,10 @@ jest.mock('../../config/database', () => ({
 }))
 
 jest.mock('../../utils/logger', () => ({
-  logger: { error: jest.fn() }
+  logger: { error: jest.fn(), warn: jest.fn() }
 }))
 
-import { adminAuthMiddleware, authMiddleware } from '../auth.middleware'
+import { adminAuthMiddleware, authMiddleware, authWithProjectionGrant } from '../auth.middleware'
 import { signSessionToken } from '../../utils/session-token'
 
 function createResponse() {
@@ -87,6 +87,30 @@ describe('auth middleware session domains', () => {
 
     expect(res.statusCode).toBe(401)
     expect(next).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['GET', 'read-only', false, 403],
+    ['GET', 'read-only', true, 200],
+    ['POST', 'read-only', true, 403],
+    ['DELETE', 'read-only', true, 403],
+    ['POST', 'write-enabled', true, 200],
+    ['POST', 'write-enabled', false, 403],
+  ] as const)('%s 的 %s 授权（路由开放 %s）返回 %s', async (method, accessMode, enabled, status) => {
+    const req: any = {
+      headers: {}, method, path: '/test',
+      user: { userId: 'user-1', projection: { active: true, grantSource: 'access-grant', scope: 'full', scopeDefinition: JSON.stringify({ accessMode }) } },
+    }
+    const res = createResponse()
+    const next = jest.fn()
+    const middleware = enabled ? authWithProjectionGrant() : authMiddleware
+    await middleware(req, res as any, next)
+    expect(res.statusCode).toBe(status)
+    expect(next).toHaveBeenCalledTimes(status === 200 ? 1 : 0)
+    if (status === 200) {
+      await authMiddleware(req, res as any, next)
+      expect(next).toHaveBeenCalledTimes(2)
+    }
   })
 
   it('外层 Admin 认证建立上下文后，旧子路由的重复普通认证保持幂等', async () => {

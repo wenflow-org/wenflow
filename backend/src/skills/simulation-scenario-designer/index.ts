@@ -347,6 +347,11 @@ export function normalizeScenarioOutput(raw: any) {
       metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile),
       cognitiveLoadTolerance: normalizeString(personaSeed.cognitiveLoadTolerance),
       selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle),
+      // 与 persona-designer canonical 对齐（2026-11-21）：这三个字段下游 simulator 会消费，
+      // 旧 normalize 会静默丢掉，导致两个人设设计器产出形状继续分叉。
+      selfAwarenessPattern: normalizeString(personaSeed.selfAwarenessPattern) || undefined,
+      planningFollowThrough: normalizeString(personaSeed.planningFollowThrough) || undefined,
+      overloadReaction: normalizeString(personaSeed.overloadReaction) || undefined,
       digitalLiteracy: normalizeString(personaSeed.digitalLiteracy),
       helpSeekingPattern: normalizeString(personaSeed.helpSeekingPattern),
       adversarialPattern: normalizeString(personaSeed.adversarialPattern),
@@ -355,6 +360,8 @@ export function normalizeScenarioOutput(raw: any) {
       learningPreferences: normalizeStringArray(personaSeed.learningPreferences),
       failurePatterns: normalizeStringArray(personaSeed.failurePatterns),
       behavioralProfileSummary: normalizeString(personaSeed.behavioralProfileSummary),
+      // 声纹样本：与 persona-designer canonical 对齐，已有则保留。
+      voiceSamples: normalizeStringArray(personaSeed.voiceSamples).slice(0, 2),
       personalityTraits: {
         verbosity: isAllowedEnum(personaSeed.personalityTraits?.verbosity, ['terse', 'normal', 'verbose']) ? personaSeed.personalityTraits.verbosity : null,
         enthusiasm: isAllowedEnum(personaSeed.personalityTraits?.enthusiasm, ['low', 'normal', 'high']) ? personaSeed.personalityTraits.enthusiasm : null,

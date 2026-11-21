@@ -12,12 +12,12 @@ services:
       - SYSTEM_DATABASE_URL=file:/app/data/system.db
       - NODE_ENV=production
       - LOG_DIR=/app/data/logs
-      - PROMPTS_DIR=/app/prompts
-      - CORE_FILES_DIR=/app/prompts/core
-      - SKILLS_FILE=/app/prompts/skills.yaml
-      - ORCHESTRATION_DIR=/app/prompts/orchestration
+      - PROMPTS_DIR=/app/data/prompts
+      - CORE_FILES_DIR=/app/data/prompts/core
+      - SKILLS_FILE=/app/data/prompts/skills.yaml
+      - ORCHESTRATION_DIR=/app/data/prompts/orchestration
     user: "0:0"
-    entrypoint: ["sh", "-c", "umask 077 && npm run prisma:migrate:deploy:all && chown -R 10001:10001 /app/data"]
+    entrypoint: ["sh", "-ec", "umask 077; mkdir -p /app/data/prompts; cp -Rn /app/prompts/. /app/data/prompts/; npm run prisma:migrate:deploy:all; chown -R 10001:10001 /app/data"]
     restart: "no"
 
   backend:
@@ -29,7 +29,6 @@ services:
     volumes:
       - wenflow_data:/app/data
       - ./backend/src:/backend/src:ro
-      - ./prompts:/prompts:ro
       - ./virtual-learners:/virtual-learners:ro
     env_file:
       - backend/.env
@@ -42,10 +41,10 @@ services:
       - LOG_DIR=/app/data/logs
       # #141：单实例锁目录指向数据卷（镜像内默认已设同值，这里显式透出便于覆盖排查）
       - WENFLOW_RUNTIME_DIR=/app/data/.runtime
-      - PROMPTS_DIR=/app/prompts
-      - CORE_FILES_DIR=/app/prompts/core
-      - SKILLS_FILE=/app/prompts/skills.yaml
-      - ORCHESTRATION_DIR=/app/prompts/orchestration
+      - PROMPTS_DIR=/app/data/prompts
+      - CORE_FILES_DIR=/app/data/prompts/core
+      - SKILLS_FILE=/app/data/prompts/skills.yaml
+      - ORCHESTRATION_DIR=/app/data/prompts/orchestration
       # 预制虚拟学习者真源（仓库根 virtual-learners/presets.yaml）：镜像已内置，
       # 这里再挂一份 + 环境变量指向，便于不重建镜像更新预置；否则启动同步会静默跳过
       # （[builtin-learners] 无可同步的预制条目 → created:0）
@@ -77,7 +76,7 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_BIND_IP:-127.0.0.1}:${NGINX_PORT:-80}:80"
     depends_on:
       backend:
         condition: service_healthy

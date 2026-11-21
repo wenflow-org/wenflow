@@ -92,6 +92,23 @@ describe('simulation-referee normalization', () => {
     expect(output.scores.overall).toBeLessThan(100)
   })
 
+  it('保留 data 类 finding（数据完整性缺口不再被静默归到 trace）', () => {
+    const output = normalizeRefereeOutput({
+      scores: { goalExperience: 80, controlConsistency: 80, boundaryIntegrity: 80, evidenceSufficiency: 40 },
+      evidence: [{
+        id: 'E1', source: 'publicTrace', index: 0, path: 'observation.stage',
+        excerpt: 'teaching', interpretation: '跑过教学但没有指标产出'
+      }],
+      findings: [{
+        code: 'DATA_GAP', severity: 'major', category: 'data',
+        title: '教学指标缺失', detail: '跑过教学阶段但 metrics/wrapup 均为空', evidenceIds: ['E1']
+      }],
+      recommendations: []
+    }, input)
+
+    expect(output.findings[0]?.category).toBe('data')
+  })
+
   it('storyMeta / metricCompleteness 可作为证据来源，但不能带 index', () => {
     const withMeta: VirtualLearnerRefereeInput = {
       ...input,
@@ -132,10 +149,65 @@ describe('simulation-referee normalization', () => {
   it('教学阶段未覆盖（teachingSessions=0）不触发数据门禁', () => {
     const output = normalizeRefereeOutput({
       scores: { goalExperience: 90, controlConsistency: 90, boundaryIntegrity: 90, evidenceSufficiency: 90 },
-      evidence: [], findings: [], recommendations: []
+      evidence: [{ id: 'E1', source: 'publicTrace', index: 0, path: 'observation.stage' }], findings: [], recommendations: []
     }, input)
 
     expect(output.scores.evidenceSufficiency).toBe(90)
     expect(output.verdict).toBe('pass')
+  })
+
+  it('缺失/非法分数 → inconclusive，并在 integrity.missingScores 留痕', () => {
+    const missing = normalizeRefereeOutput({
+      scores: { goalExperience: 90, boundaryIntegrity: 90, evidenceSufficiency: 90 },
+      evidence: [], findings: [], recommendations: []
+    }, input)
+    expect(missing.integrity?.valid).toBe(false)
+    expect(missing.integrity?.missingScores).toContain('controlConsistency')
+    expect(missing.verdict).toBe('inconclusive')
+
+    const invalid = normalizeRefereeOutput({
+      scores: { goalExperience: 90, controlConsistency: 140, boundaryIntegrity: 90, evidenceSufficiency: 90 },
+      evidence: [], findings: [], recommendations: []
+    }, input)
+    expect(invalid.integrity?.missingScores).toContain('controlConsistency')
+    expect(invalid.verdict).toBe('inconclusive')
+  })
+
+  it('悬空证据引用 → inconclusive（即使分数很高）', () => {
+    const output = normalizeRefereeOutput({
+      scores: { goalExperience: 95, controlConsistency: 95, boundaryIntegrity: 95, evidenceSufficiency: 95 },
+      evidence: [],
+      findings: [{
+        code: 'DANGLING', severity: 'minor', category: 'trace',
+        title: '引用了不存在的证据', detail: 'x', evidenceIds: ['E404']
+      }],
+      recommendations: []
+    }, input)
+
+    expect(output.findings).toEqual([])
+    expect(output.integrity?.danglingEvidenceRefs).toContain('E404')
+    expect(output.verdict).toBe('inconclusive')
+  })
+
+  it.each([
+    { evidence: [] },
+    { evidence: [{ source: 'publicTrace', index: 0, path: 'observation.nonexistent' }] },
+  ])('没有可定位证据时不能凭高分通过 %#', ({ evidence }) => {
+    const output = normalizeRefereeOutput({
+      scores: { goalExperience: 95, controlConsistency: 95, boundaryIntegrity: 95, evidenceSufficiency: 95 },
+      evidence, findings: [], recommendations: [],
+    }, input);
+    expect(output.verdict).toBe('inconclusive');
+    expect(output.integrity?.missingEvidence).toBe(true);
+  });
+
+  it('合法低分仍按 fail 上报，不被当成证据不足', () => {
+    const output = normalizeRefereeOutput({
+      scores: { goalExperience: 30, controlConsistency: 30, boundaryIntegrity: 30, evidenceSufficiency: 70 },
+      evidence: [{ source: 'publicTrace', index: 0, path: 'observation.stage' }], findings: [], recommendations: []
+    }, input)
+
+    expect(output.integrity?.valid).toBe(true)
+    expect(output.verdict).toBe('fail')
   })
 })

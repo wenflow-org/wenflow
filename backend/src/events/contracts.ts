@@ -12,7 +12,12 @@ export type DurableEventType =
    * 由 `lesson:completed` 的消费**登记**（见 events/lesson-enrichment-event.ts），
    * 在 outbox 的**独立泳道**里消费——既不占住有序事件的关键路径，失败也不阻塞同用户后续事件。
    */
-  | 'lesson:knowledge-enrichment';
+  | 'lesson:knowledge-enrichment'
+  /**
+   * 路径质量评审（2026-11-21）：真实/共享路径落库后，由 outbox 独立泳道异步评审。
+   * 不属于学习者有序泳道，也不是虚拟学员的 `stageResults.path_review`。
+   */
+  | 'path:quality-review';
 
 export interface DurableDomainEvent<T = Record<string, any>> {
   id: string;

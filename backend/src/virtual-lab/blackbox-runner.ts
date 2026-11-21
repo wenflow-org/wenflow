@@ -77,6 +77,9 @@ import { findMisconceptionFor } from '../config/misconception-corpus'
 import type { SkillDefinition } from '../skills/protocol'
 import { asErrorLike } from './vlab-types'
 import { buildCheckpointAction } from './blackbox-checkpoint'
+import { computeStageCoverage, normalizeObservedStage } from './run-outcome'
+import { buildProbeAnswers, type ProbePrompt } from './probe-answers'
+import { detectTeacherOverload } from './cognitive-load'
 import { shouldFreezeSimulatorRoute } from './simulator-route-policy'
 import type {
   ActorProfileSnapshot,
@@ -554,6 +557,7 @@ export class BlackboxVirtualLearnerRunner {
     const next = {
       ...stageResults,
       experiment: {
+        ...stageResults.experiment,
         experimentId,
         runId,
         mode: 'blackbox-api',
@@ -702,13 +706,18 @@ export class BlackboxVirtualLearnerRunner {
     }
 
     const input = await this.buildRefereeInput(session, state)
-    const inputFingerprint = this.reportFingerprint(input, {
-      skillId: virtualLearnerRefereeDefinition.name,
-      version: virtualLearnerRefereeDefinition.version,
-      prompt: VIRTUAL_LEARNER_REFEREE_PROMPT,
-      temperature: VIRTUAL_LEARNER_REFEREE_TEMPERATURE,
-      maxTokens: VIRTUAL_LEARNER_REFEREE_MAX_TOKENS
-    })
+    // 指纹必须覆盖「实际生效」的模型与提示词版本（以及产生本实验的 Simulator 配置），
+    // 否则管理员改了 prompt/模型后仍会复用旧报告（2026-11-21 报告口径）。
+    const evaluator = await this.resolveEvaluatorFingerprintMeta(
+      session.userId,
+      'skill:simulation-referee',
+      virtualLearnerRefereeDefinition,
+      VIRTUAL_LEARNER_REFEREE_PROMPT,
+      VIRTUAL_LEARNER_REFEREE_TEMPERATURE,
+      VIRTUAL_LEARNER_REFEREE_MAX_TOKENS
+    )
+    const experimentConfig = this.experimentFingerprintMeta(state)
+    const inputFingerprint = this.reportFingerprint(input, { evaluator, experiment: experimentConfig })
     const existing = (state.blackbox?.refereeReports || []).find((item) =>
       item.runId === input.experimentSummary.runId && item.inputFingerprint === inputFingerprint && item.status === 'completed'
     )
@@ -732,6 +741,8 @@ export class BlackboxVirtualLearnerRunner {
       inputFingerprint,
       skillId: virtualLearnerRefereeDefinition.name,
       reportVersion: virtualLearnerRefereeDefinition.version,
+      evaluator,
+      experimentConfig,
       status: 'completed',
       triggeredBy: operatorId,
       evaluatedAt: new Date().toISOString(),
@@ -767,13 +778,16 @@ export class BlackboxVirtualLearnerRunner {
     }
 
     const input = await this.buildActorAuditInput(session, state)
-    const inputFingerprint = this.reportFingerprint(input, {
-      skillId: virtualLearnerActorAuditorDefinition.name,
-      version: virtualLearnerActorAuditorDefinition.version,
-      prompt: VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
-      temperature: VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE,
-      maxTokens: VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS
-    })
+    const evaluator = await this.resolveEvaluatorFingerprintMeta(
+      session.userId,
+      'skill:simulation-actor-audit',
+      virtualLearnerActorAuditorDefinition,
+      VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
+      VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE,
+      VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS
+    )
+    const experimentConfig = this.experimentFingerprintMeta(state)
+    const inputFingerprint = this.reportFingerprint(input, { evaluator, experiment: experimentConfig })
     const existing = (state.blackbox?.actorAuditReports || []).find((item) =>
       item.runId === input.experimentSummary.runId && item.inputFingerprint === inputFingerprint && item.status === 'completed'
     )
@@ -797,6 +811,8 @@ export class BlackboxVirtualLearnerRunner {
       inputFingerprint,
       skillId: virtualLearnerActorAuditorDefinition.name,
       reportVersion: virtualLearnerActorAuditorDefinition.version,
+      evaluator,
+      experimentConfig,
       status: 'completed',
       triggeredBy: operatorId,
       evaluatedAt: new Date().toISOString(),
@@ -833,7 +849,7 @@ export class BlackboxVirtualLearnerRunner {
       | { frictionCalibration?: unknown }
       | undefined;
     const frictionCalibration = Number(auditScores?.frictionCalibration);
-    if (Number.isFinite(frictionCalibration) && frictionCalibration < 60) {
+    if (reportRecord.verdict !== 'inconclusive' && Number.isFinite(frictionCalibration) && frictionCalibration < 60) {
       try {
         const stateRecord = nextState as unknown as Record<string, unknown>;
         const simulationConfig = (stateRecord.simulationConfig as Record<string, unknown> | undefined) ?? {};
@@ -1035,7 +1051,26 @@ export class BlackboxVirtualLearnerRunner {
           'goal'
         )
         const shouldConfirm = latest.availableActions.includes('confirm_proposal') && output?.learnerState?.readyToAdvance === true
-        action = { type: shouldConfirm ? 'confirm_proposal' : 'chat', text: output.reply }
+        // C1（2026-11-21）：确认时把前置自测作答一起提交。题目在上一轮观测的旁路诊断里
+        // （platform-user-adapter 从 confirmedProposal 抽取，含判分键，不回流学习者）；
+        // 作答按画像 struggleConcepts 确定性生成：卡点命中→故意答错，否则答对。
+        const lastDiagnostic = state.blackbox?.refereeTrace?.slice(-1)[0]?.diagnostic as Record<string, unknown> | undefined
+        const probePrompts = Array.isArray(lastDiagnostic?.probePrompts)
+          ? lastDiagnostic.probePrompts as ProbePrompt[]
+          : []
+        const probeAnswers = shouldConfirm
+          ? buildProbeAnswers(
+              probePrompts,
+              Array.isArray(learner?.struggleConcepts)
+                ? learner.struggleConcepts.filter((item): item is string => typeof item === 'string' && !!item.trim())
+                : []
+            )
+          : []
+        action = {
+          type: shouldConfirm ? 'confirm_proposal' : 'chat',
+          text: output.reply,
+          ...(shouldConfirm && probeAnswers.length ? { probeAnswers } : {})
+        }
         await this.persistPrivateState(session, state, 'goal', output.learnerState, {
           emotion: output.emotion,
           degraded: output.degraded,
@@ -1065,7 +1100,7 @@ export class BlackboxVirtualLearnerRunner {
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
         }))
-        const knowledgeSnapshot = await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask)
+        const knowledgeSnapshot = this.buildLearnerKnowledgeSnapshot(latest.visibleTask)
         const lastTeacherMessage = [...history].reverse().find((item) => item.role === 'teacher')?.content || ''
         // 受控错误（与 assisted 链路同口径，外部审计 P1-5）：旧黑盒链路没有采样，
         // 画像 struggle 与真人误区语料在 blackbox 实验里完全不生效，学习者永远零失手。
@@ -1085,6 +1120,32 @@ export class BlackboxVirtualLearnerRunner {
             return hit ? { statement: hit.statement, why: hit.why ?? null, source: hit.source ?? null } : null
           },
         })
+        // 稳定误区（2026-11-21）：与 assisted 同口径——受控错误命中真人误区后跨轮持有，
+        // 最多 3 轮；老师在反例轮说服后，模型输出 null 即修正。
+        const lessonTurn = lessonHistory.filter((item) => item.role === 'learner').length
+        const teachingPrivate = state.blackbox?.learnerPrivateState?.teaching as Record<string, unknown> | undefined
+        const previousHeld = teachingPrivate?.heldMisconception as
+          | { concept: string; statement: string; why?: string | null; source?: string | null; createdTurn?: number }
+          | null
+          | undefined
+        const heldMisconception = controlledError.forced && controlledError.targetMisconception && controlledError.targetConcept
+          ? {
+              concept: controlledError.targetConcept,
+              statement: controlledError.targetMisconception.statement,
+              why: controlledError.targetMisconception.why ?? null,
+              source: controlledError.targetMisconception.source ?? null,
+              createdTurn: lessonTurn,
+            }
+          : previousHeld && lessonTurn - Number(previousHeld.createdTurn ?? 0) < 3
+            ? previousHeld
+            : null
+        // 工作记忆超载（2026-11-21）：与 assisted 同口径，按教师本轮信息量 + 人设耐受度掷信号。
+        const overloadSignal = detectTeacherOverload({
+          message: lastTeacherMessage,
+          tolerance: (learner as Record<string, unknown> | null)?.profile
+            ? ((learner as Record<string, unknown>).profile as Record<string, unknown>).cognitiveLoadTolerance as string | null
+            : null,
+        })
         // 阶段1：认知判决（BEAGLE Strategist 段，物理两阶段第一段；失败降级 null，不阻断叙事）
         let epistemicGrounding: any = null
         try {
@@ -1094,6 +1155,7 @@ export class BlackboxVirtualLearnerRunner {
               learner,
               currentTask: latest.visibleTask || null,
               knowledgeSnapshot,
+              overloadSignal,
               previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
               visibleContext: {
                 history,
@@ -1101,6 +1163,7 @@ export class BlackboxVirtualLearnerRunner {
               },
               ...(latest.visibleCheckpoint ? { pendingCheckpoint: latest.visibleCheckpoint } : {}),
               ...(controlledError.forced ? { forcedCorrectness: controlledError } : {}),
+              ...(heldMisconception ? { heldMisconception } : {}),
             },
             snapshot,
             'teaching'
@@ -1115,6 +1178,18 @@ export class BlackboxVirtualLearnerRunner {
                 ?? epistemicGrounding?.errorPattern
                 ?? (controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null),
               masteryProb: 0.15,
+            }
+          }
+          // 工作记忆超载：判决器若仍判对，按代码信号兜底覆写（与 assisted 同口径）。
+          if (overloadSignal.overloaded && epistemicGrounding?.sampledCorrectness !== false) {
+            const overloadConcept = latest.visibleTask?.linkedConcept || latest.visibleTask?.title || null
+            const rawMastery = Number(epistemicGrounding?.masteryProb)
+            epistemicGrounding = {
+              ...(epistemicGrounding || {}),
+              sampledCorrectness: false,
+              blockedConcept: overloadConcept,
+              errorPattern: '单轮信息量过载，没接住',
+              masteryProb: Number.isFinite(rawMastery) ? Math.min(rawMastery, 0.3) : 0.3,
             }
           }
         } catch (groundingError) {
@@ -1146,6 +1221,8 @@ export class BlackboxVirtualLearnerRunner {
             previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
             knowledgeSnapshot,
+            overloadSignal,
+            ...(heldMisconception ? { heldMisconception } : {}),
             turnIndex: lessonHistory.filter((item) => item.role === 'learner').length,
             turnBudget: 18,
             ...(await this.buildLearnerMemoryContextForSimulator(session.userId, sessionId, history.length)),
@@ -1257,6 +1334,14 @@ export class BlackboxVirtualLearnerRunner {
     // 老会话没有该字段时以当前长度为首个基线。
     const previousTraceSequence = this.currentTraceSequence(latestState)
     const publicTraceSequence = previousTraceSequence + 1
+    const retainedTrace = latestState.blackbox?.publicTrace || []
+    const stageObservationCounts = {
+      ...(latestState.blackbox?.stageObservationCounts ?? computeStageCoverage(retainedTrace).observedCounts)
+    }
+    const stageObservationSource = latestState.blackbox?.stageObservationSource
+      ?? (previousTraceSequence === 0 && retainedTrace.length === 0 ? 'full-trace' : 'retained-window')
+    const stage = normalizeObservedStage(result.observation.stage)
+    if (stage) stageObservationCounts[stage] += 1
     const observedAt = new Date().toISOString()
     // 写入侧归一化（#176-1）：存 sanitize 后的观测（读侧历史数据仍会在读时再 sanitize），
     // 并把两条轨迹压到首尾保留上限，避免整行随命令数无界增长。
@@ -1278,6 +1363,8 @@ export class BlackboxVirtualLearnerRunner {
         publicTrace,
         refereeTrace,
         publicTraceSequence,
+        stageObservationCounts,
+        stageObservationSource,
         ...(projectionCommandId
           ? { projectedCommandIds: [...projectedCommandIds, projectionCommandId].slice(-200) }
           : {})
@@ -2078,7 +2165,7 @@ export class BlackboxVirtualLearnerRunner {
         source: 'blackbox',
         selfState: effectiveSelfState,
         curatedConcepts: curated
-          ? { mastered: curated.masteredConcepts.map((m) => m.name), struggling: curated.struggleConcepts.map((s) => s.name) }
+          ? { mastered: curated.masteredConcepts, struggling: curated.struggleConcepts.map((s) => s.name), transferEvidence: curated.transferEvidence }
           : null,
       });
       await recordCompletedArtifact({
@@ -2096,6 +2183,7 @@ export class BlackboxVirtualLearnerRunner {
           mastered: curated.masteredConcepts,
           struggling: curated.struggleConcepts,
           selfCalibration: curated.selfCalibration,
+          selfCalibrationBias: curated.selfCalibrationBias,
         } : undefined,
       });
     } catch (error) {
@@ -2121,7 +2209,9 @@ export class BlackboxVirtualLearnerRunner {
     masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>;
     struggleConcepts: Array<{ name: string; blocker: string; severity: string }>;
     selfCalibration: string;
+    selfCalibrationBias: 'accurate' | 'overestimate' | 'underestimate' | 'unknown';
     memoryDelta: string;
+    transferEvidence: import('../skills/simulation-memory-curate').TransferEvidence[];
   } | null> {
     try {
       const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: session.virtualProfileId } });
@@ -2185,7 +2275,14 @@ export class BlackboxVirtualLearnerRunner {
       return {
         masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
         struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
+        transferEvidence: Array.isArray(output.transferEvidence) ? output.transferEvidence : [],
         selfCalibration: typeof output.selfCalibration === 'string' ? output.selfCalibration : '',
+        selfCalibrationBias: output.selfCalibrationBias === 'accurate'
+          || output.selfCalibrationBias === 'overestimate'
+          || output.selfCalibrationBias === 'underestimate'
+          || output.selfCalibrationBias === 'unknown'
+          ? output.selfCalibrationBias
+          : 'unknown',
         memoryDelta: typeof output.memoryDelta === 'string' ? output.memoryDelta : '',
       };
     } catch (error) {
@@ -2234,24 +2331,16 @@ export class BlackboxVirtualLearnerRunner {
    * - 最近完成事项（成果物标题）
    * 当前任务概念固定附加在首位（保持「当前在看什么」）。
    */
-  private async buildLearnerKnowledgeSnapshot(
-    userId: string,
+  /**
+   * 学习者页面可见的本节知识看板：只放当前任务锚点。
+   * 画像长期记忆（mastered/dueReview/struggling）走 learnerMemory；混进看板会让
+   * 模拟器自评过度贴合教师后台判定（2026-11-21 黑盒边界审计）。
+   */
+  private buildLearnerKnowledgeSnapshot(
     visibleTask: LearnerObservation['visibleTask'] | undefined
-  ): Promise<Array<{ name: string; status: string; progress: number }>> {
-    const memory = await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null);
+  ): Array<{ name: string; status: string; progress: number }> {
     const currentName = visibleTask?.linkedConcept || visibleTask?.title || null;
-    const result: Array<{ name: string; status: string; progress: number }> = [];
-    if (currentName) result.push({ name: String(currentName), status: 'learning', progress: 40 });
-    for (const item of memory?.mastered || []) {
-      result.push({ name: item.name, status: 'mastered', progress: 100 });
-    }
-    for (const item of memory?.dueReview || []) {
-      result.push({ name: item.name, status: 'review', progress: item.progress });
-    }
-    for (const item of memory?.struggling || []) {
-      result.push({ name: item.name, status: 'learning', progress: 30 });
-    }
-    return result.slice(0, 8);
+    return currentName ? [{ name: String(currentName), status: 'learning', progress: 40 }] : [];
   }
 
   /**
@@ -2609,7 +2698,7 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private async buildRefereeInput(session: VirtualSessionRow, state: StageResults): Promise<VirtualLearnerRefereeInput> {
-    const { rawPublic, publicTrace, summary } = this.buildSharedAuditTrace(session, state)
+    const { publicTrace, summary } = this.buildSharedAuditTrace(session, state)
     const rawReferee = Array.isArray(state.blackbox?.refereeTrace) ? state.blackbox.refereeTrace : []
     const refereeTrace = this.compactTrace(rawReferee, 120).map((entry: BlackboxRefereeTraceEntry) => ({
       timestamp: String(entry?.timestamp || ''),
@@ -2706,14 +2795,15 @@ export class BlackboxVirtualLearnerRunner {
       control: entry?.control && typeof entry.control === 'object' ? entry.control : {}
     })) as BlackboxPublicTraceEntry[]
     const control = state.blackbox?.control && typeof state.blackbox.control === 'object' ? state.blackbox.control : {}
-    const stageCoverage = {
-      goal: false,
-      path: false,
-      teaching: false,
-      completed: false,
-      error: false
-    } as Record<LearnerObservation['stage'], boolean>
-    for (const entry of publicTrace) stageCoverage[entry.observation.stage] = true
+    const retainedCoverage = computeStageCoverage(rawPublic)
+    const observedCounts = state.blackbox?.stageObservationCounts ?? retainedCoverage.observedCounts
+    const coverageSource = state.blackbox?.stageObservationSource ?? 'retained-window'
+    const stageCoverage = { ...retainedCoverage.stageCoverage }
+    for (const stage of Object.keys(stageCoverage) as Array<keyof typeof stageCoverage>) {
+      stageCoverage[stage] = observedCounts[stage] > 0
+    }
+    const originalPublicTraceCount = Math.max(rawPublic.length, this.currentTraceSequence(state))
+    const declaredStageScope = state.experiment.declaredStageScope
     const startedAt = state.experiment?.createdAt || session.createdAt?.toISOString?.() || null
     const completedAt = session.completedAt?.toISOString?.() || null
     const summary: BlackboxExperimentSummary = {
@@ -2733,15 +2823,19 @@ export class BlackboxVirtualLearnerRunner {
       goalCompleted: control.goalCompleted === true,
       taskCompleted: control.taskCompleted === true,
       runCompleted: control.runCompleted === true,
-      publicTraceCount: rawPublic.length,
+      publicTraceCount: originalPublicTraceCount,
       refereeTraceCount: 0,
       stageCoverage,
+      stageCoverageSource: coverageSource,
+      observedStageCounts: observedCounts,
+      ...(Array.isArray(declaredStageScope) ? { declaredStageScope } : {}),
       inputCoverage: {
-        originalPublicTraceCount: rawPublic.length,
+        originalPublicTraceCount,
         includedPublicTraceCount: publicTrace.length,
         originalRefereeTraceCount: 0,
         includedRefereeTraceCount: 0,
-        truncated: rawPublic.length !== publicTrace.length
+        truncated: originalPublicTraceCount !== publicTrace.length,
+        coverageComputedBeforeTruncation: coverageSource === 'full-trace'
       }
     }
     return { rawPublic, publicTrace, control, summary }
@@ -2806,8 +2900,73 @@ export class BlackboxVirtualLearnerRunner {
     })
   }
 
+  /**
+   * 实际生效的评审身份：ACTIVE prompt 版本/指纹 + 路由模型。
+   * 解析失败不阻断报告生成，但会显式把对应字段置 null（指纹仍稳定）。
+   */
+  private async resolveEvaluatorFingerprintMeta(
+    userId: string,
+    agentId: string,
+    definition: Pick<SkillDefinition, 'name' | 'version'>,
+    fallbackPrompt: string,
+    fallbackTemperature: number,
+    fallbackMaxTokens: number
+  ) {
+    const active = await agentConfigService.getActivePrompt(agentId).catch(() => null)
+    const route: ResolvedRoute | null = await (async () => {
+      try {
+        return await getAPIGateway().resolveRoute({ skillId: definition.name }, userId)
+      } catch {
+        return null
+      }
+    })()
+    const activePrompt = typeof active?.systemPrompt === 'string' && active.systemPrompt.trim()
+      ? active.systemPrompt.trim()
+      : null
+    const activeTemperature = Number(active?.temperature)
+    const activeMaxTokens = Number(active?.maxTokens)
+    return {
+      skillId: definition.name,
+      version: definition.version,
+      agentId,
+      promptVersion: active?.version ?? null,
+      promptFingerprint: this.valueFingerprint(activePrompt || fallbackPrompt),
+      temperature: Number.isFinite(activeTemperature) ? activeTemperature : fallbackTemperature,
+      maxTokens: activeMaxTokens > 0 ? activeMaxTokens : fallbackMaxTokens,
+      model: route?.model ?? null,
+      providerId: route?.providerId ?? null,
+      providerType: route?.providerType ?? null,
+      thinkingMode: route?.thinkingMode ?? null,
+      reasoningEffort: route?.reasoningEffort ?? null,
+    }
+  }
+
+  /** 产生本实验的 Simulator 配置（模型/prompt 版本）；配置变化必须使旧评审指纹失效。 */
+  private experimentFingerprintMeta(state: StageResults) {
+    const simulators = state.experimentSnapshot?.simulators || null
+    const pick = (stage: 'goal' | 'teaching') => {
+      const item = simulators?.[stage]
+      if (!item) return null
+      return {
+        version: item.version ?? null,
+        promptVersion: item.promptVersion ?? null,
+        promptFingerprint: item.promptFingerprint ?? null,
+        model: item.route?.model ?? null,
+        providerId: item.route?.providerId ?? null,
+        temperature: Number.isFinite(item.temperature) ? item.temperature : null,
+        maxTokens: Number.isFinite(item.maxTokens) ? item.maxTokens : null,
+      }
+    }
+    return {
+      capturedAt: state.experimentSnapshot?.capturedAt ?? null,
+      frictionBudget: state.simulationConfig?.frictionBudget ?? null,
+      goal: pick('goal'),
+      teaching: pick('teaching'),
+    }
+  }
+
   private reportFingerprint(input: unknown, evaluator: Record<string, unknown>) {
-    return createHash('sha256').update(JSON.stringify({ evaluator, input })).digest('hex')
+    return createHash('sha256').update(JSON.stringify({ evidenceContract: 2, evaluator, input })).digest('hex')
   }
 
   private valueFingerprint(value: unknown) {
@@ -2894,7 +3053,9 @@ export class BlackboxVirtualLearnerRunner {
     if (!value || typeof value !== 'object') return null
     const allowedKeys = [
       'schemaVersion', 'renderHints', 'generationStatus', 'canStartLearning', 'replan',
-      'analysis', 'state', 'strategies', 'completionCandidate', 'endResult', 'completedTask', 'task'
+      'analysis', 'state', 'strategies', 'completionCandidate', 'endResult', 'completedTask', 'task',
+      // C1：前置自测题（含判分键）只留在旁路诊断，供 runner 生成作答计划
+      'probePrompts'
     ]
     const sanitize = (item: unknown, depth = 0): unknown => {
       if (depth > 3) return '[truncated]'

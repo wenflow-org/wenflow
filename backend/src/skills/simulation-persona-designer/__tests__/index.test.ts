@@ -24,6 +24,15 @@ function validPersonaSeed() {
     personalityDrivers: ['被认可', '掌控感'],
     emotionalTriggers: ['当众被指出错误', '时间被压缩'],
     failurePatterns: ['学了开头就放弃', '复盘总停留在情绪层'],
+    voiceSamples: ['我这边消息一直响，先把这个表弄完再说', '这玩意儿也太绕了，我脑子已经乱了'],
+    personalityTraits: {
+      verbosity: 'normal',
+      enthusiasm: 'normal',
+      confusionStyle: 'direct',
+      patience: 'normal',
+      questionStyle: 'clarifying',
+      emotionalRange: 'moderate',
+    },
   }
 }
 
@@ -45,6 +54,22 @@ describe('simulation-persona-designer validate/normalize', () => {
     const seed3 = validPersonaSeed() as any
     delete seed3.personalityDrivers
     expect(validatePersonaOutput({ personaSeed: seed3 }).valid).toBe(false)
+  })
+
+  it('voiceSamples 少于 2 句时拒绝（去 AI 腔的原话锚点）', () => {
+    const seed = validPersonaSeed() as any
+    seed.voiceSamples = ['只有一句']
+    expect(validatePersonaOutput({ personaSeed: seed }).valid).toBe(false)
+  })
+
+  it('缺少 personalityTraits / 子枚举非法时拒绝（A1：防止全部回落成默认客服腔）', () => {
+    const missing = validPersonaSeed() as any
+    delete missing.personalityTraits
+    expect(validatePersonaOutput({ personaSeed: missing }).valid).toBe(false)
+
+    const bad = validPersonaSeed() as any
+    bad.personalityTraits.verbosity = 'chatty'
+    expect(validatePersonaOutput({ personaSeed: bad }).valid).toBe(false)
   })
 
   it('normalize 保留 canonical 扩展字段并补齐 legacy 字段', () => {

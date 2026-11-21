@@ -42,6 +42,17 @@ describe('simulation-path-evaluate normalize', () => {
     expect(output.reaction.length).toBeGreaterThan(0)
     expect(output.debug?.internalDecision).toBe('accept')
   })
+
+  it.each([undefined, 'unknown'])('缺失或非法决策 %s 时沿用学员时间负荷判断', (internalDecision) => {
+    const output = normalizeOutput({ reaction: '我先看看。', debug: { internalDecision } }, {
+      ...input,
+      learner: { availableTime: 'minimal' },
+      pathProposal: { estimatedHours: 40 },
+    })
+    expect(output.debug?.internalDecision).toBe('modify')
+    expect(output.debug?.normalizedFallback?.fields).toContain('internalDecision')
+    expect(output.visibleRequestedChanges).toHaveLength(1)
+  })
 })
 
 describe('simulation-path-evaluate 失败显式传播', () => {

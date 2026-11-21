@@ -296,6 +296,14 @@ describe('parseHarnessArgs', () => {
     expect(parseHarnessArgs(['--realistic-persona'], {}).realisticPersona).toBe(true);
   });
 
+  it('--stages / --expected-terminal 显式声明阶段范围与终态', () => {
+    const args = parseHarnessArgs(['--stages=classroom,settlement', '--expected-terminal=observation-exhausted'], {});
+    expect(args.stages).toEqual(['teaching', 'completion']);
+    expect(args.expectedTerminal).toBe('observation-exhausted');
+    expect(() => parseHarnessArgs(['--stages=goal,unknown'], {})).toThrow(/stages/);
+    expect(() => parseHarnessArgs(['--expected-terminal=pass'], {})).toThrow(/expected-terminal/);
+  });
+
   it('凭据兜底：E2E_* 优先，其次 .env 的 INIT_ADMIN_*', () => {
     const initWith = parseHarnessArgs([], { INIT_ADMIN_NAME: 'root2', INIT_ADMIN_PASSWORD: 'p2' });
     expect(initWith.adminName).toBe('root2');
@@ -353,5 +361,43 @@ describe('RunState（断点续跑状态）', () => {
     // 进度与身份保留
     expect(fresh.sessionId).toBe('vs1');
     expect(fresh.round).toBe(2);
+  });
+
+  it('beginRunAttempt：归档上一轮尝试（未落终态 → interrupted），新 attempt 自增', () => {
+    const resumed = parseRunState({
+      version: 1,
+      sessionId: 'vs1',
+      round: 3,
+      attempt: 2,
+      attemptStartedAt: '2026-09-18T10:00:00.000Z',
+      findings: [{ code: 'retry-exhausted', detail: '网络' }],
+      attempts: [{ attempt: 1, outcome: 'interrupted', round: 1, findings: [] }],
+    })!;
+    const fresh = beginRunAttempt(resumed);
+    expect(fresh.attempt).toBe(3);
+    expect(fresh.attempts).toHaveLength(2);
+    expect(fresh.attempts[1]).toMatchObject({
+      attempt: 2,
+      outcome: 'interrupted',
+      round: 3,
+      sessionId: 'vs1',
+      findings: [{ code: 'retry-exhausted', detail: '网络' }],
+    });
+    expect(fresh.attemptStartedAt).toBeTruthy();
+  });
+
+  it('parseRunState：保留 outcome / stageScope / stagesReached / attempts', () => {
+    const parsed = parseRunState({
+      version: 1,
+      sessionId: 'vs1',
+      outcome: 'observation-exhausted',
+      stageScope: { expectedTerminal: 'observation-exhausted', stages: ['goal', 'path'], observationDays: 4 },
+      stagesReached: ['goal', 'path'],
+      attempts: [{ attempt: 1, outcome: 'failed', round: 0, findings: [] }],
+    })!;
+    expect(parsed.outcome).toBe('observation-exhausted');
+    expect(parsed.stageScope?.stages).toEqual(['goal', 'path']);
+    expect(parsed.stagesReached).toEqual(['goal', 'path']);
+    expect(parsed.attempts[0].outcome).toBe('failed');
   });
 });

@@ -9,6 +9,26 @@
  *
  * 本模块把上述判定固化为纯函数；HTTP/落库粘合见 `scripts/simulate-learner-e2e.ts`。
  */
+import {
+  buildFunctionalEvidence,
+  classifyRunTerminal,
+  normalizeStageScope,
+  normalizeStageScopeName,
+  type FunctionalEvidence,
+  type RunOutcome,
+  type RunStageScopeName,
+  type StageScope,
+} from '../../virtual-lab/run-outcome';
+
+export {
+  buildFunctionalEvidence,
+  classifyRunTerminal,
+  normalizeStageScope,
+  type FunctionalEvidence,
+  type RunOutcome,
+  type RunStageScopeName,
+  type StageScope,
+} from '../../virtual-lab/run-outcome';
 
 /** advance-day 一轮的处置分类 */
 export type AdvanceKind =
@@ -85,6 +105,21 @@ export interface RunFinding {
   detail: string;
 }
 
+/**
+ * 单次运行尝试的归档（续跑/重试不覆盖历史）。
+ * `outcome` 为空表示该次尝试被中断且没有落终态，续跑时按 interrupted 处理。
+ */
+export interface RunAttemptSummary {
+  attempt: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  outcome: RunOutcome | 'interrupted';
+  round: number;
+  maxDays: number | null;
+  sessionId: string | null;
+  findings: RunFinding[];
+}
+
 /** 断点续跑状态（落在一个 JSON 文件里，进程被杀后同命令可续） */
 export interface RunState {
   version: 1;
@@ -97,7 +132,22 @@ export interface RunState {
   sessionId: string | null;
   /** 已完成的模拟日轮数 */
   round: number;
+  goalStepsAcknowledged?: number;
   findings: RunFinding[];
+  /** 当前第几次尝试（从 1 起）；旧 state 缺省为 1 */
+  attempt: number;
+  /** 当前尝试开始时刻（旧 state 回退 updatedAt） */
+  attemptStartedAt: string;
+  /** 历次尝试归档：续跑只清空当前 findings，不丢历史 */
+  attempts: RunAttemptSummary[];
+  /** 显式阶段范围（声明式；功能验证/报告共用） */
+  stageScope: StageScope | null;
+  /** 当前/最近一次终态（canonical；与 exitCode 解耦） */
+  outcome: RunOutcome | null;
+  /** 实际到达的阶段（累积；续跑不丢） */
+  stagesReached: RunStageScopeName[];
+  /** 功能验证证据（与效果分完全解耦） */
+  functional: FunctionalEvidence | null;
   updatedAt: string;
 }
 
@@ -123,6 +173,10 @@ export interface HarnessArgs {
   expectNoPath: boolean;
   /** 创建后用 persona-designer 生成完整人设（friction/情绪触发/背景），而不是空壳跑数人设 */
   realisticPersona: boolean;
+  /** 显式阶段范围（--stages=goal,path,teaching）；缺省按 expect 推导 */
+  stages: RunStageScopeName[];
+  /** 显式声明终态（--expected-terminal=completed|no-path|learner-ended|observation-exhausted|any） */
+  expectedTerminal: StageScope['expectedTerminal'] | null;
 }
 
 const RETRYABLE_HTTP = new Set([408, 425, 429, 502, 503, 504, 524]);
@@ -301,6 +355,7 @@ export function defaultLearnerName(now: Date): string {
 }
 
 export function createRunState(input: { runId: string; learnerName: string }): RunState {
+  const now = new Date().toISOString();
   return {
     version: 1,
     runId: input.runId,
@@ -311,8 +366,59 @@ export function createRunState(input: { runId: string; learnerName: string }): R
     sessionId: null,
     round: 0,
     findings: [],
-    updatedAt: new Date().toISOString(),
+    attempt: 1,
+    attemptStartedAt: now,
+    attempts: [],
+    stageScope: null,
+    outcome: null,
+    stagesReached: [],
+    functional: null,
+    updatedAt: now,
   };
+}
+
+function parseAttempts(raw: unknown): RunAttemptSummary[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const attempt = Number(item.attempt);
+    const outcome = asString(item.outcome);
+    return [{
+      attempt: Number.isFinite(attempt) && attempt > 0 ? Math.floor(attempt) : 0,
+      startedAt: asString(item.startedAt) || null,
+      finishedAt: asString(item.finishedAt) || null,
+      outcome: (outcome === 'interrupted' || RUN_OUTCOME_VALUES.has(outcome))
+        ? outcome as RunAttemptSummary['outcome']
+        : 'interrupted',
+      round: typeof item.round === 'number' && item.round >= 0 ? Math.floor(item.round) : 0,
+      maxDays: typeof item.maxDays === 'number' && item.maxDays >= 0 ? Math.floor(item.maxDays) : null,
+      sessionId: asString(item.sessionId) || null,
+      findings: Array.isArray(item.findings)
+        ? item.findings.flatMap((finding) => isRecord(finding) && typeof finding.code === 'string'
+          ? [{ code: finding.code, detail: asString(finding.detail) }]
+          : [])
+        : [],
+    }];
+  });
+}
+
+const RUN_OUTCOME_VALUES = new Set([
+  'completed', 'expected-no-path', 'learner-ended', 'observation-exhausted',
+  'retry-exhausted', 'interrupted', 'failed',
+]);
+
+function parseStageScope(raw: unknown): StageScope | null {
+  if (!isRecord(raw)) return null;
+  const stages = Array.isArray(raw.stages)
+    ? raw.stages.filter((item): item is string => typeof item === 'string')
+    : [];
+  return normalizeStageScope({
+    expectedTerminal: ['completed', 'no-path', 'learner-ended', 'observation-exhausted', 'any'].includes(asString(raw.expectedTerminal))
+      ? raw.expectedTerminal as StageScope['expectedTerminal']
+      : null,
+    stages,
+    observationDays: typeof raw.observationDays === 'number' ? raw.observationDays : null,
+  });
 }
 
 /** 解析状态文件；结构不符或版本不识别返回 null（视为"从头跑"）。 */
@@ -327,6 +433,8 @@ export function parseRunState(raw: unknown): RunState | null {
           : [],
       )
     : [];
+  const updatedAt = asString(raw.updatedAt) || new Date().toISOString();
+  const attempt = typeof raw.attempt === 'number' && raw.attempt >= 1 ? Math.floor(raw.attempt) : 1;
   return {
     version: 1,
     runId: asString(raw.runId) || 'resumed',
@@ -336,20 +444,56 @@ export function parseRunState(raw: unknown): RunState | null {
     userId: asString(raw.userId) || null,
     sessionId: raw.sessionId,
     round: typeof raw.round === 'number' && raw.round >= 0 ? Math.floor(raw.round) : 0,
+    goalStepsAcknowledged: typeof raw.goalStepsAcknowledged === 'number' && Number.isSafeInteger(raw.goalStepsAcknowledged)
+      ? Math.max(0, raw.goalStepsAcknowledged)
+      : undefined,
     findings,
-    updatedAt: asString(raw.updatedAt) || new Date().toISOString(),
+    attempt,
+    attemptStartedAt: asString(raw.attemptStartedAt) || updatedAt,
+    attempts: parseAttempts(raw.attempts),
+    stageScope: parseStageScope(raw.stageScope),
+    outcome: RUN_OUTCOME_VALUES.has(asString(raw.outcome)) ? asString(raw.outcome) as RunOutcome : null,
+    stagesReached: Array.isArray(raw.stagesReached)
+      ? raw.stagesReached.map((item) => typeof item === 'string' ? item : '').filter(Boolean) as RunStageScopeName[]
+      : [],
+    functional: isRecord(raw.functional) ? raw.functional as unknown as FunctionalEvidence : null,
+    updatedAt,
   };
 }
 
 /**
- * 开始一次新的运行尝试：清空 findings。
+ * 开始一次新的运行尝试。
  *
- * 断点续跑的 state 会带着**上一轮**的 findings；若不清空，本轮的最终汇总会把上一轮
- * 已失效的问题混进来（实测：续跑成功后汇总里仍留着上一轮的 `retry-exhausted`）。
- * 历史记录保留在同目录的 `<state>.log` 里，不丢信息。
+ * - **保留历次尝试**：把上一轮的终态/轮次/findings 归档到 `attempts`，再清空当前 findings。
+ *   否则断点续跑成功后，汇总里会混入上一轮已失效的问题（实测 `retry-exhausted`），
+ *   而历史尝试又完全丢失。
+ * - 上一轮没有落终态（进程被杀/异常）→ 归档为 `interrupted`，指出这是可续跑中断。
+ * - 历史详情仍在同目录的 `<state>.log` 里，归档同时保留结构化摘要。
  */
 export function beginRunAttempt(state: RunState): RunState {
-  return { ...state, findings: [], updatedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const hasAttemptHistory = state.attempt >= 1
+    && (state.sessionId || state.findings.length > 0 || state.round > 0 || state.attempts.length > 0);
+  const archived: RunAttemptSummary = {
+    attempt: state.attempt || 1,
+    startedAt: state.attemptStartedAt || null,
+    finishedAt: now,
+    outcome: state.outcome || 'interrupted',
+    round: state.round || 0,
+    maxDays: state.stageScope?.observationDays ?? null,
+    sessionId: state.sessionId || null,
+    findings: [...state.findings],
+  };
+  return {
+    ...state,
+    findings: [],
+    attempt: (state.attempt || 1) + 1,
+    attemptStartedAt: now,
+    attempts: hasAttemptHistory ? [...state.attempts, archived] : state.attempts,
+    outcome: null,
+    functional: null,
+    updatedAt: now,
+  };
 }
 
 /**
@@ -373,6 +517,8 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
     advisoryResponse: null,
     expectNoPath: false,
     realisticPersona: false,
+    stages: [],
+    expectedTerminal: null,
   };
 
   const numberArg = (name: string, value: string, min: number, max: number): number => {
@@ -413,6 +559,23 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
           throw new Error('--advisory-response 只能是 keep/later/preview/adopt');
         }
         args.advisoryResponse = action as HarnessArgs['advisoryResponse'];
+        break;
+      }
+      case 'stages': {
+        const stages = value.split(',').map((item) => item.trim()).filter(Boolean);
+        const normalized = stages.map(normalizeStageScopeName);
+        if (normalized.some((item) => item === null)) {
+          throw new Error('--stages 只能是 goal/path/teaching/completion/review（逗号分隔）');
+        }
+        args.stages = normalized as RunStageScopeName[];
+        break;
+      }
+      case 'expected-terminal': {
+        const expected = value.trim().toLowerCase();
+        if (!['completed', 'no-path', 'learner-ended', 'observation-exhausted', 'any'].includes(expected)) {
+          throw new Error('--expected-terminal 只能是 completed/no-path/learner-ended/observation-exhausted/any');
+        }
+        args.expectedTerminal = expected as StageScope['expectedTerminal'];
         break;
       }
       case 'admin-name': args.adminName = value.trim() || args.adminName; break;

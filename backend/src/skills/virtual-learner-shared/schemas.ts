@@ -66,6 +66,8 @@ export interface VirtualLearnerPersona {
   failurePatterns?: string[];
   behavioralProfileSummary?: string;
   personalityTraits?: VirtualLearnerPersonalityTraits;
+  /** 声纹样本：2 句本人原话，锁年龄/职业用词与口语节奏 */
+  voiceSamples?: string[];
 }
 
 /* ============ Story ============ */
@@ -391,6 +393,7 @@ export const PERSONA_FIELD_ANCHORS_HINT = `
   - learner.personalityTraits.confusionStyle → direct=直说卡在哪 / hinting=委婉给暗示让对方猜
   - learner.personalityTraits.questionStyle → none=不提问 / clarifying=问细节 / challenging=质疑
   - learner.personalityTraits.emotionalRange → flat=克制 / moderate=自然 / expressive=明显
+  - learner.profile.voiceSamples → 用这两句本人原话锁住年龄/职业用词与口语节奏；像同一个人说话，不要逐字复读
   - learner.helpSeekingPattern → 决定你提问的方式与门槛
   - learner.adversarialPattern → 决定你抗拒/反驳的常见说法
   - learner.emotionalTriggers → 出现这些情境时情绪化

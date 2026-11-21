@@ -4,7 +4,7 @@
  * 职责：集中注册全部业务路由与挂载顺序。约定：
  * - 具体路由必须在通用路由之前注册（/api/admin 平台路由在 devtools/platform 之前）；
  * - admin 路由统一走五重中间件链（access-restrict + auth + role + audit + acp-context）；
- * - 投影视角（dashboardProjectionPolicy / directUserSessionOnly）限制账户与密钥类端点。
+ * - 用户投影授权由 authWithProjectionGrant 显式开放；账户与密钥类端点要求本人会话。
  */
 import type express from 'express';
 import authRoutes from '../routes/auth';
@@ -71,11 +71,11 @@ import userAgentModelConfigsRoutes from '../routes/user-agent-model-configs';
 import userMcpRoutes from '../routes/user-mcp';
 import userDeveloperRoutes from '../routes/user-developer';
 import { acpContextMiddleware } from '../middleware/acp-context.middleware';
-import { adminAuthMiddleware, authMiddleware } from '../middleware/auth.middleware';
+import { adminAuthMiddleware, authMiddleware, authWithProjectionGrant } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
 import { adminAccessRestrictMiddleware } from '../middleware/admin-access-restrict.middleware';
 import { adminAuditMiddleware } from '../middleware/admin-audit.middleware';
-import { projectionAccessPolicy, rejectProjectionAccess } from '../middleware/projection-access.middleware';
+import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 
 export function registerRoutes(app: express.Express): void {
   // API 文档入口
@@ -121,7 +121,7 @@ export function registerRoutes(app: express.Express): void {
   });
 
   // 路由注册
-  const dashboardProjectionPolicy = projectionAccessPolicy({
+  const dashboardProjectionAuth = authWithProjectionGrant({
     dashboardReadPaths: [
       '/stats',
       '/paths',
@@ -140,18 +140,19 @@ export function registerRoutes(app: express.Express): void {
   const directUserSessionOnly = rejectProjectionAccess('投影视角不允许访问账户、密钥或开发者配置');
 
   // Platform 层路由 - 核心学习功能（平台内部调用）
-  app.use('/api/learning', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), learningRoutes);
-  app.use('/api/state', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), stateTrackingRoutes);
-  app.use('/api/achievements', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), achievementsRoutes);
+  app.use('/api/learning', dashboardProjectionAuth, acpContextMiddleware('platform'), learningRoutes);
+  app.use('/api/state', dashboardProjectionAuth, acpContextMiddleware('platform'), stateTrackingRoutes);
+  app.use('/api/achievements', dashboardProjectionAuth, acpContextMiddleware('platform'), achievementsRoutes);
   app.use('/api/metrics', authMiddleware, acpContextMiddleware('platform'), metricsRoutes);
   // 用户端公告（登录即可见，无平台策略限制）
   app.use('/api/announcements', authMiddleware, announcementsRoutes);
 
-  // goal-conversation 路由（用户侧调用）
-  app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('user'), goalConversationRoutes);
+  // 仅在显式授权的用户路由开放 access-grant；未配置路由默认由 authMiddleware 拒绝。
+  const fullProjectionAuth = authWithProjectionGrant();
+  app.use('/api/goal-conversation', fullProjectionAuth, acpContextMiddleware('user'), goalConversationRoutes);
 
   // 上传资料路由（用户侧调用；只支持文本型文档，扫描件/老格式在接口层拒收并告知）
-  app.use('/api/materials', authMiddleware, acpContextMiddleware('user'), materialsRoutes);
+  app.use('/api/materials', fullProjectionAuth, acpContextMiddleware('user'), materialsRoutes);
 
   // 其他路由（保持原有认证）
   // 注意：具体路由必须在通用路由之前注册！
@@ -212,11 +213,11 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/token-cost', ...adminRouteMiddleware, adminTokenCostRoutes);
   app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
   app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
-  app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);
+  app.use('/api/users', dashboardProjectionAuth, acpContextMiddleware('user'), userRoutes);
   app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
-  app.use('/api/adaptive-guidance', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
-  app.use('/api/ai-teaching', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), aiTeachingRoutes);
-  app.use('/api/notifications', authMiddleware, acpContextMiddleware('user'), notificationsRoutes);
+  app.use('/api/adaptive-guidance', dashboardProjectionAuth, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
+  app.use('/api/ai-teaching', dashboardProjectionAuth, acpContextMiddleware('user'), aiTeachingRoutes);
+  app.use('/api/notifications', fullProjectionAuth, acpContextMiddleware('user'), notificationsRoutes);
   app.use('/api/feedback', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), feedbackRoutes);
 
   // 用户自定义路由

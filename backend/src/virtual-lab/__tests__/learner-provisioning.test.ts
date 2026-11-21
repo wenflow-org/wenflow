@@ -64,4 +64,14 @@ describe('P2-26：generateAndApplyPersona 的 studentHints 键名', () => {
     expect(payload).not.toHaveProperty('recentPersonaHints')
     expect(payload).not.toHaveProperty('recentScenarioHints')
   })
+
+  it('personaSeed.personalityTraits 写入独立列（A1：模拟器只读列）', async () => {
+    mockExecuteSkill.mockResolvedValueOnce({
+      personaSeed: { nameHint: '高三学生', age: 17, personalityTraits: { verbosity: 'terse', questionStyle: 'none' } },
+    })
+    await generateAndApplyPersona('profile-1', {})
+
+    const data = mockProfileUpdate.mock.calls[0][0].data
+    expect(data.personalityTraits).toBe(JSON.stringify({ verbosity: 'terse', questionStyle: 'none' }))
+  })
 })

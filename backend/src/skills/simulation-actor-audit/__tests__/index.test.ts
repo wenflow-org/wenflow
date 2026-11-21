@@ -14,7 +14,7 @@ const input: VirtualLearnerActorAuditInput = {
   learnerPrivateState: { goal: { trust: 0.5 } },
   publicTrace: [{
     timestamp: '2026-07-14T10:00:00.000Z',
-    observation: { stage: 'goal', visibleMessages: [], availableActions: ['chat'] }
+    observation: { stage: 'goal', visibleMessages: [{ role: 'learner', content: '公开行为' }], availableActions: ['chat'] }
   }],
   experimentSummary: {
     experimentId: 'exp1', runId: 'run1', virtualSessionId: 'vs1', mode: 'blackbox-api',
@@ -31,7 +31,7 @@ const input: VirtualLearnerActorAuditInput = {
 }
 
 describe('simulation-actor-audit normalization', () => {
-  it('由代码重算 overall 和 verdict，并过滤无证据发现', () => {
+  it('过滤无证据发现；悬空证据引用使结论降级为 inconclusive', () => {
     const output = normalizeActorAuditOutput({
       scores: {
         overall: 100,
@@ -54,8 +54,10 @@ describe('simulation-actor-audit normalization', () => {
       recommendations: [{ priority: 'P1', action: '调整模拟器', findingCodes: ['VALID', 'INVALID'] }]
     }, input)
 
-    expect(output.scores.overall).toBe(81)
-    expect(output.verdict).toBe('credible_with_concerns')
+    // 引用不存在的证据 → integrity 失效、evidenceSufficiency 封顶、verdict=inconclusive。
+    expect(output.scores.overall).toBe(76)
+    expect(output.verdict).toBe('inconclusive')
+    expect(output.integrity?.danglingEvidenceRefs).toEqual(['MISSING'])
     expect(output.findings.map(item => item.code)).toEqual(['VALID'])
     expect(output.recommendations[0].findingCodes).toEqual(['VALID'])
   })
@@ -72,6 +74,48 @@ describe('simulation-actor-audit normalization', () => {
 
     expect(output.scores.storyConsistency).toBeNull()
     expect(output.scores.disclosureDiscipline).toBeNull()
+    expect(output.verdict).toBe('inconclusive')
+  })
+
+  it('缺失/非法分数 → inconclusive 且保留诊断', () => {
+    const output = normalizeActorAuditOutput({
+      scores: {
+        personaConsistency: 90, storyConsistency: 90, disclosureDiscipline: 90,
+        frictionCalibration: 90, stateContinuity: 90, behaviorPlausibility: 'NaN',
+        evidenceSufficiency: 90
+      },
+      evidence: [], findings: [], recommendations: []
+    }, input)
+
+    expect(output.integrity?.valid).toBe(false)
+    expect(output.integrity?.missingScores).toContain('behaviorPlausibility')
+    expect(output.verdict).toBe('inconclusive')
+  })
+
+  it('无证据时高分也不能判定角色可信', () => {
+    const output = normalizeActorAuditOutput({
+      scores: {
+        personaConsistency: 95, storyConsistency: 95, disclosureDiscipline: 95,
+        frictionCalibration: 95, stateContinuity: 95, behaviorPlausibility: 95, evidenceSufficiency: 95,
+      },
+      evidence: [], findings: [], recommendations: [],
+    }, input);
+    expect(output.verdict).toBe('inconclusive');
+    expect(output.integrity?.missingEvidence).toBe(true);
+  });
+
+  it('悬空证据引用 → inconclusive', () => {
+    const output = normalizeActorAuditOutput({
+      scores: {
+        personaConsistency: 95, storyConsistency: 95, disclosureDiscipline: 95,
+        frictionCalibration: 95, stateContinuity: 95, behaviorPlausibility: 95, evidenceSufficiency: 95
+      },
+      evidence: [],
+      findings: [{ code: 'DANGLING', severity: 'minor', category: 'behavior', title: '无证据', detail: 'x', evidenceIds: ['AE404'] }],
+      recommendations: []
+    }, input)
+
+    expect(output.integrity?.danglingEvidenceRefs).toContain('AE404')
     expect(output.verdict).toBe('inconclusive')
   })
 })

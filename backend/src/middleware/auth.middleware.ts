@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import prisma from '../config/database';
 import { ProjectionGrantSource, SyntheticCapability, verifyProjectionToken } from '../utils/projection-token';
 import { enforceSyntheticProjectionAccess } from './synthetic-projection.middleware';
+import { projectionAccessPolicy } from './projection-access.middleware';
 import {
   SessionTokenType,
   verifySessionToken,
@@ -106,12 +107,33 @@ const issueAndSetTokens = async (
   return rotation;
 };
 
+const defaultGrantPolicy = projectionAccessPolicy({ denyAccessGrant: true });
+const approvedGrantRequests = new WeakSet<Request>();
+
+function authorizeProjectionGrant(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  policy: ReturnType<typeof projectionAccessPolicy>,
+) {
+  if (req.user?.projection?.grantSource !== 'access-grant'
+    || (policy === defaultGrantPolicy && approvedGrantRequests.has(req))) {
+    next();
+    return;
+  }
+  policy(req, res, () => {
+    approvedGrantRequests.add(req);
+    next();
+  });
+}
+
 const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction,
   expectedType: SessionTokenType,
-  allowProjection: boolean
+  allowProjection: boolean,
+  grantPolicy = defaultGrantPolicy
 ) => {
   try {
     if (req.user) {
@@ -121,7 +143,7 @@ const authenticate = async (
           || req.user.sessionType === 'admin'
           || (allowProjection && req.user.projection?.active);
       if (alreadyAuthenticated) {
-        next();
+        authorizeProjectionGrant(req, res, next, grantPolicy);
         return;
       }
       return res.status(403).json({
@@ -137,7 +159,9 @@ const authenticate = async (
     if (projectionToken && allowProjection) {
       const projection = verifyProjectionToken(projectionToken);
 
-      if ((projection.grantSource || 'virtual-learner') === 'access-grant') {
+      let accessGrantScope: string | undefined;
+      let accessGrantDefinition: string | null = null;
+      if (projection.grantSource === 'access-grant') {
         const grant = await prisma.projection_access_grants.findUnique({
           where: { id: projection.grantId }
         });
@@ -149,6 +173,8 @@ const authenticate = async (
           });
         }
 
+        accessGrantScope = grant.scope === 'full' ? 'full' : 'dashboard';
+        accessGrantDefinition = grant.scopeDefinition;
         await prisma.projection_access_grants.update({
           where: { id: grant.id },
           data: {
@@ -171,14 +197,16 @@ const authenticate = async (
           grantId: projection.grantId || null,
           storyId: projection.storyId || null,
           virtualSessionId: projection.virtualSessionId || null,
-          scope: projection.scope,
-          scopeDefinition: projection.scopeDefinition || null,
+          scope: accessGrantScope ?? projection.scope,
+          scopeDefinition: projection.grantSource === 'access-grant'
+            ? accessGrantDefinition
+            : projection.scopeDefinition || null,
           capabilities: projection.capabilities || [],
           experimentId: projection.experimentId || null,
           runId: projection.runId || null,
         }
       };
-      enforceSyntheticProjectionAccess(req, res, next);
+      enforceSyntheticProjectionAccess(req, res, () => authorizeProjectionGrant(req, res, next, grantPolicy));
       return;
     }
 
@@ -328,6 +356,13 @@ const authenticate = async (
 /** 普通用户认证，同时允许显式的 Projection Header。 */
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   return authenticate(req, res, next, 'user', true);
+};
+
+/** 显式授权 access-grant 的挂载点；子路由重复鉴权沿用该请求已通过的策略。 */
+export const authWithProjectionGrant = (options: Parameters<typeof projectionAccessPolicy>[0] = {}) => {
+  const policy = projectionAccessPolicy(options);
+  return (req: Request, res: Response, next: NextFunction) =>
+    authenticate(req, res, next, 'user', true, policy);
 };
 
 /** Admin Bearer Token 认证，不接受普通用户或 Projection Token。 */

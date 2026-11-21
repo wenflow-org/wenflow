@@ -28,6 +28,10 @@ export interface EpistemicGroundingInput {
   previousLearnerState?: Record<string, any> | null;
   /** 编排层受控错误指令（decideControlledError 采样命中时传入，判决必须服从） */
   forcedCorrectness?: { forced: boolean; targetConcept: string | null; hint: string | null } | null;
+  /** 工作记忆超载信号（2026-11-21）：overloaded=true 时判决必须为未接住 */
+  overloadSignal?: { overloaded?: boolean; loadScore?: number; reason?: string } | null;
+  /** 跨轮持有的错误直觉：老师给出反例前按它判错 */
+  heldMisconception?: { concept: string; statement: string; why?: string | null; source?: string | null } | null;
   /**
    * 学习者可见的对话上下文（P1-7）：判决"本轮能否做对当前这一步"必须看到教师本轮实际讲了什么——
    * 此前 payload 无对话历史/教师最新消息，判决对象是模型从未见过的"这一步"。
@@ -118,6 +122,8 @@ function buildUserPayload(input: EpistemicGroundingInput) {
     ...(input.pendingCheckpoint ? { pendingCheckpoint: input.pendingCheckpoint } : {}),
     // 编排层硬指令放 payload 尾部（与逐轮变化的概念数组同区，保住稳定画像的前缀缓存）
     ...(input.forcedCorrectness?.forced ? { forcedCorrectness: input.forcedCorrectness } : {}),
+    ...(input.overloadSignal && typeof input.overloadSignal === 'object' ? { overloadSignal: input.overloadSignal } : {}),
+    ...(input.heldMisconception ? { heldMisconception: input.heldMisconception } : {}),
   };
 }
 
@@ -133,6 +139,10 @@ export const virtualLearnerEpistemicGroundingDefinition: SkillDefinition = {
       learner: { type: 'object', description: '学习者画像（含掌握度描述）', required: true },
       currentTask: { type: 'object', description: '当前 task 信息' },
       knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
+      overloadSignal: { type: 'object', description: '工作记忆超载信号（overloaded=true 时判决必须未接住）' },
+      heldMisconception: { type: 'object', description: '跨轮持有的错误直觉（老师给出反例前按它判错）' },
+      forcedCorrectness: { type: 'object', description: '编排层受控错误指令（出现时判决必须服从）' },
+      pendingCheckpoint: { type: 'object', description: '待作答检查点（题干/选项，不含答案键）' },
       previousLearnerState: { type: 'object', description: '上一轮学习者主观状态' },
       visibleContext: { type: 'object', description: '学习者可见的对话上下文（history + lastTeacherMessage）' },
     },

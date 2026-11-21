@@ -1063,7 +1063,9 @@ await this.writeState(sessionId, {
     const stageResults = parseStageResults(session.stageResults)
     const control = (stageResults.blackbox?.control || {}) as Record<string, unknown>
     const completed = session.status === 'completed' || control.runCompleted === true
-    if (completed) await this.notifyGoalReached(sessionId, 'blackbox')
+    if (completed && control.terminalCode !== 'GOAL_ENDED_WITHOUT_PATH') {
+      await this.notifyGoalReached(sessionId, 'blackbox')
+    }
     await this.writeState(sessionId, {
       status: completed ? 'completed' : 'failed',
       completedStage: completed ? completedStage ?? null : null,

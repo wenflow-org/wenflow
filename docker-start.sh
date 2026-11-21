@@ -41,7 +41,7 @@ fi
 
 if [ ! -f "$ENV_FILE" ]; then
     if [ -f "$ENV_EXAMPLE" ]; then
-        cp "$ENV_EXAMPLE" "$ENV_FILE"
+        (umask 077; cp "$ENV_EXAMPLE" "$ENV_FILE")
         echo -e "${GREEN}> 已从 .env.example 创建 backend/.env${NC}"
         echo ""
     else
@@ -49,6 +49,7 @@ if [ ! -f "$ENV_FILE" ]; then
         exit 1
     fi
 fi
+chmod 600 "$ENV_FILE"
 
 # ==========================================
 # 辅助函数
@@ -288,18 +289,23 @@ if [ "$NON_INTERACTIVE" != true ]; then
         echo -e "${GREEN}> 端口 ${NGINX_PORT} 可用${NC}"
     fi
 
-    if [ "$NGINX_PORT" = "80" ]; then
-        FRONTEND_URL="http://localhost"
-        CORS_ORIGIN="http://localhost,http://127.0.0.1"
-    else
-        FRONTEND_URL="http://localhost:${NGINX_PORT}"
-        CORS_ORIGIN="http://localhost:${NGINX_PORT},http://127.0.0.1"
-    fi
-
-    set_env "FRONTEND_URL" "$FRONTEND_URL"
-    set_env "CORS_ORIGIN" "$CORS_ORIGIN"
-    echo -e "${GREEN}> 已适配：FRONTEND_URL=${FRONTEND_URL}${NC}"
 fi
+
+LOCAL_FRONTEND_URL="http://localhost"
+if [ "$NGINX_PORT" != "80" ]; then
+    LOCAL_FRONTEND_URL="http://localhost:${NGINX_PORT}"
+fi
+CONFIGURED_FRONTEND_URL="${FRONTEND_URL:-$(get_env FRONTEND_URL)}"
+case "$CONFIGURED_FRONTEND_URL" in
+    ""|http://localhost:5173) CONFIGURED_FRONTEND_URL="$LOCAL_FRONTEND_URL" ;;
+esac
+CONFIGURED_CORS_ORIGIN="${CORS_ORIGIN:-$(get_env CORS_ORIGIN)}"
+case "$CONFIGURED_CORS_ORIGIN" in
+    ""|http://localhost:5173) CONFIGURED_CORS_ORIGIN="$CONFIGURED_FRONTEND_URL" ;;
+esac
+set_env "FRONTEND_URL" "$CONFIGURED_FRONTEND_URL"
+set_env "CORS_ORIGIN" "$CONFIGURED_CORS_ORIGIN"
+chmod 600 "$ENV_FILE"
 
 export NGINX_PORT
 

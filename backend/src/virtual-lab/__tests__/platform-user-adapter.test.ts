@@ -34,6 +34,97 @@ describe('PlatformUserAdapter', () => {
     expect(JSON.stringify(result.observation)).not.toContain('secret')
   })
 
+  it('Goal 硬阻断作为实际终态记录，不推断案例预期', async () => {
+    const request = jest.fn().mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          userVisible: '这类目标当前不会生成学习路径。',
+          internal: {
+            core: {
+              conversationId: 'goal-1', stage: 'completed', confidence: 0.9,
+              isCompleted: true, hardBlocked: true,
+            },
+            ext: { goalConversation: {} },
+          },
+        },
+      },
+      headers: {},
+    })
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'bearer', token: 'user-token' }),
+      transport: { request } as PlatformHttpTransport,
+    })
+
+    const result = await adapter.startGoal('想学吉他手型')
+    expect(result.control.hardBlocked).toBe(true)
+    expect(result.observation.stage).toBe('goal')
+    expect(result.control).toMatchObject({ goalTerminalKind: 'hard_blocked', runCompleted: true, terminalCode: 'GOAL_ENDED_WITHOUT_PATH' })
+    expect(result.control).not.toHaveProperty('expectedNoPath')
+  })
+
+  it.each(['answer_only', 'no_path', 'path_bound'])('按实际路径绑定投影目标终态 %s', async (terminalKind) => {
+    const hasPath = terminalKind === 'path_bound';
+    const request = jest.fn().mockResolvedValue({ data: { success: true, data: { control: {
+      conversationId: 'goal-1', isCompleted: true, terminalKind,
+      learningPath: hasPath ? { id: 'path-1' } : null,
+    } } }, headers: {} });
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'projection', token: 'synthetic-token' }),
+      transport: { request } as PlatformHttpTransport,
+    });
+    const result = await adapter.startGoal('学习一个目标');
+    expect(result.observation.stage).toBe(hasPath ? 'path' : 'goal');
+    expect(result.control.goalTerminalKind).toBe(terminalKind);
+    expect(result.control.learningPathId).toBe(hasPath ? 'path-1' : undefined);
+    expect(result.control.runCompleted).toBe(hasPath ? undefined : true);
+  });
+
+  it('confirm_proposal 透传 probeAnswers，并把前置题（含判分键）放进旁路 diagnostic', async () => {
+    const request = jest.fn().mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          userVisible: '好的，按这版开始。',
+          internal: {
+            core: { conversationId: 'goal-1', stage: 'proposing', confidence: 0.9, isCompleted: true },
+            ext: {
+              goalConversation: {
+                confirmedProposal: {
+                  prerequisiteDiagnostics: [{
+                    probeId: 'p1',
+                    targetConcept: '函数参数',
+                    question: '哪个是参数？',
+                    options: [{ id: 'A', text: 'a' }, { id: 'B', text: 'b' }],
+                    correctOption: 'B',
+                  }],
+                },
+              },
+            },
+          },
+        },
+      },
+      headers: { 'x-trace-id': 'trace-2' },
+    })
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'bearer', token: 'user-token' }),
+      transport: { request } as PlatformHttpTransport,
+    })
+    const probeAnswers = [{ probeId: 'p1', userAnswer: 'A', targetConcept: '函数参数' }]
+
+    const result = await adapter.replyGoal('goal-1', { type: 'confirm_proposal', text: '确认', probeAnswers })
+
+    expect((request as jest.Mock).mock.calls[0][0].data).toEqual(expect.objectContaining({
+      confirmProposal: true,
+      probeAnswers,
+    }))
+    expect(result.diagnostic?.probePrompts).toEqual([
+      expect.objectContaining({ probeId: 'p1', correctOption: 'B' }),
+    ])
+    expect(JSON.stringify(result.observation)).not.toContain('correctOption')
+    expect(JSON.stringify(result.observation)).not.toContain('判分键')
+  })
+
   it('将 Teaching 内部分析放入旁路 diagnostic，不回流到 Observation', async () => {
     const transport: PlatformHttpTransport = {
       request: jest.fn().mockResolvedValue({

@@ -1,6 +1,6 @@
 ---
 agentId: skill:simulation-memory-curate
-coreHash: 3e2012afb9242a188da40632a52c7e3e3bca163b8da543a4bfb272aebc6d8cea
+coreHash: 6fd2a8ce3bc6006ed09700ec5e2f45ccb65bee4e350ebb714b3f3a1da40d1adb
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -34,15 +34,17 @@ failurePolicy: propagate
 2. 校准自评：**不要引用 persona.selfAssessmentAccuracy 作为默认依据**（输入不保证提供该字段，不要断言其取值）。从对话证据推断本轮自评可靠性：自评数值 / 回复内容 / 收束轮 learnerFeedback 三者矛盾（说"会了"却仍要提示、自评高但持续追问）→ 按高估倾向处理；自评偏低却已能独立完成 → 按低估倾向处理；无一致证据时不作校准结论。仅当 persona 确实带 selfAssessmentAccuracy 时才把它当补充信号（高估倾向者自评 0.7 只算中等；低估倾向者可适当上修）
 3. 从 turnSequence 中找证据：回复内容（"会了/卡住/换个例子"）、learnerState 数值、learnerFeedback 的 blockers。注意 learnerState / learnerFeedback 只在**收束轮**提供，其余轮缺席属正常——缺席时不要臆造，也不要据此下校准结论
 4. masteredConcepts 每项必须给出 evidence（学习者自己的话或自评信号）与 confidence（0-1）
-5. struggleConcepts 每项必须给出 blocker（具体卡在哪）与 severity（low|medium|high）
-6. 不要凭空发明输入里没有的概念；概念名优先取 currentTask.linkedConcept。没有 linkedConcept 时，从对话里提炼一个 2-12 字的概念名词（如"列宽比例""打印区域边界"）；**禁止把整句任务标题、动作指令或目标句当概念名**（例如"把三个导出层入口写成照着点就行的极简清单"不是概念，应拆成"导出层入口""清单步骤"）
-7. 概念名必须是可复用的知识点，不是任务/动作：以动词开头的整句（"把…写成…""在…里辨认…"）一律不算概念；宁可不列，也不要污染画像先验
-8. 若学习者自认完成但自评掌握不足（**< 0.65**，例如 0.5-0.65），按「完成 ≠ 掌握」处理：归 struggle 或降低 mastered confidence（与代码侧兜底阈值一致：>= 0.65 且非卡住才记 mastered；< 0.4 视为 stuck）
-9. 增量判断：已在 existingKnown 中的概念，本课若无新的掌握证据（新的自评/回复证据）不要重复列入 masteredConcepts；已在 existingStruggle 中且本课仍未突破的概念，可继续列入 struggleConcepts 并在 blocker 里写明本课的新表现
-10. 同一个概念名不得同时出现在 masteredConcepts 与 struggleConcepts 两处；拿不准时只保留一处
-11. selfCalibration 用一句话说明这位学习者本轮的自评可靠度（如"高估倾向，自评需打折"）。该句会被机器解析为校准判决，必须**直陈结论**：需要否定某偏差时改用肯定式表述（如"自评基本准确"），禁止"未见高估""谈不上低估"这类否定/混合句式，也不要同时出现"高估"与"低估"两个方向
-12. memoryDelta 用一句话总结"这课在我的记忆里新增/改变了什么"，供故事与开场引用
-13. 只输出结构化字段，不输出 markdown，不解释
+5. masteredConcepts 的每项都要在 transferEvidence 里给出**远迁移证据**：kind=own_words（用自己的话解释）、new_context（换一个生活场景仍能做对）、reverse_explain（反向讲给老师听）、none（只是复述结论/在支架内做对）。只有 own_words/new_context/reverse_explain 才允许 confidence ≥ 0.8；kind=none 时必须把 confidence 压到 ≤0.6。平台会按这个枚举做掌握门，不要把「听懂了/跟着做对了」写成 mastered
+6. struggleConcepts 每项必须给出 blocker（具体卡在哪）与 severity（low|medium|high）
+7. 不要凭空发明输入里没有的概念；概念名优先取 currentTask.linkedConcept。没有 linkedConcept 时，从对话里提炼一个 2-12 字的概念名词（如"列宽比例""打印区域边界"）；**禁止把整句任务标题、动作指令或目标句当概念名**（例如"把三个导出层入口写成照着点就行的极简清单"不是概念，应拆成"导出层入口""清单步骤"）
+8. 概念名必须是可复用的知识点，不是任务/动作：以动词开头的整句（"把…写成…""在…里辨认…"）一律不算概念；宁可不列，也不要污染画像先验
+9. 若学习者自认完成但自评掌握不足（**< 0.65**，例如 0.5-0.65），按「完成 ≠ 掌握」处理：归 struggle 或降低 mastered confidence（与代码侧兜底阈值一致：>= 0.65 且非卡住才记 mastered；< 0.4 视为 stuck）
+10. 增量判断：已在 existingKnown 中的概念，本课若无新的掌握证据（新的自评/回复证据）不要重复列入 masteredConcepts；已在 existingStruggle 中且本课仍未突破的概念，可继续列入 struggleConcepts 并在 blocker 里写明本课的新表现
+11. 同一个概念名不得同时出现在 masteredConcepts 与 struggleConcepts 两处；拿不准时只保留一处
+12. selfCalibration 用一句话说明这位学习者本轮的自评可靠度（如"高估倾向，自评需打折"），只做人读说明；真正的机器判决必须写进 `selfCalibrationBias`（accurate|overestimate|underestimate|unknown），两者方向必须一致。没有一致证据时 bias 写 unknown，不要硬判
+13. selfCalibrationBias 是确定性枚举：accurate=自评基本准确；overestimate=高估（自评高于证据）；underestimate=低估（自评低于证据）；unknown=证据不足/自相矛盾。禁止写中文或其他值
+14. memoryDelta 用一句话总结"这课在我的记忆里新增/改变了什么"，供故事与开场引用
+15. 只输出结构化字段，不输出 markdown，不解释
 
 ## 输出字段
 
@@ -50,7 +52,10 @@ failurePolicy: propagate
 { "name": 概念名, "evidence": 学习者的话或自评信号摘要, "confidence": 0-1 }
 - struggleConcepts · object[] — 学习者自己觉得没学会/卡住的概念，每项：
 { "name": 概念名, "blocker": 具体卡在哪, "severity": "low|medium|high" }
-- selfCalibration · string — 一句话说明这位学习者本轮的自评可靠度与校准方式
+- transferEvidence · object[] — 远迁移证据，每项：{ "concept": 概念名, "kind": "own_words|new_context|reverse_explain|none", "evidence": 学习者原话或具体表现 }
+只登记本课出现过的概念；kind=none 表示只有复述/支架内做对，不构成掌握
+- selfCalibration · string — 一句话说明这位学习者本轮的自评可靠度与校准方式（人读）
+- selfCalibrationBias · enum — accurate | overestimate | underestimate | unknown —— 机器读取的校准判决；与 selfCalibration 方向一致，证据不足写 unknown
 - memoryDelta · string — 一句话总结这课在记忆里新增/改变了什么（供故事与开场引用）
 
 ## 边界约束

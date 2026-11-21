@@ -12,7 +12,18 @@
  */
 import { createRequire } from 'node:module'
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
+import campaignOutcomes from './campaign-outcomes.cjs'
+
+const {
+  normalizeStageScope,
+  classifyCampaignOutcome,
+  buildFunctionalEvidence,
+  deriveStagesReached,
+  expectedTerminalMatches,
+  summarizeOutcomes
+} = campaignOutcomes
 
 const require = createRequire(import.meta.url)
 const { PrismaClient } = require('@prisma/client')
@@ -65,17 +76,37 @@ for (const file of resultFiles.sort()) {
   const result = readJson(file, null)
   if (!result) continue
   const caseSpec = caseById.get(result.id) || {}
-  const findingCodes = new Set((result.findings || []).map((f) => f.code))
-  // 口径：max-days 是「路径比模拟日长」而非产品失败；goal 未收敛单列
-  const outcome = result.exitCode === 0
-    ? 'completed'
-    : findingCodes.has('goal-ended-without-path')
-      ? 'goal-failed'
-      : findingCodes.has('orchestrator-stopped')
-        ? 'stopped'
-        : findingCodes.has('max-days-reached')
-          ? 'incomplete'
-          : 'failed'
+  const expectNoPath = (caseSpec.expect || result.expect || 'path') === 'no-path'
+  const outcome = result.outcome || classifyCampaignOutcome({
+    result: result.exitCode === 0 ? 'completed' : (result.signal ? 'failed' : 'failed'),
+    expectNoPath,
+    findings: result.findings || [],
+    round: result.round || 0,
+    maxDays: result.days,
+    interrupted: !!result.signal || result.exitCode === null || result.exitCode === undefined
+  })
+  const stageScope = normalizeStageScope({
+    expectNoPath,
+    expectedTerminal: caseSpec.expectedTerminal || result.stageScope?.expectedTerminal || null,
+    stages: Array.isArray(caseSpec.stages)
+      ? caseSpec.stages
+      : (caseSpec.observe?.stages || result.stageScope?.stages || null),
+    observationDays: result.days ?? caseSpec.days
+  })
+  const priorAttempts = Array.isArray(result.attempts)
+    ? result.attempts
+    : result.attempt ? [{
+      attempt: result.attempt,
+      startedAt: result.startedAt || null,
+      finishedAt: result.finishedAt || null,
+      outcome,
+      exitCode: result.exitCode,
+      durationSec: result.durationSec || 0,
+      round: result.round || 0,
+      maxDays: result.days || null,
+      sessionId: result.sessionId || null,
+      findings: result.findings || []
+    }] : []
   const row = {
     id: result.id,
     domain: result.domain || caseSpec.domain,
@@ -83,6 +114,9 @@ for (const file of resultFiles.sort()) {
     status: result.status,
     outcome,
     exitCode: result.exitCode,
+    attempt: result.attempt || priorAttempts.length || 1,
+    attempts: priorAttempts,
+    stageScope,
     durationMin: Math.round((result.durationSec || 0) / 60),
     round: result.round,
     findings: result.findings || [],
@@ -90,13 +124,90 @@ for (const file of resultFiles.sort()) {
     goal: null,
     path: null,
     teaching: null,
-    materials: null
+    materials: null,
+    stageCoverage: { goal: false, path: false, teaching: false, completed: false, error: false },
+    stagesReached: [],
+    functional: null,
+    effect: null,
+    config: null,
+    configFingerprint: null,
+    missingSession: false
   }
   const sessionId = result.sessionId
-  if (!sessionId) { rows.push(row); continue }
+  if (!sessionId) {
+    row.functional = result.functional || buildFunctionalEvidence({
+      scope: stageScope,
+      outcome,
+      stagesReached: deriveStagesReached({ outcome, round: result.round || 0, expectNoPath }),
+      rounds: result.round || 0,
+      maxDays: result.days,
+      findings: result.findings || [],
+      stateVersion: result.version,
+      dataComplete: false
+    })
+    rows.push(row)
+    continue
+  }
 
   const vs = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
-  if (!vs) { row.missingSession = true; rows.push(row); continue }
+  if (!vs) {
+    row.missingSession = true
+    row.functional = result.functional || buildFunctionalEvidence({
+      scope: stageScope,
+      outcome,
+      stagesReached: deriveStagesReached({ outcome, round: result.round || 0, expectNoPath }),
+      rounds: result.round || 0,
+      maxDays: result.days,
+      findings: result.findings || [],
+      stateVersion: result.version,
+      dataComplete: false
+    })
+    rows.push(row)
+    continue
+  }
+
+  // 配置一致性：模型与提示词版本必须随每次观测落档；配置变了不能复用旧报告结论。
+  const stageResults = safeParse(vs.stageResults, {})
+  const snapshot = stageResults?.experimentSnapshot || {}
+  const simulators = snapshot?.simulators || {}
+  const config = {
+    capturedAt: snapshot?.capturedAt || null,
+    frictionBudget: snapshot?.frictionBudget || null,
+    goal: {
+      promptVersion: simulators?.goal?.promptVersion ?? null,
+      promptFingerprint: simulators?.goal?.promptFingerprint ?? null,
+      model: simulators?.goal?.route?.model ?? null,
+      providerId: simulators?.goal?.route?.providerId ?? null
+    },
+    teaching: {
+      promptVersion: simulators?.teaching?.promptVersion ?? null,
+      promptFingerprint: simulators?.teaching?.promptFingerprint ?? null,
+      model: simulators?.teaching?.route?.model ?? null,
+      providerId: simulators?.teaching?.route?.providerId ?? null
+    }
+  }
+  const promptRows = await prisma.prompt_call_logs.findMany({
+    where: {
+      userId: vs.userId,
+      success: true,
+      agentId: { in: ['skill:goal-conversation', 'skill:path-planning', 'skill:path-task-design', 'skill:teaching-turn', 'skill:teaching-wrapup', 'skill:teaching-retention-probe'] },
+      ...(vs.createdAt ? { createdAt: { gte: vs.createdAt } } : {}),
+    },
+    select: { agentId: true, systemPromptVersion: true, systemPromptHash: true, systemPromptVariant: true, providerId: true, model: true },
+  })
+  const actualBySkill = new Map()
+  for (const item of promptRows) {
+    const versions = actualBySkill.get(item.agentId) || new Set()
+    versions.add(JSON.stringify({ version: item.systemPromptVersion, hash: item.systemPromptHash, variant: item.systemPromptVariant, provider: item.providerId, model: item.model }))
+    actualBySkill.set(item.agentId, versions)
+  }
+  const actual = Object.fromEntries([...actualBySkill].sort(([a], [b]) => a.localeCompare(b))
+    .map(([skill, versions]) => [skill, [...versions].sort().map((version) => JSON.parse(version))]))
+  row.config = { ...config, actual }
+  const { capturedAt, ...configIdentity } = config
+  row.configFingerprint = Object.keys(actual).length
+    ? createHash('sha256').update(JSON.stringify(actual)).digest('hex').slice(0, 16)
+    : capturedAt ? createHash('sha256').update(JSON.stringify(configIdentity)).digest('hex').slice(0, 16) : null
 
   // Goal 会话
   if (vs.goalConversationId) {
@@ -163,6 +274,13 @@ for (const file of resultFiles.sort()) {
     orderBy: { startTime: 'asc' }
   })
   const sessionIds = sessions.map((s) => s.id)
+  const reviewSessionIds = sessions.filter((session) => session.mode === 'review' && session.status === 'completed').map((session) => session.id)
+  const reviewOperations = reviewSessionIds.length ? await prisma.session_finalization_operations.findMany({
+    where: { sessionId: { in: reviewSessionIds }, action: 'complete_review', status: 'completed' },
+    distinct: ['sessionId'],
+    select: { sessionId: true },
+  }) : []
+  row.review = reviewOperations.length ? { settledSessions: reviewOperations.length, sessionIds: reviewOperations.map((item) => item.sessionId) } : null
   const messages = sessionIds.length
     ? await prisma.teaching_session_messages.findMany({
       where: { sessionId: { in: sessionIds } },
@@ -190,8 +308,10 @@ for (const file of resultFiles.sort()) {
   const emptySessions = openings.filter((o) => o.messages === 0).length
   const boardMessages = parsed.filter((m) => m.analysis?.board || m.analysis?.figure || m.analysis?.visual)
   const truncatedFrames = parsed.filter((m) => JSON.stringify(m.analysis?.board || m.analysis?.figure || '').includes('truncatedFrames')).length
+  const settledWithWrapup = sessions.filter((session) => session.status === 'completed' && !!session.wrapup).length
   row.teaching = {
     sessions: sessions.length,
+    settledWithWrapup,
     statusCount: countBy(sessions, (s) => s.status),
     messageCount: parsed.length,
     userMessages: parsed.filter((m) => m.role === 'user').length,
@@ -224,24 +344,144 @@ for (const file of resultFiles.sort()) {
     collectorSuccess: materialSuccess
   }
 
+  // 阶段覆盖：只认实际观测到的事实；未覆盖阶段留空（false），不按失败排除。
+  const reachedSet = new Set(deriveStagesReached({
+    outcome,
+    round: result.round || 0,
+    finalStage: vs.currentStage || '',
+    expectNoPath
+  }))
+  if (row.goal) reachedSet.add('goal')
+  if (row.path) reachedSet.add('path')
+  if ((row.teaching?.sessions || 0) > 0) reachedSet.add('teaching')
+  if (outcome === 'completed') reachedSet.add('completion')
+  if (row.review) reachedSet.add('review')
+  row.stagesReached = [...reachedSet]
+  row.stageCoverage = {
+    goal: !!row.goal,
+    path: !!row.path,
+    teaching: (row.teaching?.sessions || 0) > 0,
+    completed: outcome === 'completed' || outcome === 'expected-no-path',
+    error: false
+  }
+
+  const stageRequired = {
+    goal: !!row.goal && row.goal.turns > 0,
+    path: !!row.path && row.path.stageCount > 0 && row.path.lessonCount > 0
+      && Number.isFinite(row.path.estimatedHours),
+    teaching: (row.teaching?.messageCount || 0) > 0 && (row.teaching?.assistantMessages || 0) > 0,
+    completion: outcome === 'completed' && (row.teaching?.settledWithWrapup || 0) > 0,
+    review: !!row.review
+  }
+  const stageEvidence = {
+    goal: row.goal ? { status: row.goal.status, turns: row.goal.turns, learningPathId: row.goal.learningPathId } : null,
+    path: row.path ? { pathId: row.path.id, stageCount: row.path.stageCount, lessonCount: row.path.lessonCount } : null,
+    teaching: row.teaching ? { sessions: row.teaching.sessions, messageCount: row.teaching.messageCount } : null,
+    completion: outcome === 'completed' ? { sessionId, status: vs.status } : null,
+    review: row.review
+  }
+
+  row.functional = result.functional || buildFunctionalEvidence({
+    scope: stageScope,
+    outcome,
+    stagesReached: row.stagesReached,
+    rounds: result.round || 0,
+    maxDays: result.days,
+    sessionStatus: vs.status,
+    currentStage: vs.currentStage,
+    findings: result.findings || [],
+    stateVersion: result.version ?? 1,
+    dataComplete: true,
+    stageData: stageRequired
+  })
+
+  // 效果纳入：只看终态/覆盖/必要指标/证据引用/配置一致性；**不看分数高低**。
+  const terminalOk = expectedTerminalMatches(stageScope.expectedTerminal, outcome)
+  const skillsByStage = {
+    goal: ['skill:goal-conversation'],
+    path: ['skill:path-planning', 'skill:path-task-design'],
+    teaching: ['skill:teaching-turn'],
+    completion: ['skill:teaching-wrapup'],
+    review: ['skill:teaching-retention-probe'],
+  }
+  const stageConfigReady = (stage) => skillsByStage[stage].every((skill) => {
+    const versions = actual[skill] || []
+    return versions.length === 1 && !!versions[0].hash && !!versions[0].provider && !!versions[0].model
+  })
+  const configConsistent = stageScope.stages.every(stageConfigReady)
+  const degraded = (row.teaching?.emptySessions || 0) > 0
+    || (row.functional?.checks || []).some((check) => check.code === 'data-complete' && !check.ok)
+  row.effect = {
+    eligible: false,
+    scoreUsedForEligibility: false,
+    terminalOk,
+    configConsistent,
+    degraded,
+    stages: stageScope.stages.map((stage) => {
+      const covered = reachedSet.has(stage)
+      const metricsOk = stageRequired[stage] !== false
+      const missing = []
+      if (!covered) missing.push('stage-not-observed')
+      if (!metricsOk) missing.push('required-metrics-missing')
+      if (!stageConfigReady(stage)) missing.push('config-inconsistent')
+      if (!terminalOk) missing.push('declared-terminal-not-reached')
+      if (degraded && ['teaching', 'completion', 'review'].includes(stage)) missing.push('stage-data-degraded')
+      if (stage === 'teaching' && !settledWithWrapup) missing.push('teaching-wrapup-missing')
+      return {
+        stage,
+        eligible: missing.length === 0,
+        covered,
+        metricsOk,
+        evidence: stageEvidence[stage],
+        missing
+      }
+    })
+  }
+  row.effect.eligible = row.effect.stages.every((stage) => stage.eligible)
+  row.effect.missing = row.effect.stages
+    .filter((stage) => !stage.eligible)
+    .map((stage) => ({ stage: stage.stage, missing: stage.missing }))
+
   rows.push(row)
 }
 
-// 汇总
+// 汇总（所有 case 均保留；分类只反映终态，不按分数高低过滤）
 const count = rows.length
-const completed = rows.filter((r) => r.outcome === 'completed').length
-const goalFailed = rows.filter((r) => r.outcome === 'goal-failed').length
-const incomplete = rows.filter((r) => r.outcome === 'incomplete').length
-const stopped = rows.filter((r) => r.outcome === 'stopped').length
-const failed = rows.filter((r) => r.outcome === 'failed').length
+const outcomes = summarizeOutcomes(rows)
+const incomplete = outcomes['observation-exhausted'] + outcomes['learner-ended']
 const paths = rows.filter((r) => r.path)
+const effectEligibleRows = rows.filter((r) => r.effect?.eligible)
+const effectByStage = Object.fromEntries(['goal', 'path', 'teaching', 'completion', 'review'].map((stage) => {
+  const scoped = rows.filter((row) => row.stageScope?.stages?.includes(stage))
+  const usable = scoped.filter((row) => row.effect?.stages?.some((item) => item.stage === stage && item.eligible))
+  return [stage, { declared: scoped.length, eligible: usable.length, caseIds: usable.map((row) => row.id) }]
+}))
+const stageCoverageCounts = rows.reduce((acc, row) => {
+  for (const stage of ['goal', 'path', 'teaching', 'completed', 'error']) {
+    if (row.stageCoverage?.[stage]) acc[stage] = (acc[stage] || 0) + 1
+  }
+  return acc
+}, {})
 const aggregates = {
   cases: count,
-  completed,
+  outcomes,
+  completed: outcomes.completed,
   incomplete,
-  stopped,
-  goalFailed,
-  failed,
+  learnerEnded: outcomes['learner-ended'],
+  observationExhausted: outcomes['observation-exhausted'],
+  retryExhausted: outcomes['retry-exhausted'],
+  interrupted: outcomes.interrupted,
+  failed: outcomes.failed,
+  expectedNoPath: outcomes['expected-no-path'],
+  attempts: rows.reduce((sum, row) => sum + (row.attempts?.length || 0), 0),
+  stageCoverageCounts,
+  effectEligibleCases: effectEligibleRows.map((r) => r.id),
+  effectEligibleCount: effectEligibleRows.length,
+  effectByStage,
+  effectIneligible: rows
+    .filter((r) => !r.effect?.eligible)
+    .map((r) => ({ id: r.id, missing: r.effect?.missing || [] })),
+  configFingerprints: [...new Set(rows.map((r) => r.configFingerprint).filter(Boolean))],
   pathsGenerated: paths.length,
   avgStages: paths.length ? +(paths.reduce((s, r) => s + r.path.stageCount, 0) / paths.length).toFixed(1) : 0,
   avgLessons: paths.length ? +(paths.reduce((s, r) => s + r.path.lessonCount, 0) / paths.length).toFixed(1) : 0,
@@ -269,7 +509,11 @@ md.push(`生成时间：${report.generatedAt}`)
 md.push('')
 md.push('## 汇总')
 md.push('')
-md.push(`- 用例：${aggregates.cases}（完成 ${completed} / 未跑完 ${incomplete} / 主动停止 ${stopped} / goal 未收敛 ${goalFailed} / 失败 ${failed}）`)
+md.push(`- 用例：${aggregates.cases}（completed ${outcomes.completed} / expected-no-path ${outcomes['expected-no-path']} / learner-ended ${outcomes['learner-ended']} / observation-exhausted ${outcomes['observation-exhausted']} / retry-exhausted ${outcomes['retry-exhausted']} / interrupted ${outcomes.interrupted} / failed ${outcomes.failed}）`)
+md.push(`- 尝试次数：${aggregates.attempts}；阶段覆盖：${JSON.stringify(stageCoverageCounts)}`)
+md.push(`- 效果纳入：${aggregates.effectEligibleCount}/${aggregates.cases}（仅按终态/覆盖/指标/证据/配置，不看分数）`)
+md.push(`- 各阶段有效样本：${Object.entries(effectByStage).map(([stage, items]) => `${stage} ${items.eligible}/${items.declared}`).join('；')}`)
+md.push(`- 配置指纹：${aggregates.configFingerprints.join(', ') || '无（旧数据缺少实验快照）'}`)
 md.push(`- 生成路径：${aggregates.pathsGenerated}`)
 md.push(`- 平均阶段数：${aggregates.avgStages}｜平均课次：${aggregates.avgLessons}｜平均预估时长：${aggregates.avgHours}h`)
 md.push(`- 一节课风险：${aggregates.oneLessonRisk.join(', ') || '无'}`)
@@ -283,15 +527,32 @@ md.push(`- findings：${JSON.stringify(aggregates.findingCounts)}`)
 md.push('')
 md.push('## 逐 case')
 md.push('')
-md.push('| case | 状态 | 用时 | 阶段 | 课次 | 预估 | 目标消息 | 课堂消息 | 材料调用 | findings |')
-md.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+md.push('| case | 终态 | 覆盖 | 效果纳入 | 尝试 | 用时 | 阶段 | 课次 | 预估 | 目标消息 | 课堂消息 | 材料调用 | findings |')
+md.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
 for (const r of rows) {
-  md.push(`| ${r.id} | ${r.outcome}${r.exitCode ? `(${r.exitCode})` : ''} | ${r.durationMin}min | ${r.path?.stageCount ?? '—'} | ${r.path?.lessonCount ?? '—'} | ${r.path?.estimatedHours ?? '—'}h | ${r.goal?.turns ?? '—'} | ${r.teaching?.messageCount ?? '—'} | ${r.materials?.collectorCalls ?? 0} | ${(r.findings || []).map((f) => f.code).join('<br>') || '—'} |`)
+  const covered = ['goal', 'path', 'teaching', 'completed'].filter((stage) => r.stageCoverage?.[stage]).join(',') || '—'
+  md.push(`| ${r.id} | ${r.outcome}${r.exitCode ? `(${r.exitCode})` : ''} | ${covered} | ${r.effect?.eligible ? '✓' : '—'} | ${r.attempts?.length || 0} | ${r.durationMin}min | ${r.path?.stageCount ?? '—'} | ${r.path?.lessonCount ?? '—'} | ${r.path?.estimatedHours ?? '—'}h | ${r.goal?.turns ?? '—'} | ${r.teaching?.messageCount ?? '—'} | ${r.materials?.collectorCalls ?? 0} | ${(r.findings || []).map((f) => f.code).join('<br>') || '—'} |`)
 }
 md.push('')
 for (const r of rows) {
   md.push(`### ${r.id}｜${r.learnerName || ''}`)
   md.push('')
+  md.push(`- 终态：${r.outcome}；覆盖：${r.stagesReached?.join(',') || '—'}；效果纳入：${r.effect?.eligible ? '是' : '否'}`)
+  if (r.effect?.missing?.length) {
+    md.push(`- 未纳入原因：${r.effect.missing.map((item) => `${item.stage}(${item.missing.join('/')})`).join('；')}`)
+  }
+  if (r.attempts?.length) {
+    md.push(`- 尝试：${r.attempts.map((a) => `#${a.attempt}:${a.outcome}`).join('，')}`)
+  }
+  if (r.config) {
+    md.push(`- 配置：模型 ${r.config.teaching?.model || r.config.goal?.model || '—'}；`
+      + `goal prompt ${r.config.goal?.promptVersion || '—'}；teaching prompt ${r.config.teaching?.promptVersion || '—'}`
+      + `（指纹 ${r.configFingerprint || '—'}）`)
+  }
+  if (r.functional) {
+    const failedChecks = (r.functional.checks || []).filter((check) => !check.ok)
+    md.push(`- 功能检查：${failedChecks.length ? failedChecks.map((check) => `${check.code}=${check.detail}`).join('；') : '全部通过'}`)
+  }
   if (r.goal) {
     md.push(`- Goal：${r.goal.status}/${r.goal.stage}，${r.goal.turns} 条（user ${r.goal.userTurns}）`)
     md.push(`- 首条诉求：${r.goal.firstOpening || '—'}`)

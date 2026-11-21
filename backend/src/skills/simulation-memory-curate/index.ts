@@ -52,10 +52,24 @@ export interface MemoryCuratorInput {
   existingStruggle?: string[] | null
 }
 
+export type SelfCalibrationBias = 'accurate' | 'overestimate' | 'underestimate' | 'unknown'
+export type TransferKind = 'own_words' | 'new_context' | 'reverse_explain' | 'none'
+
+export interface TransferEvidence {
+  concept: string
+  kind: TransferKind
+  evidence: string
+}
+
 export interface MemoryCuratorOutput {
   masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>
   struggleConcepts: Array<{ name: string; blocker: string; severity: 'low' | 'medium' | 'high' }>
+  /** 远迁移证据（2026-11-21）：none 时掌握 confidence 被代码压到 0.6，不能过掌握门 */
+  transferEvidence: TransferEvidence[]
+  /** 人读的校准说明（保留审计语义） */
   selfCalibration: string
+  /** 机器读的确定性校准判决（2026-11-21）：代码优先读它，散文只做说明 */
+  selfCalibrationBias: SelfCalibrationBias
   memoryDelta: string
 }
 
@@ -71,6 +85,37 @@ function clamp01(value: unknown, fallback = 0.5): number {
 
 function clampSeverity(value: unknown): 'low' | 'medium' | 'high' {
   return value === 'low' || value === 'high' ? value : 'medium'
+}
+
+function normalizeCalibrationBias(value: unknown, fallback: SelfCalibrationBias = 'unknown'): SelfCalibrationBias {
+  return value === 'accurate' || value === 'overestimate' || value === 'underestimate' || value === 'unknown'
+    ? value
+    : fallback
+}
+
+function normalizeTransferKind(value: unknown): TransferKind {
+  return value === 'own_words' || value === 'new_context' || value === 'reverse_explain' || value === 'none'
+    ? value
+    : 'none'
+}
+
+function normalizeTransferEvidence(value: unknown): TransferEvidence[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  return value.flatMap((item: any) => {
+    const concept = text(item?.concept, 80)
+    if (!concept || seen.has(concept)) return []
+    seen.add(concept)
+    return [{
+      concept,
+      kind: normalizeTransferKind(item?.kind),
+      evidence: text(item?.evidence, 300),
+    }]
+  }).slice(0, 10)
+}
+
+function conceptKey(value: string): string {
+  return value.toLowerCase().replace(/[\s\u3000]+/g, '')
 }
 
 function normalizeMastered(value: unknown): MemoryCuratorOutput['masteredConcepts'] {
@@ -141,11 +186,18 @@ export function buildMemoryCuratorFallback(input: MemoryCuratorInput): MemoryCur
   const accuracy = typeof input.persona?.selfAssessmentAccuracy === 'string'
     ? input.persona.selfAssessmentAccuracy
     : ''
-  const calibration = /overconfident|高估|偏高/.test(accuracy)
-    ? '画像显示该学习者自评倾向高估，记忆按打折处理。'
+  const calibrationBias: SelfCalibrationBias = /overconfident|高估|偏高/.test(accuracy)
+    ? 'overestimate'
     : /underconfident|低估|偏低/.test(accuracy)
-      ? '画像显示该学习者自评倾向低估，记忆可适度上修。'
+      ? 'underestimate'
       : /accurate|准确|较准/.test(accuracy)
+        ? 'accurate'
+        : 'unknown'
+  const calibration = calibrationBias === 'overestimate'
+    ? '画像显示该学习者自评倾向高估，记忆按打折处理。'
+    : calibrationBias === 'underestimate'
+      ? '画像显示该学习者自评倾向低估，记忆可适度上修。'
+      : calibrationBias === 'accurate'
         ? '画像显示该学习者自评基本准确。'
         : '本课未获得可用的自评校准信息，不作校准结论。'
   const memoryDelta = taskName
@@ -155,7 +207,15 @@ export function buildMemoryCuratorFallback(input: MemoryCuratorInput): MemoryCur
         ? `这课我在 ${struggleConcepts.map((s) => s.name).join('、')} 上还卡着。`
         : `这课没有明显的新增记忆。`
     : '本课记忆增量待补充。'
-  return { masteredConcepts, struggleConcepts, selfCalibration: calibration, memoryDelta }
+  return {
+    masteredConcepts,
+    struggleConcepts,
+    // 确定性 fallback 没有可靠的远迁移证据：不写 transferEvidence（避免把「自评完成」硬说成迁移）。
+    transferEvidence: [],
+    selfCalibration: calibration,
+    selfCalibrationBias: calibrationBias,
+    memoryDelta,
+  }
 }
 
 export function normalizeMemoryCuratorOutput(
@@ -163,12 +223,25 @@ export function normalizeMemoryCuratorOutput(
   input: MemoryCuratorInput,
 ): MemoryCuratorOutput {
   const fallback = buildMemoryCuratorFallback(input)
-  const mastered = normalizeMastered(parsed?.masteredConcepts)
+  const transferEvidence = normalizeTransferEvidence(parsed?.transferEvidence)
+  const transferByConcept = new Map(transferEvidence.map((item) => [conceptKey(item.concept), item]))
+  const mastered = normalizeMastered(parsed?.masteredConcepts).map((item) => {
+    // 远迁移门（2026-11-21）：明确登记 none（只会复述/支架内做对）时，掌握 confidence 压到
+    // 0.6（低于代码侧 0.65 的 mastered 阈值）→ 本课不会被写成已掌握。
+    // 未提供 transferEvidence 的旧输出保持原样（灰度兼容，不把存量全打回）。
+    const transfer = transferByConcept.get(conceptKey(item.name))
+    return transfer?.kind === 'none' && item.confidence > 0.6
+      ? { ...item, confidence: 0.6 }
+      : item
+  })
   const struggle = normalizeStruggle(parsed?.struggleConcepts)
   return {
     masteredConcepts: mastered.length > 0 ? mastered : fallback.masteredConcepts,
     struggleConcepts: struggle.length > 0 ? struggle : fallback.struggleConcepts,
+    transferEvidence,
     selfCalibration: text(parsed?.selfCalibration, 300) || fallback.selfCalibration,
+    // 结构化判决优先；模型漏给/给错时回落到 fallback（画像先验或 unknown），不再靠散文猜。
+    selfCalibrationBias: normalizeCalibrationBias(parsed?.selfCalibrationBias, fallback.selfCalibrationBias),
     memoryDelta: text(parsed?.memoryDelta, 300) || fallback.memoryDelta,
   }
 }
@@ -194,7 +267,9 @@ export const virtualLearnerMemoryCuratorDefinition: SkillDefinition = {
     properties: {
       masteredConcepts: { type: 'array', description: '自己觉得学会的概念（name/evidence/confidence）' },
       struggleConcepts: { type: 'array', description: '自己觉得没学会的概念（name/blocker/severity）' },
+      transferEvidence: { type: 'array', description: '远迁移证据（concept/kind/evidence）' },
       selfCalibration: { type: 'string', description: '自评可靠度说明' },
+      selfCalibrationBias: { type: 'string', description: 'accurate|overestimate|underestimate|unknown（机器判决）' },
       memoryDelta: { type: 'string', description: '本课记忆增量一句话' },
     },
   },
@@ -227,7 +302,7 @@ export async function virtualLearnerMemoryCurator(
     normalizeOutput: normalizeMemoryCuratorOutput,
     retryStrategy: {
       maxAttempts: 2,
-      onValidationFail: () => '请只输出合法 JSON，并完整包含 masteredConcepts、struggleConcepts、selfCalibration、memoryDelta。',
+      onValidationFail: () => '请只输出合法 JSON，并完整包含 masteredConcepts、struggleConcepts、transferEvidence、selfCalibration、selfCalibrationBias、memoryDelta。',
     },
   }, input)
 

@@ -72,6 +72,8 @@ export interface BlackboxRunState {
    * 老会话缺该字段时以当时的 publicTrace.length 作为基线。
    */
   publicTraceSequence?: number
+  stageObservationCounts?: import('./run-outcome').StageCoverageResult['observedCounts']
+  stageObservationSource?: 'full-trace' | 'retained-window'
   refereeReports?: RefereeReportRecord[]
   actorAuditReports?: ActorAuditReportRecord[]
   latestRefereeReportId?: string | null

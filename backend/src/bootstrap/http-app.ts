@@ -103,7 +103,7 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
           credentials: true,
           optionsSuccessStatus: 200,
           methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-          allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key', 'X-Projection-Token', 'X-Expected-Trace-Count'],
         }
       : { origin: false });
   }));

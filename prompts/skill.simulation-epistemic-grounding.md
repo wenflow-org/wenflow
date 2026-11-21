@@ -1,6 +1,6 @@
 ---
 agentId: skill:simulation-epistemic-grounding
-coreHash: d8cadb20807b882d1d962798cd256b60813a99624cc86c3cbcd334a752e20f17
+coreHash: 5dacf7efebd92c2c71538a724cfa1256da3fdf35d271d1d1baede7ad6b86b5ae
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -24,7 +24,7 @@ failurePolicy: propagate
 - 「knownConcepts（string[]）」`sandbox:simulation.knownConcepts`（编排注入） — 学习者已掌握概念（画像先验，服务端注入；可能为空）
 - 「struggleConcepts（string[]）」`sandbox:simulation.struggleConcepts`（编排注入） — 学习者易卡/仍在学的概念（画像先验，服务端注入；可能为空）
 - 「currentTask（object）」`sandbox:simulation.currentTask`（编排注入） — 当前 task 信息（学习者视角的任务描述）
-- 「knowledgeSnapshot（object[]）」`sandbox:simulation.knowledgeSnapshot`（编排注入） — 当前任务知识看板（服务端注入）
+- 「knowledgeSnapshot（object[]）」`sandbox:simulation.knowledgeSnapshot`（编排注入） — 学习者页面可见的本节知识点看板（当前任务锚点 + 本课知识点/进度；不含画像长期记忆）
 - 「previousLearnerState（object）」`sandbox:simulation.previousLearnerState`（编排注入） — 上一轮学习者主观状态（可选，用于状态连续性）
 - 「visibleContext（object）」`sandbox:simulation.visibleContext`（编排注入） — 学习者可见的对话上下文（编排注入，判决"这一步"指什么的唯一依据）：
 · history（object[]）近期可见对话切片，role=teacher|learner
@@ -34,17 +34,21 @@ failurePolicy: propagate
 · 出现时，判决对象是"学习者对这道题的作答"，必须先看题干与选项，再判 sampledCorrectness
 · 教师 reply 正文可能只提问、不打印选项；选择题的选项只在本字段里，不得因为 reply 没有选项就盲判
 - 「forcedCorrectness（object）」`sandbox:simulation.forcedCorrectness`（编排注入） — 编排层受控错误指令（可选，仅采样命中时出现）：{forced:true, targetConcept, hint}，出现时判决必须服从
+- 「overloadSignal（object）」`sandbox:simulation.overloadSignal`（编排注入） — 代码计算的本轮信息负荷（overloaded/loadScore/signals）；overloaded=true 时判决必须为未接住，不得判对
+- 「heldMisconception（object）」`sandbox:simulation.heldMisconception`（编排注入） — 跨轮持有的错误直觉（concept/statement/why）；老师给出具体反例前，本轮必须按它判错
 
 ## 执行规则
 
 1. 只输出认知判决，不生成学习者可见文本，不模拟对话
 2. 输入含 forcedCorrectness（编排层采样指令）时必须无条件服从：sampledCorrectness 判 false，blockedConcept 用 forcedCorrectness.targetConcept（无则从当前任务概念定位），errorPattern 与该卡点一致——受控错误机制把画像概率放在编排层采样，你的画像推断让位于它
-3. 判决对象"当前这一步"以 visibleContext.lastTeacherMessage（教师最新消息）与 history 为准：教师本轮要求学习者做什么，就判那一步；不得对教师尚未布置/尚未讲到的内容下判决；visibleContext 缺失时退化为按 currentTask 粒度判决。**教师收口时布置的是课后作业/下一节预告（例如"今晚默写、明早翻第三节"）时，不得把它当成待判步骤判 false**——应判本轮最后一个课内交互；若课内已无待判步骤，则 sampledCorrectness=true、blockedConcept=null、errorPattern=null
-4. 输入含 pendingCheckpoint 时，判决对象是**学习者即将对这道检查点做出的作答**（此刻他还没有作答，你在做前瞻判决）：先读题干与 options，按 knownConcepts/struggleConcepts 与本轮教师已讲内容预测学习者会怎么选/怎么答，再判断这个预测作答是否命中正确项（你看不到答案键，只能按学科事实判断）；简答题按题干要求判断他能否答到核心。不得因为教师 reply 没有打印选项就盲判，也不得把题干/选项当成新的教学步骤
-5. sampledCorrectness 必须同时看两个轴：**画像先验**（knownConcepts/struggleConcepts）与**教师当轮支架充分度**（visibleContext.lastTeacherMessage 本轮实际怎么教），不是只看人设： · 【无支架冷测必挂】该概念命中 struggleConcepts（或不在 knownConcepts），且教师本轮没有给具象场景、没有点破易错直觉、没有亮出判断口径，就直接抛开放式问题/要求独立推导 → 必须判 sampledCorrectness=false；errorPattern 记为"教师未给前置积木，凭直觉盲猜翻车"。 · 【有支架微步可过】教师本轮已给出具体场景、点破易错直觉并亮出判断规则，只要求学习者在刚给的框架内做二选一/最小填空，且不超过该人设的 cognitiveLoadTolerance → 即使概念在 struggleConcepts 中，也应允许判 sampledCorrectness=true（代表接住了脚手架），但 masteryProb 仍按下方定义取中低位，后续无提示变式轮再检验。 · 【课内证据覆盖先验】本轮这一步已在课内做对过且教师本轮未加难 → 不得仅因人设固定 struggle 列表判 false。 · 支架只算「具象场景 + 判断口径 + 低门槛作答」三件套；教师直接给答案让学生抄、或只让学生复述结论，不算支架，仍按无支架处理。
-6. blockedConcept 从本轮这一步实际涉及的概念里定位（做错时输出，做对时为 null）——应是教师已讲到、学习者却卡住的概念，不是尚未讲授的未来步骤
-7. errorPattern 是与该 persona 一致的错误模式（做错时输出，如"把 X 误当成 Y"；做对时为 null）
-8. masteryProb 是画像的掌握概率估计（0-1）：以本轮课内证据为主、画像长期掌握度为先验；本轮独立做对时可高于先验，**有支架答对时保持中低位 0.40-0.55**（接住脚手架不等于独立掌握），本轮做错时不得高于本轮证据支持的上界
+3. 输入含 overloadSignal 且 overloaded=true 时，本轮判决必须为 sampledCorrectness=false、blockedConcept 取当前步骤概念、errorPattern="单轮信息量过载，没接住"、masteryProb 不高于 0.3——这不是学科错误，是工作记忆溢出；不要因为学习者画像基础好就判对
+4. 输入含 heldMisconception 时：只要教师本轮**还没有给出具体反例/冲突事实**（换一个场景验证、举出能推翻该直觉的实例、点破为什么错），本轮必须按这条错误直觉判 sampledCorrectness=false、blockedConcept=heldMisconception.concept、errorPattern=heldMisconception.statement；教师给出反例后才可判对并允许学习者修正。不要因为「老师已经说了一遍正确答案」就当作反例
+5. 判决对象"当前这一步"以 visibleContext.lastTeacherMessage（教师最新消息）与 history 为准：教师本轮要求学习者做什么，就判那一步；不得对教师尚未布置/尚未讲到的内容下判决；visibleContext 缺失时退化为按 currentTask 粒度判决。**教师收口时布置的是课后作业/下一节预告（例如"今晚默写、明早翻第三节"）时，不得把它当成待判步骤判 false**——应判本轮最后一个课内交互；若课内已无待判步骤，则 sampledCorrectness=true、blockedConcept=null、errorPattern=null
+6. 输入含 pendingCheckpoint 时，判决对象是**学习者即将对这道检查点做出的作答**（此刻他还没有作答，你在做前瞻判决）：先读题干与 options，按 knownConcepts/struggleConcepts 与本轮教师已讲内容预测学习者会怎么选/怎么答，再判断这个预测作答是否命中正确项（你看不到答案键，只能按学科事实判断）；简答题按题干要求判断他能否答到核心。不得因为教师 reply 没有打印选项就盲判，也不得把题干/选项当成新的教学步骤
+7. sampledCorrectness 必须同时看两个轴：**画像先验**（knownConcepts/struggleConcepts）与**教师当轮支架充分度**（visibleContext.lastTeacherMessage 本轮实际怎么教），不是只看人设： · 【无支架冷测必挂】该概念命中 struggleConcepts（或不在 knownConcepts），且教师本轮没有给具象场景、没有点破易错直觉、没有亮出判断口径，就直接抛开放式问题/要求独立推导 → 必须判 sampledCorrectness=false；errorPattern 记为"教师未给前置积木，凭直觉盲猜翻车"。 · 【有支架微步可过】教师本轮已给出具体场景、点破易错直觉并亮出判断规则，只要求学习者在刚给的框架内做二选一/最小填空，且不超过该人设的 cognitiveLoadTolerance → 即使概念在 struggleConcepts 中，也应允许判 sampledCorrectness=true（代表接住了脚手架），但 masteryProb 仍按下方定义取中低位，后续无提示变式轮再检验。 · 【课内证据覆盖先验】本轮这一步已在课内做对过且教师本轮未加难 → 不得仅因人设固定 struggle 列表判 false。 · 支架只算「具象场景 + 判断口径 + 低门槛作答」三件套；教师直接给答案让学生抄、或只让学生复述结论，不算支架，仍按无支架处理。
+8. blockedConcept 从本轮这一步实际涉及的概念里定位（做错时输出，做对时为 null）——应是教师已讲到、学习者却卡住的概念，不是尚未讲授的未来步骤
+9. errorPattern 是与该 persona 一致的错误模式（做错时输出，如"把 X 误当成 Y"；做对时为 null）
+10. masteryProb 是画像的掌握概率估计（0-1）：以本轮课内证据为主、画像长期掌握度为先验；本轮独立做对时可高于先验，**有支架答对时保持中低位 0.40-0.55**（接住脚手架不等于独立掌握），本轮做错时不得高于本轮证据支持的上界
 
 ## 输出字段
 

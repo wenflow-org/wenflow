@@ -28,6 +28,15 @@ export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT =
 
 export type LearnLearnerPhase = 'trying' | 'blocked' | 'verifying' | 'ready_to_close';
 
+/** 跨轮持有的错误直觉（2026-11-21）：代码按受控错误写入，最多持有 3 轮。 */
+export interface HeldMisconception {
+  concept: string;
+  statement: string;
+  why?: string | null;
+  source?: string | null;
+  createdTurn?: number;
+}
+
 export interface LearnLearnerVisibleMessage {
   role: 'learner' | 'teacher';
   content: string;
@@ -56,6 +65,15 @@ export interface LearnLearnerSimulationInput {
     status?: string;
     progress?: number;
   }>;
+  /** 代码计算的本轮信息负荷（2026-11-21）：overloaded=true 时必须演工作记忆溢出 */
+  overloadSignal?: {
+    overloaded?: boolean;
+    loadScore?: number;
+    reason?: string;
+    signals?: Record<string, number>;
+  } | null;
+  /** 跨轮持有的错误直觉（代码注入；最多 3 轮） */
+  heldMisconception?: HeldMisconception | null;
   /** 学习者记忆（已掌握/到期复习/最近完成事项），供模拟器自然引用“我记得/我之前做过” */
   learnerMemory?: {
     mastered?: string[];
@@ -133,6 +151,8 @@ export interface LearnLearnerSimulationOutput {
     wantsWorkedExample: boolean;
     readyForNextTask: boolean;
     remainingBlockers: string[];
+    /** 跨轮持有的错误直觉（没给反例前继续持有；代码最多保留 3 轮） */
+    heldMisconception?: HeldMisconception | null;
   };
   learnerFeedback: {
     selfReportedTaskDone: boolean;
@@ -196,6 +216,20 @@ function normalizeStringArray(value: any): string[] {
   return value.map((item) => safeText(item)).filter(Boolean).slice(0, 5);
 }
 
+function normalizeHeldMisconception(value: any): HeldMisconception | null {
+  if (!value || typeof value !== 'object') return null;
+  const concept = safeText(value.concept);
+  const statement = safeText(value.statement);
+  if (!concept || !statement) return null;
+  return {
+    concept,
+    statement,
+    ...(safeText(value.why) ? { why: safeText(value.why) } : {}),
+    ...(safeText(value.source) ? { source: safeText(value.source) } : {}),
+    ...(Number.isFinite(Number(value.createdTurn)) ? { createdTurn: Number(value.createdTurn) } : {}),
+  };
+}
+
 function buildFeedbackFromState(state: LearnLearnerSimulationOutput['learnerState'], reason = ''): LearnLearnerSimulationOutput['learnerFeedback'] {
   const blockers = normalizeStringArray(state.remainingBlockers);
   const confidentEnough = state.taskUnderstanding >= 0.78 && Math.max(state.conceptualMastery, state.proceduralMastery) >= 0.65;
@@ -250,12 +284,12 @@ const CLAUSE_BREAK_CHARS = '，、；：,;:';
 function cropReply(
   reply: string,
   phase: LearnLearnerPhase,
-  options: { teacherMessage?: string | null; hasCheckpoint?: boolean } = {}
+  options: { teacherMessage?: string | null; hasCheckpoint?: boolean; verbosity?: LearnerVerbosity } = {}
 ) {
   const normalized = sanitizeVisibleContent(reply);
   if (!normalized) return '';
   const parts = normalized.split(/(?<=[。！？!?])\s*|\n+/).map((item) => item.trim()).filter(Boolean);
-  const limit = resolveReplyBudget(phase, options);
+  const limit = resolveReplyBudget(phase, options, options.verbosity);
   const shortened = parts.slice(0, limit.sentences).join(' ');
   if (shortened.length <= limit.chars) return shortened;
   const head = shortened.slice(0, limit.chars);
@@ -274,9 +308,28 @@ function cropReply(
  */
 const EXTENDED_REPLY_REQUEST = /(列出|列举|列一下|写下来|写出来|说出来|讲一遍|说一遍|分点|逐条|依次|分别|逐一|各自|总结|概述|概括|复述|完整地|步骤|流程|排序|排一下|(回我|告诉我|说出|说明|解释)[^。！？!?\n]{0,14}([一二三四五六七八九十两\d]+|几)(件|点|条|句|步|个|项|方面))/;
 
+export type LearnerVerbosity = 'terse' | 'normal' | 'verbose';
+
+/**
+ * 从 learner 画像解析 verbosity：优先读顶层 personalityTraits，其次读嵌套 profile。
+ * 缺失/非法一律回落 normal（与 personaAnchorHint 的默认口径一致）。
+ */
+export function resolveLearnerVerbosity(learner: LearnLearnerSimulationInput['learner'] | null | undefined): LearnerVerbosity {
+  const source = (learner || {}) as Record<string, unknown>;
+  const nestedProfile = source.profile && typeof source.profile === 'object'
+    ? (source.profile as Record<string, unknown>)
+    : null;
+  const traits = (source.personalityTraits && typeof source.personalityTraits === 'object'
+    ? source.personalityTraits
+    : nestedProfile?.personalityTraits) as Record<string, unknown> | undefined;
+  const value = traits?.verbosity;
+  return value === 'terse' || value === 'verbose' ? value : 'normal';
+}
+
 function resolveReplyBudget(
   phase: LearnLearnerPhase,
-  options: { teacherMessage?: string | null; hasCheckpoint?: boolean }
+  options: { teacherMessage?: string | null; hasCheckpoint?: boolean },
+  verbosity: LearnerVerbosity = 'normal'
 ): { sentences: number; chars: number } {
   if (EXTENDED_REPLY_REQUEST.test(String(options.teacherMessage || ''))) {
     return { sentences: 6, chars: 360 };
@@ -284,9 +337,11 @@ function resolveReplyBudget(
   if (options.hasCheckpoint) {
     return { sentences: 3, chars: 160 };
   }
-  return phase === 'ready_to_close'
-    ? { sentences: 1, chars: 48 }
-    : { sentences: 2, chars: phase === 'blocked' ? 80 : 96 };
+  // 离场/收口轮一律收短，避免 verbose 人设在告别时又展开一段。
+  if (phase === 'ready_to_close') return { sentences: 1, chars: 48 };
+  if (verbosity === 'terse') return { sentences: 1, chars: 48 };
+  if (verbosity === 'verbose') return { sentences: 3, chars: phase === 'blocked' ? 120 : 180 };
+  return { sentences: 2, chars: phase === 'blocked' ? 80 : 96 };
 }
 
 function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulationOutput {
@@ -370,6 +425,15 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
     learnerFeedback: LEARN_FEEDBACK_FIELDS.filter((field) => !(field in rawFeedback)).slice(0, 8),
   };
   const phaseFocus = normalizePhase(rawState.phaseFocus || input.currentPhase);
+  // 工作记忆超载（2026-11-21）：代码信号命中时强制 blocked + 高负荷 + 登记卡点，
+  // 不依赖模型是否照做；否则 actor-audit 抓不到、结课也可能被误放行。
+  const overloaded = input.overloadSignal?.overloaded === true;
+  const overloadBlocker = '信息太多没接住';
+  const stateBlockers = normalizeStringArray(rawState.remainingBlockers);
+  // 模型显式输出 null = 已被老师说服/修正；否则沿用代码注入的跨轮持有项。
+  const heldMisconception = Object.prototype.hasOwnProperty.call(rawState, 'heldMisconception')
+    ? normalizeHeldMisconception(rawState.heldMisconception)
+    : normalizeHeldMisconception(input.heldMisconception);
   const learnerState = {
     phaseFocus,
     taskUnderstanding: clamp01(rawState.taskUnderstanding, fallback.learnerState.taskUnderstanding),
@@ -381,8 +445,15 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
     wantsHint: safeBool(rawState.wantsHint, fallback.learnerState.wantsHint),
     wantsWorkedExample: safeBool(rawState.wantsWorkedExample, fallback.learnerState.wantsWorkedExample),
     readyForNextTask: safeBool(rawState.readyForNextTask, fallback.learnerState.readyForNextTask),
-    remainingBlockers: normalizeStringArray(rawState.remainingBlockers).length ? normalizeStringArray(rawState.remainingBlockers) : fallback.learnerState.remainingBlockers,
+    remainingBlockers: stateBlockers.length
+      ? stateBlockers
+      : (overloaded ? [overloadBlocker] : fallback.learnerState.remainingBlockers),
+    heldMisconception,
   };
+  if (overloaded) {
+    learnerState.phaseFocus = 'blocked';
+    learnerState.cognitiveLoad = Math.max(learnerState.cognitiveLoad, 0.8);
+  }
   // P1-4：判错轮硬钳制掌握度上界——与 learn-phase 的主链防线同口径，避免
   // simulator 输出/blackbox 私有状态先保存了高于 masteryProb 的自评。
   const judgeMasteryClampedFields: string[] = [];
@@ -395,8 +466,15 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
       }
     }
   }
+  // A3（2026-11-21）：remainingBlockers 单一真相源。learnerFeedback 显式给出（含空数组）时以它为准；
+  // 未给出时沿用 learnerState 的卡点，避免「feedback 缺字段 → 空清单 → 提前结课」。
+  const feedbackBlockers = overloaded
+    ? [overloadBlocker]
+    : Array.isArray(rawFeedback.remainingBlockers)
+      ? normalizeStringArray(rawFeedback.remainingBlockers)
+      : learnerState.remainingBlockers;
+  learnerState.remainingBlockers = feedbackBlockers;
   const fallbackFeedback = buildFeedbackFromState(learnerState, fallback.learnerFeedback.reason);
-  const feedbackBlockers = normalizeStringArray(rawFeedback.remainingBlockers);
   const wantsMoreHelp = safeBool(rawFeedback.wantsMoreHelp, fallbackFeedback.wantsMoreHelp);
   // P1-5 / #46（2026-10-18 拍板）：认知判决只作观测留痕，不再改写学员自评、也不再否决结课。
   // 旧实现把 judgeGate 焊进 selfReportedTaskDone，判决一 false 学员就永远「没学完」，
@@ -442,6 +520,7 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
     reply: cropReply(stripCheckpointEchoPrefix(parsed?.reply || fallback.reply), phaseFocus, {
       teacherMessage: input.visibleContext?.lastTeacherMessage,
       hasCheckpoint: !!input.pendingCheckpoint,
+      verbosity: resolveLearnerVerbosity(input.learner),
     }),
     emotion: safeText(parsed?.emotion) || fallback.emotion,
     learnerState,
@@ -585,6 +664,8 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     previousLearnerState: input.previousLearnerState || null,
     currentTask: input.currentTask || null,
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
+    ...(input.overloadSignal && typeof input.overloadSignal === 'object' ? { overloadSignal: input.overloadSignal } : {}),
+    ...(input.heldMisconception ? { heldMisconception: input.heldMisconception } : {}),
     ...(temporalContext ? { temporalContext } : {}),
     ...(typeof input.turnIndex === 'number' ? { turnIndex: input.turnIndex } : {}),
     ...(typeof input.turnBudget === 'number' ? { turnBudget: input.turnBudget } : {}),
@@ -643,6 +724,8 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       previousLearnerState: body.previousLearnerState,
       currentTask: body.currentTask,
       knowledgeSnapshot: body.knowledgeSnapshot,
+      ...(body.overloadSignal ? { overloadSignal: body.overloadSignal } : {}),
+      ...(body.heldMisconception ? { heldMisconception: body.heldMisconception } : {}),
       conceptProgress,
       ...(temporalContext ? { temporalContext } : {}),
     ...(typeof input.turnIndex === 'number' ? { turnIndex: input.turnIndex } : {}),

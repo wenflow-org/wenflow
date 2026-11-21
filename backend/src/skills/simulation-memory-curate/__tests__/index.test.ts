@@ -50,6 +50,7 @@ describe('simulation-memory-curate', () => {
       // P2-33：fallback 文案自带明确方向（不再是「按此校准」这类无方向 meta 句）
       expect(fallback.selfCalibration).toContain('高估');
       expect(fallback.selfCalibration).not.toContain('按此校准');
+      expect(fallback.selfCalibrationBias).toBe('overestimate');
     });
 
     it('P2-33：fallback 文案可被确定性解析器判出方向；无 persona 字段不下判决', () => {
@@ -102,6 +103,39 @@ describe('simulation-memory-curate', () => {
         { name: '调色', blocker: '白平衡搞不定', severity: 'high' },
       ]);
       expect(normalized.selfCalibration).toBe('自评偏高，打八折');
+      // 模型漏给结构化 bias → 回落到画像先验（baseInput 的 selfAssessmentAccuracy=偏高估）
+      expect(normalized.selfCalibrationBias).toBe('overestimate');
+
+      const withBias = normalizeMemoryCuratorOutput({
+        masteredConcepts: [{ name: '剪辑节奏' }],
+        struggleConcepts: [],
+        selfCalibration: '这课基本准',
+        selfCalibrationBias: 'accurate',
+        memoryDelta: '',
+      }, baseInput);
+      expect(withBias.selfCalibrationBias).toBe('accurate');
+    });
+
+    it('远迁移门：transferEvidence.kind=none 时掌握 confidence 压到 0.6', () => {
+      const normalized = normalizeMemoryCuratorOutput({
+        masteredConcepts: [{ name: '剪辑节奏', evidence: '能跟着做', confidence: 0.9 }],
+        struggleConcepts: [],
+        transferEvidence: [{ concept: '剪辑节奏', kind: 'none', evidence: '只是复述了结论' }],
+        selfCalibration: '较准',
+        memoryDelta: '',
+      }, baseInput);
+      expect(normalized.masteredConcepts[0].confidence).toBe(0.6);
+    });
+
+    it('远迁移门：new_context/own_words 保留原 confidence', () => {
+      const normalized = normalizeMemoryCuratorOutput({
+        masteredConcepts: [{ name: '剪辑节奏', evidence: '换了一个探店视频也能卡上点', confidence: 0.9 }],
+        struggleConcepts: [],
+        transferEvidence: [{ concept: '剪辑节奏', kind: 'new_context', evidence: '换场景仍能做对' }],
+        selfCalibration: '较准',
+        memoryDelta: '',
+      }, baseInput);
+      expect(normalized.masteredConcepts[0].confidence).toBe(0.9);
     });
 
     it('LLM 空结果回退确定性 fallback（记忆不丢）', () => {

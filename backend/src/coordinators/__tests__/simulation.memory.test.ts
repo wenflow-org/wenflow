@@ -201,7 +201,10 @@ describe('P1-2：mastery 来自 curator confidence，不再写死 0.85', () => {
     await persistAssistedLearnerMemory('vs1', assistedSession(), task)
 
     const writeArg = mockWriteProfileConcepts.mock.calls[0][2] as any
-    expect(writeArg.curatedConcepts.mastered).toEqual(['剪辑节奏', '转场'])
+    expect(writeArg.curatedConcepts.mastered).toEqual([
+      { name: '剪辑节奏', evidence: 'a', confidence: 0.8 },
+      { name: '转场', evidence: 'b', confidence: 0.75 },
+    ])
     expect(writeArg.curatedConcepts.struggling).toEqual(['调色', '曲线'])
   })
 })
@@ -233,8 +236,7 @@ describe('P2-9：本课看板通过 learningState 传递，不依赖逐回合画
 
   it('buildAssistedKnowledgeSnapshot 合并 lessonKnowledgePoints（同名以本课为准）', async () => {
     const { buildAssistedKnowledgeSnapshot } = await import('../simulation.memory')
-    const snapshot = await buildAssistedKnowledgeSnapshot(
-      'u1',
+    const snapshot = buildAssistedKnowledgeSnapshot(
       { id: 't1', title: '一页宽', linkedConcept: '设置一页宽缩放' } as any,
       null,
       [
@@ -251,13 +253,8 @@ describe('P2-9：本课看板通过 learningState 传递，不依赖逐回合画
   })
 
   it('画像 mastered 不得覆盖本课看板的降级状态（独立评审 P1：Map last-wins 方向反了）', async () => {
-    const prisma = (await import('../../config/database')).default as any
-    prisma.virtual_learner_profiles.findUnique.mockResolvedValueOnce({
-      profile: JSON.stringify({ knownConcepts: ['识别叠字版面'], struggleConcepts: [] }),
-    })
     const { buildAssistedKnowledgeSnapshot } = await import('../simulation.memory')
-    const snapshot = await buildAssistedKnowledgeSnapshot(
-      'u1',
+    const snapshot = buildAssistedKnowledgeSnapshot(
       { id: 't1', title: '一页宽', linkedConcept: '设置一页宽缩放' } as any,
       null,
       [{ name: '识别叠字版面', status: 'learning', progress: 40 }]

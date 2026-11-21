@@ -6,17 +6,24 @@ import { Router, Request, Response } from 'express';
 import { logger } from '../../utils/logger';
 import {
   createExperiment,
-  advanceRun,
+  advanceRunWithMeta,
   manualDecay,
   manualSnapshot,
   startBatchExperimentScheduler,
   listExperiments,
   getExperimentDetail,
   stopExperiment,
-  BatchLearnerConfig,
+  type BatchLearnerConfig,
 } from '../../services/virtual-lab/batch-experiment.service';
 
 const router = Router();
+
+/** 批量推进的幂等键：沿用 blackbox / assisted 的 Idempotency-Key 约定。 */
+function getBatchCommandId(req: Request): string {
+  const header = typeof req.get === 'function' ? req.get('Idempotency-Key') : undefined;
+  const bodyValue = typeof req.body?.commandId === 'string' ? req.body.commandId : '';
+  return String(header || bodyValue || '').trim();
+}
 
 /** 列表 */
 router.get('/', async (req: Request, res: Response) => {
@@ -44,6 +51,10 @@ router.post('/', async (req: Request, res: Response) => {
     const normalized: BatchLearnerConfig[] = learners.map((l: any) => ({
       name: String(l?.name || '').slice(0, 64),
       learningGoal: l?.learningGoal ? String(l.learningGoal).slice(0, 200) : undefined,
+      sampleType: ['student', 'general'].includes(String(l?.sampleType))
+        ? String(l.sampleType)
+        : undefined,
+      expectedNoPath: l?.expectedNoPath === true ? true : undefined,
       frictionBudget: ['none', 'low', 'normal', 'high', 'stress_test'].includes(l?.frictionBudget)
         ? l.frictionBudget
         : 'normal',
@@ -86,13 +97,27 @@ router.post('/:id/stop', async (req: Request, res: Response) => {
   }
 });
 
-/** 手动推进一个 run */
+/** 手动推进一个 run（可选 Idempotency-Key：同键同请求回放，不重复推进一步） */
 router.post('/:id/runs/:runId/advance', async (req: Request, res: Response) => {
   try {
-    const phase = await advanceRun(req.params.runId);
-    res.json({ success: true, data: { phase } });
+    const commandId = getBatchCommandId(req);
+    const outcome = await advanceRunWithMeta(req.params.runId, {
+      requestKey: commandId,
+      request: { runId: req.params.runId, experimentId: req.params.id },
+    });
+    res.json({
+      success: true,
+      data: { phase: outcome.phase },
+      ...(commandId ? { reused: outcome.reused } : {}),
+    });
   } catch (error) {
-    res.status(500).json({ success: false, error: String((error as Error).message || error) });
+    logger.error('[batch-experiment] advance failed', { error: String((error as Error).message || error) });
+    const status = (error as { statusCode?: number }).statusCode ?? 500;
+    res.status(status).json({
+      success: false,
+      error: String((error as Error).message || error),
+      ...((error as { code?: string }).code ? { code: (error as { code: string }).code } : {}),
+    });
   }
 });
 

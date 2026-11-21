@@ -15,6 +15,8 @@ export const virtualLearnerLearnTurnSimulatorRuntimeDefinition: RuntimeDefinitio
       previousLearnerState: { type: 'object', description: '上一轮学习者主观状态' },
       currentTask: { type: 'object', description: '当前 task 信息' },
       knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
+      overloadSignal: { type: 'object', description: '工作记忆超载信号（overloaded=true 时演内存溢出）' },
+      heldMisconception: { type: 'object', description: '跨轮持有的错误直觉（给出反例前不轻易放弃）' },
       learnerMemory: { type: 'object', description: '学习者长期记忆（已掌握/到期复习/最近完成）' },
       temporalContext: { type: 'object', description: '日期模拟时间上下文（可选）' },
       memoryRecall: { type: 'array', description: '代码裁决的到期点概率化提取结果（Q4）' },
@@ -35,7 +37,7 @@ export const virtualLearnerLearnTurnSimulatorRuntimeDefinition: RuntimeDefinitio
     },
   },
   variableBindings: {
-    consumes: ['learner', 'story', 'visibleContext', 'currentPhase', 'previousLearnerState', 'currentTask', 'knowledgeSnapshot', 'learnerMemory', 'temporalContext', 'memoryRecall', 'epistemicGrounding', 'pendingCheckpoint'],
+    consumes: ['learner', 'story', 'visibleContext', 'currentPhase', 'previousLearnerState', 'currentTask', 'knowledgeSnapshot', 'overloadSignal', 'heldMisconception', 'learnerMemory', 'temporalContext', 'memoryRecall', 'epistemicGrounding', 'pendingCheckpoint'],
     produces: ['reply', 'emotion', 'learnerState', 'learnerFeedback', 'checkpointAnswer', 'debug'],
   },
   capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-teaching-reply'],

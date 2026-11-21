@@ -12,7 +12,12 @@ export type LearnerAction =
     }
   | { type: 'submit_answer'; answer: string; checkpointId?: string; selectedOptionIds?: string[]; skip?: boolean }
   | { type: 'submit_code'; code: string }
-  | { type: 'confirm_proposal'; text: string }
+  | {
+      type: 'confirm_proposal'
+      text: string
+      /** 前置自测作答（随确认一次性提交；见 virtual-lab/probe-answers.ts） */
+      probeAnswers?: Array<{ probeId: string; userAnswer: string; targetConcept?: string }>
+    }
   | { type: 'start_learning'; taskId?: string }
   | { type: 'confirm_complete' }
   | { type: 'skip'; reason: string }
@@ -86,6 +91,11 @@ export type PlatformControlReceipt = {
   extensionText?: string | null
   platformStage?: string
   goalCompleted?: boolean
+  /**
+   * 平台实际返回的 Goal 硬阻断。案例的预期由实验配置单独声明。
+   */
+  hardBlocked?: boolean
+  goalTerminalKind?: 'answer_only' | 'no_path' | 'hard_blocked' | 'path_bound'
   taskCompleted?: boolean
   completedTasks?: number
   totalTasks?: number
@@ -138,12 +148,25 @@ export type BlackboxExperimentSummary = {
   publicTraceCount: number
   refereeTraceCount: number
   stageCoverage: Record<LearnerObservation['stage'], boolean>
+  /**
+   * 优先使用写入时累计的完整统计；旧记录只能用保留窗口作为下界。
+   */
+  stageCoverageSource?: 'full-trace' | 'retained-window'
+  /** 完整轨迹里每种 stage 的出现次数（截断前；用于发现「覆盖了但只出现一次」的薄证据） */
+  observedStageCounts?: Record<LearnerObservation['stage'], number>
+  /**
+   * 案例声明的阶段范围（显式）；未覆盖阶段由 report 留空，不按失败排除。
+   * 只从实验预先声明的范围读取。
+   */
+  declaredStageScope?: LearnerObservation['stage'][]
   inputCoverage: {
     originalPublicTraceCount: number
     includedPublicTraceCount: number
     originalRefereeTraceCount: number
     includedRefereeTraceCount: number
     truncated: boolean
+    /** true = stageCoverage 在压缩前由完整轨迹算出 */
+    coverageComputedBeforeTruncation?: boolean
   }
 }
 
@@ -184,8 +207,22 @@ export type RefereeMetricCompleteness = {
   error: string | null
 }
 
+/**
+ * 评审/审计输出完整性。
+ * 模型缺分、给非法分或引用不存在的证据 → verdict 必须 inconclusive，不能按默认分兜底成结论。
+ */
+export type EvaluationIntegrity = {
+  valid: boolean
+  missingScores: string[]
+  danglingEvidenceRefs: string[]
+  danglingFindingCodes: string[]
+  missingEvidence?: boolean
+}
+
 export type VirtualLearnerRefereeOutput = {
   verdict: 'pass' | 'pass_with_concerns' | 'fail' | 'inconclusive'
+  /** 完整性诊断（供报告/管理台显式展示「证据不足」的原因） */
+  integrity?: EvaluationIntegrity
   scores: {
     overall: number
     goalExperience: number | null
@@ -199,7 +236,7 @@ export type VirtualLearnerRefereeOutput = {
   findings: Array<{
     code: string
     severity: 'critical' | 'major' | 'minor' | 'info'
-    category: 'goal' | 'path' | 'teaching' | 'control' | 'boundary' | 'completion' | 'trace'
+    category: 'goal' | 'path' | 'teaching' | 'control' | 'boundary' | 'completion' | 'trace' | 'data'
     title: string
     detail: string
     evidenceIds: string[]
@@ -249,6 +286,8 @@ export type VirtualLearnerActorAuditInput = {
 
 export type VirtualLearnerActorAuditOutput = {
   verdict: 'credible' | 'credible_with_concerns' | 'invalid' | 'inconclusive'
+  /** 完整性诊断（缺分/非法分/悬空引用） */
+  integrity?: EvaluationIntegrity
   scores: {
     overall: number
     personaConsistency: number

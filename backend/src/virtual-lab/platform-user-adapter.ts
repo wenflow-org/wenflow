@@ -5,6 +5,7 @@ import type {
   LearnerObservation,
   PlatformInteractionResult,
 } from './contracts'
+import { extractProbePrompts } from './probe-answers'
 
 export type PlatformUserCredential =
   | { kind: 'projection'; token: string }
@@ -145,7 +146,12 @@ export class PlatformUserAdapter {
       data: {
         input: { text: action.text },
         contextMode: 'recent',
-        confirmProposal: action.type === 'confirm_proposal'
+        confirmProposal: action.type === 'confirm_proposal',
+        // C1（2026-11-21）：前置自测作答随确认提交，否则「答对/答错 → path 补前置」链路
+        // 在虚拟实验室里永远走不到。答案计划由 runner 按画像生成，只在这里透传。
+        ...(action.type === 'confirm_proposal' && action.probeAnswers?.length
+          ? { probeAnswers: action.probeAnswers }
+          : {})
       },
       headers: await this.headers()
     })
@@ -161,30 +167,45 @@ export class PlatformUserAdapter {
           .filter((item: any) => typeof item === 'string' && item.trim())
       : []
     const canConfirm = visibleChoices.some((item: string) => /确认|生成路径|可以|开始/.test(item))
+    // C1：把前置自测题放进旁路诊断（含判分键），由 runner 按画像生成作答计划；
+    // 不放进 observation，避免判分键回流学习者可见上下文。
+    const proposal = envelope?.internal?.ext?.goalConversation?.confirmedProposal
+      || envelope?.control?.confirmedProposal
+      || null
+    const probePrompts = extractProbePrompts(proposal)
+    const learningPathId = core.learningPath?.id || core.learningPathId || undefined
+    const noPath = !learningPathId && (!!core.isCompleted || core.hardBlocked === true
+      || ['answer_only', 'no_path', 'hard_blocked'].includes(core.terminalKind))
+    const terminalKind = learningPathId ? 'path_bound' : noPath
+      ? (core.hardBlocked === true || core.terminalKind === 'hard_blocked' ? 'hard_blocked'
+        : core.terminalKind === 'answer_only' ? 'answer_only' : 'no_path')
+      : undefined
+    const stage = learningPathId ? 'path' : 'goal'
     return {
       observation: {
-        stage: core.isCompleted ? 'path' : 'goal',
+        stage,
         visibleMessages: [
           { role: 'learner', content: learnerText },
           ...(platformText ? [{ role: 'platform' as const, content: platformText }] : [])
         ],
         visibleChoices,
-        availableActions: core.isCompleted ? ['abandon'] : canConfirm ? ['chat', 'confirm_proposal', 'abandon'] : ['chat', 'abandon'],
+        availableActions: terminalKind ? ['abandon'] : canConfirm ? ['chat', 'confirm_proposal', 'abandon'] : ['chat', 'abandon'],
         lastActionResult: { status: 'success', visibleMessage: platformText }
       },
       control: {
         conversationId: core.conversationId || undefined,
-        learningPathId: core.learningPath?.id || undefined,
-        // 归一化到 observation 的阶段空间：goal 确认完成即进入 path，
-        // 不再把 goal 会话的 'completed' 原样透传（否则路径生成期间 platformStage
-        // 会在 completed → generating 间跳变，2026-11-13 u19/u20 裁判实证）。
-        platformStage: core.isCompleted ? 'path' : 'goal',
-        goalCompleted: !!core.isCompleted,
+        learningPathId,
+        platformStage: stage,
+        goalCompleted: terminalKind !== undefined,
+        ...(terminalKind ? { goalTerminalKind: terminalKind } : {}),
+        ...(terminalKind === 'hard_blocked' ? { hardBlocked: true } : {}),
+        ...(noPath ? { runCompleted: true, terminalReason: 'completed', terminalCode: 'GOAL_ENDED_WITHOUT_PATH' } : {}),
         rawTraceId: traceId
       },
       diagnostic: {
         schemaVersion: envelope?.schemaVersion,
-        renderHints: envelope?.renderHints || null
+        renderHints: envelope?.renderHints || null,
+        ...(probePrompts.length ? { probePrompts } : {})
       }
     }
   }

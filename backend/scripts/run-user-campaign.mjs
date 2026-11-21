@@ -24,6 +24,16 @@ import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
+import campaignOutcomes from './campaign-outcomes.cjs'
+
+const {
+  normalizeStageScope,
+  classifyCampaignOutcome,
+  buildFunctionalEvidence,
+  appendAttempt,
+  deriveStagesReached,
+  summarizeOutcomes
+} = campaignOutcomes
 
 const backendRoot = resolve(import.meta.dirname, '..')
 const tsNodeBin = join(backendRoot, 'node_modules', 'ts-node', 'dist', 'bin.js')
@@ -42,6 +52,8 @@ const concurrency = Math.max(1, Number(arg('concurrency', '5')) || 5)
 const daysOverride = arg('days') ? Number(arg('days')) : null
 const only = new Set(arg('only').split(',').map((s) => s.trim()).filter(Boolean))
 const force = flag('force')
+const stagesOverride = arg('stages').split(',').map((s) => s.trim()).filter(Boolean)
+const expectedTerminalOverride = arg('expected-terminal') || null
 const baseUrl = arg('base-url', 'http://127.0.0.1:3001').replace(/\/+$/, '')
 const runRoot = resolve(backendRoot, arg('run-dir', join('.runtime', 'campaigns', new Date().toISOString().slice(0, 10))))
 
@@ -102,12 +114,15 @@ if (selected.length === 0) {
 
 mkdirSync(runRoot, { recursive: true })
 const state = {
+  version: 2,
   campaign: spec.campaign,
   startedAt: new Date().toISOString(),
   backend: baseUrl,
   casesPath,
   concurrency,
   daysOverride: daysOverride ?? spec.daysOverride ?? null,
+  stageScopeOverride: stagesOverride.length ? stagesOverride : null,
+  expectedTerminalOverride,
   results: {}
 }
 
@@ -126,7 +141,7 @@ function writeJson(path, value) {
 
 function summarize() {
   const rows = Object.values(state.results)
-  const counts = { total: selected.length, pending: 0, running: 0, completed: 0, failed: 0, skipped: 0 }
+  const counts = { total: selected.length, pending: 0, running: 0, completed: 0, incomplete: 0, interrupted: 0, failed: 0, skipped: 0 }
   const findings = {}
   for (const c of selected) {
     const row = state.results[c.id]
@@ -136,16 +151,34 @@ function summarize() {
       findings[f.code] = (findings[f.code] || 0) + 1
     }
   }
+  const terminalRows = rows.filter((row) => row && row.status !== 'skipped' && row.outcome)
   state.counts = counts
+  state.outcomes = summarizeOutcomes(terminalRows)
   state.findings = findings
+  state.attempts = rows.reduce((sum, row) => sum + (Array.isArray(row?.attempts) ? row.attempts.length : 0), 0)
   state.updatedAt = new Date().toISOString()
   writeJson(join(runRoot, 'summary.json'), state)
+}
+
+function caseScope(caseSpec, days) {
+  const declaredStages = stagesOverride.length
+    ? stagesOverride
+    : (Array.isArray(caseSpec.stages)
+      ? caseSpec.stages
+      : Array.isArray(caseSpec.observe?.stages) ? caseSpec.observe.stages : null)
+  return normalizeStageScope({
+    expectNoPath: (caseSpec.expect || 'path') === 'no-path',
+    expectedTerminal: expectedTerminalOverride || caseSpec.expectedTerminal || null,
+    stages: declaredStages,
+    observationDays: days
+  })
 }
 
 function buildArgs(caseSpec) {
   const days = daysOverride ?? caseSpec.days ?? 7
   const baseDaysAgo = (spec.baseDaysAgo ?? 30) + caseSpec.index * 3
   const dir = caseDir(caseSpec.id)
+  const scope = caseScope(caseSpec, days)
   const args = [
     tsNodeBin,
     '--transpile-only',
@@ -156,6 +189,8 @@ function buildArgs(caseSpec) {
     `--days=${days}`,
     `--base-days-ago=${baseDaysAgo}`,
     `--expect=${caseSpec.expect || 'path'}`,
+    `--stages=${scope.stages.join(',')}`,
+    `--expected-terminal=${scope.expectedTerminal}`,
     // 4-5 阶段路径的「core → 逐阶段设计 → KC 映射 → 落库」实测可达 20-30 分钟；
     // 默认 30 分钟太贴近边界，批量跑数统一放宽到 60 分钟，避免把「慢但正常」误判为未就绪。
     `--ready-timeout-ms=3600000`,
@@ -169,19 +204,29 @@ function buildArgs(caseSpec) {
     `--story-trigger=${caseSpec.story?.trigger || ''}`
   ]
   if ((caseSpec.persona || 'realistic') === 'realistic') args.push('--realistic-persona')
-  return { args, dir, days }
+  return { args, dir, days, scope }
 }
 
 function runCase(caseSpec) {
-  const { args, dir, days } = buildArgs(caseSpec)
+  const { args, dir, days, scope } = buildArgs(caseSpec)
   const id = caseSpec.id
   const resultPath = join(dir, 'result.json')
   const prior = readJson(resultPath, null)
+  const expectNoPath = (caseSpec.expect || 'path') === 'no-path'
 
-  if (!force && prior && prior.exitCode === 0) {
-    state.results[id] = { ...prior, status: 'skipped', skippedReason: 'already-completed' }
+  // 已完成/已稳定观测的 case 默认跳过；观察天数用尽也视为有效观测，不重复烧跑。
+  const priorOutcome = prior?.outcome
+    || (prior && prior.exitCode === 0 ? 'completed' : null)
+  if (!force && prior && prior.exitCode === 0
+    && ['completed', 'expected-no-path', 'observation-exhausted'].includes(priorOutcome)) {
+    state.results[id] = {
+      ...prior,
+      status: 'skipped',
+      skippedReason: 'already-completed',
+      attempts: Array.isArray(prior.attempts) ? prior.attempts : []
+    }
     summarize()
-    console.log(`[campaign] ${id} 已完成，跳过（--force 可重跑）`)
+    console.log(`[campaign] ${id} 已完成（${priorOutcome}），跳过（--force 可重跑）`)
     return Promise.resolve()
   }
 
@@ -189,19 +234,23 @@ function runCase(caseSpec) {
   const logPath = join(dir, 'harness.log')
   const logStream = createWriteStream(logPath, { flags: 'a' })
   const startedAt = new Date()
-  const attempt = (prior?.attempt || 0) + 1
+  const priorAttempts = Array.isArray(prior?.attempts) ? prior.attempts : []
+  const attempt = prior?.attempt || (priorAttempts.length + 1)
   state.results[id] = {
     id,
     domain: caseSpec.domain,
     learnerName: caseSpec.learnerName,
     status: 'running',
+    outcome: null,
     attempt,
+    attempts: priorAttempts,
+    stageScope: scope,
     days,
     startedAt: startedAt.toISOString(),
     logPath
   }
   summarize()
-  console.log(`[campaign] ▶ ${id} 启动（第 ${attempt} 次，days=${days}，并发=${concurrency}）`)
+  console.log(`[campaign] ▶ ${id} 启动（第 ${attempt} 次，days=${days}，阶段=${scope.stages.join(',')}，并发=${concurrency}）`)
 
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, args, {
@@ -239,16 +288,77 @@ function runCase(caseSpec) {
       const finishedAt = new Date()
       const stateFile = readJson(join(dir, 'state.json'), null)
       const findings = Array.isArray(stateFile?.findings) ? stateFile.findings : []
+      const interrupted = !!signal || code === null
+      const outcome = classifyCampaignOutcome({
+        stateOutcome: stateFile?.outcome,
+        result: code === 0 ? 'completed' : 'failed',
+        expectNoPath,
+        findings,
+        round: stateFile?.round ?? 0,
+        maxDays: days,
+        interrupted
+      })
+      const stagesReached = Array.isArray(stateFile?.stagesReached) && stateFile.stagesReached.length
+        ? stateFile.stagesReached
+        : deriveStagesReached({
+          outcome,
+          result: code === 0 ? 'completed' : 'failed',
+          round: stateFile?.round ?? 0,
+          finalStage: stateFile?.currentStage || '',
+          expectNoPath
+        })
+      const functional = stateFile?.functional || buildFunctionalEvidence({
+        scope: stateFile?.stageScope || scope,
+        outcome,
+        stagesReached,
+        rounds: stateFile?.round ?? 0,
+        maxDays: days,
+        findings,
+        stateVersion: stateFile?.version,
+        dataComplete: !!stateFile?.sessionId,
+        stageData: {
+          goal: !!stateFile?.sessionId,
+          path: (stateFile?.round ?? 0) > 0,
+          teaching: (stateFile?.round ?? 0) > 0,
+          completion: outcome === 'completed',
+          review: false
+        }
+      })
+      const status = outcome === 'completed' || outcome === 'expected-no-path'
+        ? 'completed'
+        : outcome === 'observation-exhausted' || outcome === 'learner-ended'
+          ? 'incomplete'
+          : outcome === 'interrupted' ? 'interrupted' : 'failed'
+      const attemptRecord = {
+        attempt,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        outcome,
+        exitCode: code,
+        signal: signal || null,
+        durationSec: Math.round((finishedAt - startedAt) / 1000),
+        round: stateFile?.round ?? 0,
+        maxDays: days,
+        sessionId: stateFile?.sessionId || null,
+        profileId: stateFile?.profileId || null,
+        findings,
+        functional
+      }
       const row = {
         id,
         domain: caseSpec.domain,
         learnerName: caseSpec.learnerName,
-        status: code === 0 ? 'completed' : 'failed',
+        status,
+        outcome,
         attempt,
+        attempts: appendAttempt(prior, attemptRecord),
+        stageScope: stateFile?.stageScope || scope,
+        stagesReached,
+        functional,
         days,
         startedAt: startedAt.toISOString(),
         finishedAt: finishedAt.toISOString(),
-        durationSec: Math.round((finishedAt - startedAt) / 1000),
+        durationSec: attemptRecord.durationSec,
         exitCode: code,
         signal: signal || null,
         sessionId: stateFile?.sessionId || null,
@@ -260,7 +370,9 @@ function runCase(caseSpec) {
       writeJson(resultPath, row)
       state.results[id] = row
       summarize()
-      console.log(`[campaign] ${code === 0 ? '✔' : '✘'} ${id} 结束 code=${code} 用时=${Math.round(row.durationSec / 60)}min round=${row.round} findings=${findings.map((f) => f.code).join(',') || '无'}`)
+      console.log(`[campaign] ${status === 'completed' ? '✔' : status === 'failed' ? '✘' : '◐'} ${id} 结束`
+        + ` outcome=${outcome} code=${code} 用时=${Math.round(row.durationSec / 60)}min round=${row.round}`
+        + ` findings=${findings.map((f) => f.code).join(',') || '无'}`)
       resolvePromise()
     })
   })
@@ -285,7 +397,9 @@ async function main() {
   await Promise.all(workers)
   summarize()
   const c = state.counts || {}
-  console.log(`[campaign] 收尾：completed=${c.completed || 0} failed=${c.failed || 0} skipped=${c.skipped || 0} findings=${JSON.stringify(state.findings || {})}`)
+  console.log(`[campaign] 收尾：completed=${c.completed || 0} incomplete=${c.incomplete || 0} interrupted=${c.interrupted || 0}`
+    + ` failed=${c.failed || 0} skipped=${c.skipped || 0} attempts=${state.attempts || 0}`
+    + ` outcomes=${JSON.stringify(state.outcomes || {})} findings=${JSON.stringify(state.findings || {})}`)
   console.log(`[campaign] 汇总：${join(runRoot, 'summary.json')}`)
 }
 

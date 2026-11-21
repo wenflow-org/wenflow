@@ -12,22 +12,21 @@ import { logger } from '../../../utils/logger';
 import { clampMilestonesWithLog } from './path-budget-clamp';
 import { ownerContextOverride } from './owner-context';
 import { withTransaction } from '../../../utils/with-transaction';
-import { executeSkill, executeSkillWithResult } from '../../../skills';
+import { executeSkill } from '../../../skills';
 import { runWithContext } from '../../../gateway/api-gateway/context';
 import { buildPathGenerationContext } from './generation-request-context';
 import { pathAgentDefinition } from '../../../skills/path-planning';
-import { pathReviewerDefinition, PATH_REVIEW_PASS_THRESHOLD } from '../../../skills/path-reviewer';
 import type { AgentInput } from '../../../agents/protocol';
 import { normalizeAgentOutput } from '../../../agents/output-normalizer';
 import { buildFramedNormalizedInput } from '../path-planning-hints';
 import { normalizePathDifficulty } from '../path-difficulty';
 import { sanitizeUserFacingText, detectBoilerplateClause } from '../user-facing-text';
-import { buildPathReviewerGoalContext } from '../path-reviewer-context';
 import {
   auditMilestoneRationales,
   isClarificationEnforceEnabled,
 } from '../goal-clarification-contract';
-import { reviewPathWithAutoReplan, MAX_PATH_REPLAN_DEPTH } from './path-review-replan';
+import { buildPathReviewSnapshot, type PathReviewAnalysis } from './path-review-replan';
+import { buildPathReviewConfig } from './path-review-config';
 import {
   assertGenerationRunFence,
   PATH_GENERATION_LEASE_MS,
@@ -63,6 +62,7 @@ import type {
 } from '../learning.types';
 import { createDomainEvent } from '../../../events/contracts';
 import { enqueueDomainEvent } from '../../../events/outbox.repository';
+import { enqueuePathQualityReviewEvent, hashPathReviewSnapshot, PATH_REVIEW_REVIEWER_KIND } from '../../../events/path-quality-review-event';
 import { learnerSnapshotRefreshService } from '../../learner/LearnerSnapshotRefreshService';
 import { learnerProjectionService } from '../../learner/LearnerProjectionService';
 import { dashboardGuidanceSnapshotService } from '../../learner/DashboardGuidanceSnapshotService';
@@ -552,6 +552,14 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
   }
 }
 
+/**
+ * 显式虚拟实验分组专用：对给定生成输入重跑 path-planning，供「评审→一次返工→再评审」
+ * 比较实验使用。不落库、不评审、不影响 durable path；普通路径不调用。
+ */
+export async function analyzePathForReviewExperiment(data: GeneratePathData): Promise<PathReviewAnalysis> {
+  return analyzePathWithAgent(data) as Promise<PathReviewAnalysis>;
+}
+
 
 async function persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
   const cognitiveDesign = buildPathCognitiveDesign(data, analysis);
@@ -571,6 +579,34 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
   const adjustmentPolicy = buildPathAdjustmentPolicy();
   const adjustmentEvidence = buildPathAdjustmentEvidence(data);
   const generationUpdatedAt = new Date().toISOString();
+  // 模型评审转后台观察：落库时冻结版本（core run id）与评审输入快照。普通路径不再同步等待
+  // path-reviewer；事件与路径在同一事务入队，保证「路径可见」与「可评审」同源。
+  const reviewSnapshot = runId
+    ? buildPathReviewSnapshot(data, { ...analysis, cognitiveDesign }, normalizedMilestonesData)
+    : null;
+  const reviewConfig = runId ? buildPathReviewConfig() : null;
+  const explicitReviewExperiment = runId && (
+    process.env.VIRTUAL_PATH_REVIEW_EXPERIMENT === '1'
+    || (data.userProfile?.pathReviewExperiment?.enabled === true
+      && data.userProfile?.pathReviewExperiment?.requestedBy === 'virtual-lab')
+  );
+  const reviewExperimentRequested = explicitReviewExperiment
+    ? await prisma.users.findUnique({ where: { id: data.userId }, select: { isVirtualLearner: true } })
+      .then((user) => user?.isVirtualLearner === true)
+      .catch(() => false)
+    : false;
+  const reviewMode = reviewExperimentRequested ? 'replan_experiment' as const : 'observe' as const;
+  const pendingPathReview = runId && reviewConfig
+    ? {
+        status: 'pending',
+        reviewer: 'skill:path-reviewer',
+        reviewerKind: PATH_REVIEW_REVIEWER_KIND,
+        reviewedGenerationRunId: runId,
+        reviewConfig,
+        snapshotHash: reviewSnapshot ? hashPathReviewSnapshot(reviewSnapshot) : null,
+        requestedAt: generationUpdatedAt,
+      }
+    : null;
   const promptTemplatePayload = {
       ...analysis,
       source: data.source || (data.sourceConversationId ? 'goal' : 'api'),
@@ -595,6 +631,10 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
         coreStep: 'completed',
         stageDesign: 'pending',
         lastError: null,
+        // 不可变路径版本（本次 core 生成 run id）：后台评审只写回这个版本；
+        // 新版本覆盖后，迟到评审按版本栅栏丢弃，不修改新路径。
+        pathVersion: runId ?? null,
+        ...(pendingPathReview ? { pathReview: pendingPathReview } : {}),
         // 守恒决策留痕（I6-2）：此前 report 只进日志（且仅在有 gapNote 时打），
         // 路径落库后「是谁把学时夹下来的」无从复核（enforceBudgetConservation /
         // clampStageTasksToHints / 结构容量上限三者都会改）。这里随生成记录落库。
@@ -832,6 +872,22 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
       (path as any).activeGenerationRunId = stageRunId;
     }
 
+    // 模型评审转后台观察（2026-11-21）：与路径落库同事务登记，走 outbox 独立泳道。
+    // 普通路径（真实/虚拟）只观察、不等待、不自动重规划；显式虚拟实验分组才会在
+    // 后台执行「评审→一次返工→再评审」，且结果只写实验记录、不影响本条 durable path。
+    if (runId && reviewSnapshot && reviewConfig) {
+      await enqueuePathQualityReviewEvent(tx, {
+        pathId: path.id,
+        userId: data.userId,
+        reviewedGenerationRunId: runId,
+        mode: reviewMode,
+        requestedBy: reviewExperimentRequested ? 'virtual-lab' : 'path-generation',
+        reviewConfig: reviewConfig as unknown as Record<string, unknown>,
+        snapshot: reviewSnapshot as unknown as Record<string, unknown>,
+        ...(reviewExperimentRequested ? { experiment: { compareReplan: true } } : {}),
+      });
+    }
+
     await enqueueDomainEvent(tx, createDomainEvent({
       type: 'path:created',
       aggregateType: 'path',
@@ -922,11 +978,9 @@ async function generateLearningPathCore(data: GeneratePathData) {
 
   try {
     logger.info('开始生成学习路径...', { userId: data.userId, goal: data.description });
-    // 路径评审（CIDDP 五维度）+ 一次自动重规划：best-effort，不阻断路径生成。
-    // 重规划结果会重新评审（#172-6③），深度由 MAX_PATH_REPLAN_DEPTH 护栏限制。
-    const reviewed = await reviewPathWithAutoReplan(data, await analyzePathWithAgent(data), analyzePathWithAgent);
-    const analysis = reviewed.analysis;
-    const pathReview = reviewed.pathReview;
+    // 2026-11-21：确定性检查（用户确认/目标澄清/结构归一/数据写入约束）通过后直接落库，
+    // 模型评审（path-reviewer）转后台观察任务，不再同步等待，也不在普通真实/虚拟路径上自动重规划。
+    const analysis = await analyzePathWithAgent(data);
     if (data.existingPathId && coreRunId) {
       await heartbeatGenerationRun(data.existingPathId, coreRunId, { progress: 50 });
     }
@@ -945,7 +999,6 @@ async function generateLearningPathCore(data: GeneratePathData) {
     const fullPath = await persistGeneratedPath(data, {
       ...analysis,
       cognitiveDesign,
-      pathReview,
     }, normalizedMilestonesData, coreRunId);
     // 渐进式（批次 D）：首跑只设计 stage 1——把首个里程碑 id 传给 enrichment restrict
     const progressive = isProgressiveStageDesignEnabled();

@@ -428,4 +428,104 @@ describe('simulation-learn-turn · 判决完成门（P1-5 / VL-1）', () => {
     expect(output.learnerState.conceptualMastery).toBe(0.85)
     expect(output.debug?.judgeMasteryClampedFields).toBeUndefined()
   })
+
+  // A2（2026-11-21）：长度按 persona.verbosity 分档，不再一律 1-2 句。
+  it('verbosity=terse → 只保留 1 短句', () => {
+    const output = normalizeOutput(
+      { reply: '我先按这个试试。感觉能跟上。' },
+      { ...input, learner: { personalityTraits: { verbosity: 'terse' } } },
+    )
+    expect(output.reply).toBe('我先按这个试试。')
+  })
+
+  it('verbosity=verbose → 保留 2-3 句（不被 normal 上限截掉）', () => {
+    const three = '我先按这个试试。感觉这一步能跟上。不过我还得再确认一下最后那步。'
+    const output = normalizeOutput(
+      { reply: three },
+      { ...input, learner: { personalityTraits: { verbosity: 'verbose' } } },
+    )
+    expect(output.reply.replace(/\s+/g, '')).toBe(three.replace(/\s+/g, ''))
+  })
+
+  it('verbosity 缺省 → 仍保持 1-2 句', () => {
+    const output = normalizeOutput(
+      { reply: '我先按这个试试。感觉这一步能跟上。不过我还得再确认一下最后那步。' },
+      input,
+    )
+    expect(output.reply).toBe('我先按这个试试。 感觉这一步能跟上。')
+  })
+
+  // A3（2026-11-21）：remainingBlockers 单一真相源。
+  it('feedback 缺 remainingBlockers 时沿用 state 卡点，不提前结课', () => {
+    const output = normalizeOutput({
+      reply: '嗯，差不多会了。',
+      learnerState: {
+        phaseFocus: 'ready_to_close',
+        taskUnderstanding: 0.9,
+        conceptualMastery: 0.9,
+        proceduralMastery: 0.9,
+        remainingBlockers: ['最后一步还不稳'],
+      },
+      learnerFeedback: { selfReportedTaskDone: true, wantsMoreHelp: false },
+    }, input)
+    expect(output.learnerFeedback.remainingBlockers).toEqual(['最后一步还不稳'])
+    expect(output.learnerState.remainingBlockers).toEqual(['最后一步还不稳'])
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(false)
+  })
+
+  it('feedback 显式清空卡点时，state 同步清空（不再残留旧卡点）', () => {
+    const output = normalizeOutput({
+      reply: '那这个先放放。',
+      learnerState: {
+        phaseFocus: 'trying',
+        taskUnderstanding: 0.8,
+        remainingBlockers: ['下节再讲的那个'],
+      },
+      learnerFeedback: { selfReportedTaskDone: true, wantsMoreHelp: false, remainingBlockers: [] },
+    }, input)
+    expect(output.learnerState.remainingBlockers).toEqual([])
+    expect(output.learnerFeedback.remainingBlockers).toEqual([])
+  })
+
+  // 工作记忆超载（2026-11-21）：代码信号命中时强制 blocked，不依赖模型自觉。
+  it('overloadSignal.overloaded → blocked + 高负荷 + 登记卡点，且不得结课', () => {
+    const output = normalizeOutput({
+      reply: '等一下，A 和 B 我还没理清，怎么就跳到 C 了。',
+      learnerFeedback: { selfReportedTaskDone: true, wantsMoreHelp: false, remainingBlockers: [] },
+    }, { ...input, overloadSignal: { overloaded: true, loadScore: 0.8 } })
+
+    expect(output.learnerState.phaseFocus).toBe('blocked')
+    expect(output.learnerState.cognitiveLoad).toBeGreaterThanOrEqual(0.8)
+    expect(output.learnerFeedback.remainingBlockers).toEqual(['信息太多没接住'])
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(false)
+  })
+
+  // 稳定误区（2026-11-21）：受控错误写一次，模型没显式放弃就跨轮持有；
+  // 只有在反例轮（老师给出冲突事实）模型显式输出 null 才释放。
+  it('模型没输出 heldMisconception 时沿用输入持有项', () => {
+    const held = { concept: '剪辑节奏', statement: '节奏越快越好', createdTurn: 2 }
+    const output = normalizeOutput({ reply: '我觉得快一点更带感吧。' }, { ...input, heldMisconception: held })
+    expect(output.learnerState.heldMisconception).toMatchObject({ concept: '剪辑节奏', statement: '节奏越快越好', createdTurn: 2 })
+  })
+
+  it('模型显式输出 heldMisconception=null → 释放（老师已给反例）', () => {
+    const held = { concept: '剪辑节奏', statement: '节奏越快越好', createdTurn: 2 }
+    const output = normalizeOutput(
+      { reply: '哦……那这段留白确实不能剪掉。', learnerState: { heldMisconception: null } },
+      { ...input, heldMisconception: held }
+    )
+    expect(output.learnerState.heldMisconception).toBeNull()
+  })
+
+  it('模型输出新的 heldMisconception 时以模型为准（本轮换了错误直觉）', () => {
+    const held = { concept: '剪辑节奏', statement: '节奏越快越好', createdTurn: 2 }
+    const output = normalizeOutput(
+      {
+        reply: '等等，是不是所有转场都该加特效？',
+        learnerState: { heldMisconception: { concept: '转场', statement: '转场越花越好' } },
+      },
+      { ...input, heldMisconception: held }
+    )
+    expect(output.learnerState.heldMisconception).toMatchObject({ concept: '转场', statement: '转场越花越好' })
+  })
 })

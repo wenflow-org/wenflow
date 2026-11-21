@@ -27,17 +27,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   beginRunAttempt,
+  buildFunctionalEvidence,
   classifyAdvanceResponse,
   classifyPathGeneration,
+  classifyRunTerminal,
   classifySessionStatus,
   classifyTeachingTurnPause,
   createRunState,
   defaultLearnerName,
   isPathReady,
   nextBackoffMs,
+  normalizeStageScope,
   parseHarnessArgs,
   parseRunState,
   type HarnessArgs,
+  type RunStageScopeName,
   type RunState,
 } from '../services/virtual-lab/run-harness';
 
@@ -153,7 +157,7 @@ async function login(baseUrl: string, name: string, password: string): Promise<v
 }
 
 /** 单次请求；网络异常收敛为 `status:0`，由分类函数决定是否重试（不在此处隐式重试）。 */
-async function api(method: string, urlPath: string, body?: unknown): Promise<ApiResult> {
+async function api(method: string, urlPath: string, body?: unknown, requestKey?: string): Promise<ApiResult> {
   try {
     const response = await fetch(urlPath, {
       method,
@@ -161,6 +165,7 @@ async function api(method: string, urlPath: string, body?: unknown): Promise<Api
         'Content-Type': 'application/json',
         Origin: ORIGIN,
         ...(cookie ? { Cookie: cookie } : {}),
+        ...(requestKey ? { 'Idempotency-Key': requestKey } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -179,8 +184,8 @@ async function api(method: string, urlPath: string, body?: unknown): Promise<Api
   }
 }
 
-function makeApi(baseUrl: string, method: string, urlPath: string, body?: unknown): Promise<ApiResult> {
-  return api(method, `${baseUrl}${urlPath}`, body);
+function makeApi(baseUrl: string, method: string, urlPath: string, body?: unknown, requestKey?: string): Promise<ApiResult> {
+  return api(method, `${baseUrl}${urlPath}`, body, requestKey);
 }
 
 function persist(statePath: string | null, state: RunState): void {
@@ -243,7 +248,9 @@ function goalTerminalSignal(body: Record<string, unknown> | null): {
 
 /** goal 阶段推进：`step` 直到离开 goal、明确不排课或学习者离场（有界）。 */
 async function driveGoalPhase(args: HarnessArgs, state: RunState, statePath: string | null): Promise<GoalDriveOutcome> {
-  for (let step = 1; step <= GOAL_MAX_STEPS; step += 1) {
+  let transportRetries = 0;
+  while ((state.goalStepsAcknowledged ?? 0) < GOAL_MAX_STEPS) {
+    const step = (state.goalStepsAcknowledged ?? 0) + 1;
     const detail = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`);
     const { status, currentStage } = sessionFields(detail.body);
     const terminal = goalTerminalSignal(detail.body);
@@ -260,18 +267,29 @@ async function driveGoalPhase(args: HarnessArgs, state: RunState, statePath: str
       return 'advanced';
     }
     const started = Date.now();
-    const response = await makeApi(args.baseUrl, 'POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/step`, {});
+    const response = await makeApi(
+      args.baseUrl,
+      'POST',
+      `/api/admin/virtual-learners/sessions/${state.sessionId}/step`,
+      {},
+      `${state.runId}:goal:${step}`,
+    );
     const after = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`);
     const afterFields = sessionFields(after.body);
     const afterTerminal = goalTerminalSignal(after.body);
     log(`[goal] step#${step} ${((Date.now() - started) / 1000).toFixed(0)}s http=${response.status} → ${afterFields.currentStage}/${afterFields.status}`);
-    if (response.status === 0 || response.status >= 500) {
-      // 传输问题：退避后重试同一步（不改状态）
+    if (response.status === 0 || response.status >= 500 || response.status === 409 || response.status === 429) {
+      transportRetries += 1;
+      if (transportRetries >= GOAL_MAX_STEPS) {
+        addFinding(state, 'retry-exhausted', `goal step#${step} http=${response.status}`);
+        return 'failed';
+      }
       addFinding(state, 'goal-step-transport', `step#${step} http=${response.status}`);
-      await sleep(nextBackoffMs(step));
+      await sleep(nextBackoffMs(transportRetries));
       continue;
     }
-    if (response.status !== 200) {
+    transportRetries = 0;
+    if (response.status !== 200 || response.body?.success === false) {
       addFinding(state, 'goal-step-failed', `step#${step} http=${response.status} ${JSON.stringify(response.body?.error ?? '')}`.slice(0, 240));
       return 'failed';
     }
@@ -291,6 +309,7 @@ async function driveGoalPhase(args: HarnessArgs, state: RunState, statePath: str
       log(`[goal] 已完成（${afterFields.currentStage}/${afterFields.status}）`);
       return 'advanced';
     }
+    state.goalStepsAcknowledged = step;
     persist(statePath, state);
     if (step === GOAL_MAX_STEPS) {
       addFinding(state, 'goal-not-converged', `${GOAL_MAX_STEPS} 步仍未离开 goal`);
@@ -312,7 +331,13 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
   while (state.round < args.maxDays) {
     const dayLabel = state.round + 1;
     const started = Date.now();
-    const response = await makeApi(args.baseUrl, 'POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/advance-day`, { days: 1, runTasks: true });
+    const response = await makeApi(
+      args.baseUrl,
+      'POST',
+      `/api/admin/virtual-learners/sessions/${state.sessionId}/advance-day`,
+      { days: 1, runTasks: true },
+      `${state.runId}:day:${state.round + 1}`,
+    );
     const outcome = classifyAdvanceResponse({ httpStatus: response.status, body: response.body });
     const seconds = ((Date.now() - started) / 1000).toFixed(0);
 
@@ -495,6 +520,30 @@ async function cleanupLearner(args: HarnessArgs, state: RunState): Promise<void>
   }
 }
 
+/**
+ * 实际到达阶段（功能证据用）。
+ * 只用运行器已观测到的事实：goal 必然发生；path/teaching 以轮次或最终 stage 为准；
+ * completion 只在声明要求路径且会话 completed 时才算，避免把 no-path 终局冒充完成。
+ */
+function deriveStagesReached(input: {
+  goalOutcome: GoalDriveOutcome;
+  result: 'completed' | 'failed' | 'exhausted';
+  round: number;
+  finalStage: string;
+  expectNoPath: boolean;
+}): RunStageScopeName[] {
+  const stages = new Set<RunStageScopeName>(['goal']);
+  const advanced = input.goalOutcome === 'advanced';
+  if (advanced || input.round > 0 || ['path', 'teaching', 'completed'].includes(input.finalStage)) {
+    stages.add('path');
+  }
+  if (input.round > 0 || ['teaching', 'completed'].includes(input.finalStage)) {
+    stages.add('teaching');
+  }
+  if (!input.expectNoPath && input.result === 'completed') stages.add('completion');
+  return [...stages];
+}
+
 async function main(): Promise<void> {
   // 故事/人设覆盖参数由本脚本消费（cliValue），不进 run-harness 的参数契约
   const EXTRA_ARG = /^--(story-(title|opening|problem|trigger)|profile-(role|scenario))=/;
@@ -597,11 +646,23 @@ async function main(): Promise<void> {
 
   persist(args.statePath, state);
 
+  // 显式阶段范围：显式参数优先；续跑沿用 state 里已声明的范围，避免中途改口径。
+  const declaredScope = normalizeStageScope({
+    expectNoPath: args.expectNoPath,
+    expectedTerminal: args.expectedTerminal,
+    stages: args.stages.length ? args.stages : null,
+    observationDays: args.maxDays,
+  });
+  state.stageScope = (args.stages.length || args.expectedTerminal)
+    ? declaredScope
+    : (state.stageScope || declaredScope);
+
   const goalOutcome = await driveGoalPhase(args, state, args.statePath);
   let result: 'completed' | 'failed' | 'exhausted' = 'failed';
   if (goalOutcome === 'advanced') {
     result = await runDailyLoop(args, state, args.statePath);
     if (result === 'exhausted') {
+      // 观察天数用尽：是有效观测（不是平台失败），终态由 classifyRunTerminal 单列。
       addFinding(state, 'max-days-reached', `已达 ${args.maxDays} 天仍未 completed`);
     }
   } else if (goalOutcome === 'no-path' || goalOutcome === 'learner-left') {
@@ -616,12 +677,64 @@ async function main(): Promise<void> {
     }
   }
 
+  // 终态 / 功能证据：与效果分完全解耦；低分不会导致证据被丢弃。
+  let finalFields = { status: 'unknown', currentStage: 'unknown' };
+  let finalLearningPathId: string | null = null;
+  if (state.sessionId) {
+    const finalDetail = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`);
+    finalFields = sessionFields(finalDetail.body);
+    const data = asRecord(finalDetail.body?.data);
+    finalLearningPathId = typeof data.learningPathId === 'string' ? data.learningPathId : null;
+  }
+  const terminal = classifyRunTerminal({
+    result,
+    goalOutcome,
+    expectNoPath: args.expectNoPath,
+    findings: state.findings,
+    round: state.round,
+    maxDays: args.maxDays,
+  });
+  const stagesReached = deriveStagesReached({
+    goalOutcome,
+    result,
+    round: state.round,
+    finalStage: finalFields.currentStage,
+    expectNoPath: args.expectNoPath,
+  });
+  state.outcome = terminal;
+  state.stagesReached = [...new Set([...(state.stagesReached || []), ...stagesReached])] as RunStageScopeName[];
+  state.functional = buildFunctionalEvidence({
+    scope: state.stageScope || declaredScope,
+    terminal,
+    stagesReached: state.stagesReached,
+    rounds: state.round,
+    maxDays: args.maxDays,
+    sessionStatus: finalFields.status,
+    currentStage: finalFields.currentStage,
+    findings: state.findings,
+    stateVersion: state.version,
+    dataComplete: !!state.sessionId && !!state.runId,
+    stageData: {
+      goal: !!state.sessionId,
+      path: !!(finalLearningPathId || state.profileId) && (goalOutcome === 'advanced' || state.round > 0),
+      teaching: state.round > 0 && !!state.sessionId,
+      completion: result === 'completed' && !args.expectNoPath && finalFields.status === 'completed',
+      review: false,
+    },
+  });
+
   persist(args.statePath, state);
+  log(`===== 终态：${terminal}；尝试#${state.attempt}；阶段=${state.stagesReached.join(',') || '—'}`
+    + `；检查=${state.functional.checks.filter((item) => !item.ok).map((item) => item.code).join(',') || '全部通过'} =====`);
+
   if (result === 'completed') {
     log(`===== 成功：${args.learnerName} session=${state.sessionId} findings=${state.findings.length} =====`);
     await cleanupLearner(args, state);
+  } else if (terminal === 'observation-exhausted') {
+    // 观察窗口跑满：不是平台失败，保留现场（可续跑/可采样），退出码 0。
+    log(`===== 观察天数用尽（${state.round}/${args.maxDays}）：保留现场以采样或续跑 =====`);
   } else {
-    log(`===== 未完成（${result}）：保留现场以续跑 =====`);
+    log(`===== 未完成（${terminal}）：保留现场以续跑 =====`);
     log(`  续跑：E2E_ADMIN_PASSWORD=*** npx ts-node --transpile-only src/scripts/simulate-learner-e2e.ts `
       + `${args.statePath ? `--state=${args.statePath} ` : `--session=${state.sessionId} `}--keep`);
     log(`  清理：DELETE ${args.baseUrl}/api/admin/virtual-learners/${state.profileId ?? '<profileId>'}`);

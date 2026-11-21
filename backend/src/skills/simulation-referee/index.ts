@@ -3,6 +3,7 @@ import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapt
 import { loadPromptFile } from '../../composers/prompt-files/loader'
 import type { SkillDefinition, SkillExecutionResult } from '../protocol'
 import type { VirtualLearnerRefereeInput, VirtualLearnerRefereeOutput } from '../../virtual-lab/contracts'
+import { hasAuditEvidenceValue } from '../virtual-learner-shared/audit-evidence'
 
 export const VIRTUAL_LEARNER_REFEREE_MAX_TOKENS = 2400
 export const VIRTUAL_LEARNER_REFEREE_TEMPERATURE = 0.2
@@ -18,10 +19,14 @@ const SCORE_KEYS = [
   'evidenceSufficiency'
 ] as const
 
-function clampScore(value: unknown, fallback = 0) {
-  const score = Number(value)
-  if (!Number.isFinite(score)) return fallback
-  return Math.round(Math.max(0, Math.min(100, score)))
+/**
+ * 严格读分：缺字段、非数字、越界都算**无效**（不能用默认 50 分悄悄造出结论）。
+ * 无效分会在 integrity.missingScores 留痕，并强制 verdict=inconclusive。
+ */
+function readScore(value: unknown): { value: number | null; valid: boolean } {
+  const score = typeof value === 'number' ? value : Number.NaN
+  if (!Number.isFinite(score) || score < 0 || score > 100) return { value: null, valid: false }
+  return { value: Math.round(score), valid: true }
 }
 
 function text(value: unknown, limit = 1200) {
@@ -40,10 +45,16 @@ function normalizeEvidence(value: unknown, input: VirtualLearnerRefereeInput): V
       ? item.source as VirtualLearnerRefereeOutput['evidence'][number]['source']
       : null
     if (!source) return []
-    const index = item?.index === null || item?.index === undefined ? null : Number(item.index)
+    if (item?.index != null && typeof item.index !== 'number') return []
+    const index = item?.index ?? null
     if (source === 'publicTrace' && (!Number.isInteger(index) || index! < 0 || index! >= input.publicTrace.length)) return []
     if (source === 'refereeTrace' && (!Number.isInteger(index) || index! < 0 || index! >= input.refereeTrace.length)) return []
-    if ((source === 'storyMeta' || source === 'metricCompleteness') && index !== null) return []
+    const indexed = source === 'publicTrace' || source === 'refereeTrace'
+    if (!indexed && index !== null) return []
+    const path = text(item?.path, 180)
+    const root = source === 'publicTrace' ? input.publicTrace[index!]
+      : source === 'refereeTrace' ? input.refereeTrace[index!] : input[source]
+    if (!path || !hasAuditEvidenceValue(source, root, path)) return []
     const id = text(item?.id, 40) || `E${position + 1}`
     if (seen.has(id)) return []
     seen.add(id)
@@ -51,7 +62,7 @@ function normalizeEvidence(value: unknown, input: VirtualLearnerRefereeInput): V
       id,
       source,
       index,
-      path: text(item?.path, 180) || source,
+      path,
       timestamp: text(item?.timestamp, 64) || null,
       traceId: text(item?.traceId, 120) || null,
       excerpt: text(item?.excerpt, 500),
@@ -63,11 +74,19 @@ function normalizeEvidence(value: unknown, input: VirtualLearnerRefereeInput): V
 export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerRefereeInput): VirtualLearnerRefereeOutput {
   const evidence = normalizeEvidence(parsed?.evidence, input)
   const evidenceIds = new Set(evidence.map(item => item.id))
+  const danglingEvidenceRefs: string[] = []
   const findings = (Array.isArray(parsed?.findings) ? parsed.findings : []).flatMap((item: any, index: number) => {
-    const refs = stringList(item?.evidenceIds).filter(id => evidenceIds.has(id))
-    if (!refs.length) return []
+    const rawRefs = stringList(item?.evidenceIds)
+    const refs = rawRefs.filter(id => evidenceIds.has(id))
+    for (const id of rawRefs) {
+      if (!evidenceIds.has(id)) danglingEvidenceRefs.push(id)
+    }
+    if (!refs.length) {
+      if (!rawRefs.length) danglingEvidenceRefs.push(`finding:${index + 1}:missing-reference`)
+      return []
+    }
     const severity = ['critical', 'major', 'minor', 'info'].includes(item?.severity) ? item.severity : 'minor'
-    const category = ['goal', 'path', 'teaching', 'control', 'boundary', 'completion', 'trace'].includes(item?.category)
+    const category = ['goal', 'path', 'teaching', 'control', 'boundary', 'completion', 'trace', 'data'].includes(item?.category)
       ? item.category : 'trace'
     return [{
       code: text(item?.code, 80) || `FINDING_${index + 1}`,
@@ -79,31 +98,57 @@ export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerReferee
     }]
   }).slice(0, 24) as VirtualLearnerRefereeOutput['findings']
   const findingCodes = new Set(findings.map(item => item.code))
+  const danglingFindingCodes: string[] = []
   const recommendations = (Array.isArray(parsed?.recommendations) ? parsed.recommendations : []).flatMap((item: any) => {
     const action = text(item?.action, 500)
     if (!action) return []
+    const rawCodes = stringList(item?.findingCodes)
+    const validCodes = rawCodes.filter(code => findingCodes.has(code))
+    for (const code of rawCodes) {
+      if (!findingCodes.has(code)) danglingFindingCodes.push(code)
+    }
     return [{
       priority: ['P0', 'P1', 'P2', 'P3'].includes(item?.priority) ? item.priority : 'P2',
       action,
       rationale: text(item?.rationale, 700),
-      findingCodes: stringList(item?.findingCodes).filter(code => findingCodes.has(code))
+      findingCodes: validCodes
     }]
   }).slice(0, 16) as VirtualLearnerRefereeOutput['recommendations']
 
   const coverage = input.experimentSummary.stageCoverage
   const rawScores = parsed?.scores || {}
+  const requiredKeys = [
+    'controlConsistency',
+    'boundaryIntegrity',
+    'evidenceSufficiency',
+    ...(coverage.goal ? ['goalExperience'] : []),
+    // 目标理解：只在有故事基准（真实问题）且 Goal 阶段被覆盖时评估
+    ...(coverage.goal && input.storyMeta?.realProblem ? ['goalUnderstanding'] : []),
+    ...(coverage.path ? ['pathExperience'] : []),
+    ...(coverage.teaching ? ['teachingExperience'] : []),
+  ]
+  const required = new Set(requiredKeys)
+  const missingScores: string[] = []
+  const readRequired = (key: string, fallback: number): number => {
+    const parsedScore = readScore(rawScores[key])
+    if (!parsedScore.valid) {
+      // 仍用 fallback 参与内部加权，但 integrity 已判定无效，最终 verdict 会被强制 inconclusive。
+      if (required.has(key)) missingScores.push(key)
+      return fallback
+    }
+    return parsedScore.value as number
+  }
   const scores: VirtualLearnerRefereeOutput['scores'] = {
     overall: 0,
-    goalExperience: coverage.goal ? clampScore(rawScores.goalExperience, 50) : null,
-    // 目标理解：只在有故事基准（真实问题）且 Goal 阶段被覆盖时评估
+    goalExperience: coverage.goal ? readRequired('goalExperience', 50) : null,
     goalUnderstanding: coverage.goal && input.storyMeta?.realProblem
-      ? clampScore(rawScores.goalUnderstanding, 50)
+      ? readRequired('goalUnderstanding', 50)
       : null,
-    pathExperience: coverage.path ? clampScore(rawScores.pathExperience, 50) : null,
-    teachingExperience: coverage.teaching ? clampScore(rawScores.teachingExperience, 50) : null,
-    controlConsistency: clampScore(rawScores.controlConsistency, 50),
-    boundaryIntegrity: clampScore(rawScores.boundaryIntegrity, 50),
-    evidenceSufficiency: clampScore(rawScores.evidenceSufficiency, evidence.length ? 60 : 20)
+    pathExperience: coverage.path ? readRequired('pathExperience', 50) : null,
+    teachingExperience: coverage.teaching ? readRequired('teachingExperience', 50) : null,
+    controlConsistency: readRequired('controlConsistency', 50),
+    boundaryIntegrity: readRequired('boundaryIntegrity', 50),
+    evidenceSufficiency: readRequired('evidenceSufficiency', evidence.length ? 60 : 20)
   }
   // 数据契约门禁：跑过教学阶段却没有任何指标/wrapup 产出 → 证据不足，不得给出结论性裁判
   const metricCompleteness = input.metricCompleteness
@@ -114,6 +159,20 @@ export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerReferee
   if (allMetricsMissing) {
     scores.evidenceSufficiency = Math.min(scores.evidenceSufficiency, 45)
   }
+
+  // 完整性门：缺分/非法分/悬空**证据引用**一律判 inconclusive。
+  // findingCodes 悬空只做诊断（推荐项允许引用被过滤的 finding，不改变裁判结论）。
+  const integrity = {
+    valid: evidence.length > 0 && missingScores.length === 0 && danglingEvidenceRefs.length === 0,
+    missingEvidence: evidence.length === 0,
+    missingScores,
+    danglingEvidenceRefs: [...new Set(danglingEvidenceRefs)],
+    danglingFindingCodes: [...new Set(danglingFindingCodes)],
+  }
+  if (!integrity.valid) {
+    scores.evidenceSufficiency = Math.min(scores.evidenceSufficiency, 45)
+  }
+
   const weighted = [
     [scores.goalExperience, 15],
     [scores.goalUnderstanding, 10],
@@ -130,7 +189,7 @@ export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerReferee
 
   const hasCritical = findings.some(item => item.severity === 'critical')
   const hasMajor = findings.some(item => item.severity === 'major')
-  const verdict: VirtualLearnerRefereeOutput['verdict'] = scores.evidenceSufficiency < 50
+  const verdict: VirtualLearnerRefereeOutput['verdict'] = !integrity.valid || scores.evidenceSufficiency < 50
     ? 'inconclusive'
     : hasCritical || scores.overall < 60
       ? 'fail'
@@ -138,7 +197,7 @@ export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerReferee
         ? 'pass_with_concerns'
         : 'pass'
 
-  return { verdict, scores, findings, recommendations, evidence }
+  return { verdict, scores, findings, recommendations, evidence, integrity }
 }
 
 export const virtualLearnerRefereeDefinition: SkillDefinition = {
@@ -201,6 +260,9 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
       valid: !!parsed?.scores && Array.isArray(parsed?.findings) && Array.isArray(parsed?.evidence),
       failureReason: 'missing scores/findings/evidence'
     }),
+    softValidateParsedOutput: (parsed) => normalizeRefereeOutput(parsed, input).integrity?.valid
+      ? { valid: true }
+      : { valid: false, failureReason: '裁判分数或证据无效。至少引用一项输入中的实际字段，且每条发现都须引用有效证据。' },
     normalizeOutput: normalizeRefereeOutput,
     mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
       phase: 'completed',
@@ -208,7 +270,7 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
     }),
     retryStrategy: {
       maxAttempts: 2,
-      onValidationFail: () => '请只输出合法 JSON，并完整包含 scores、findings、recommendations、evidence。'
+      onValidationFail: ({ failureReason }) => `请只输出合法 JSON，并完整包含 scores、findings、recommendations、evidence。上一轮问题：${failureReason}`
     }
   }, input)
 

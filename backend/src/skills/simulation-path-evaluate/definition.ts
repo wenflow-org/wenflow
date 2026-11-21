@@ -14,6 +14,7 @@ export const virtualLearnerPathEvaluatorRuntimeDefinition: RuntimeDefinitionReco
       goalState: { type: 'object', description: 'Goal 阶段状态' },
       previousReaction: { type: 'object', description: '上一次路径反应' },
       learnerState: { type: 'object', description: '当前学习者主观状态' },
+      learnerMemory: { type: 'object', description: '学习者长期记忆（已掌握/到期复习/仍在学/最近完成）' },
     },
     required: [],
   },
@@ -26,12 +27,12 @@ export const virtualLearnerPathEvaluatorRuntimeDefinition: RuntimeDefinitionReco
     },
   },
   variableBindings: {
-    consumes: ['learner', 'story', 'pathProposal', 'goalState', 'previousReaction', 'learnerState'],
+    consumes: ['learner', 'story', 'pathProposal', 'goalState', 'previousReaction', 'learnerState', 'learnerMemory'],
     produces: ['reaction', 'visibleRequestedChanges', 'debug'],
   },
   capabilities: ['virtual-learner-path-evaluation', 'virtual-learner-replan-evaluation'],
   defaultMaxTokens: 64000,
-  defaultTemperature: 0.5,
+  defaultTemperature: 0.7,
   source: 'code',
   managedByCode: true,
 };

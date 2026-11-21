@@ -20,6 +20,7 @@ import { anchorPersonaIdentity } from '../../services/virtual-lab/persona-identi
 import { parseJson, normalizeStoryPoolData, ensureProfileStoryPool, isSameStory } from '../../virtual-lab/session-factory';
 import type { VirtualSessionRow } from '../../virtual-lab/vlab-types';
 import { parseStoryContext } from './virtual-learners.projections';
+import { buildSamplingDirectives } from '../../virtual-lab/learner-sampling';
 
 // ===== 原 virtual-learners.ts L188–L251 =====
 /**
@@ -165,6 +166,11 @@ router.post('/generate-persona', async (req: Request, res) => {
       candidatePersonas: Array.isArray(candidatePersonas) && candidatePersonas.length ? candidatePersonas : undefined,
       recentPersonaHints: personaHints,
       existingPersonaSeed,
+      // C3：单次生成也由代码掷分层坐标；existingPersonaSeed 已有的档位提示词会保留。
+      samplingDirectives: buildSamplingDirectives(
+        Math.floor(Math.random() * 12),
+        { student: sampleType === 'student' ? true : undefined }
+      ),
     });
 
     // 身份锚定（2026-11-13 5/5 并发实证：模型会无视 existingPersonaSeed 换职业/生活史）。
