@@ -31,6 +31,10 @@ export interface VirtualLearnerProfileData {
   learningPreferences?: string[];
   failurePatterns?: string[];
   behavioralProfileSummary?: string;
+  /** 兼容旧数据：部分链路把 traits 嵌在 profile JSON 里；列空时读取端回退到这里 */
+  personalityTraits?: PersonalityTraits;
+  /** 声纹样本（2 句本人原话）：锁年龄/职业用词与口语节奏 */
+  voiceSamples?: string[];
   /** 虚拟学习者的 LLM 重试预算（per learner 独立配置） */
   simulationBudget?: {
     maxRetriesPerStep: number;
@@ -118,6 +122,14 @@ export interface LearnerLatentState {
   wantsWorkedExample?: boolean;
   readyForNextTask?: boolean;
   remainingBlockers?: string[];
+  /** 跨轮持有的错误直觉（受控错误轮写入，最多 3 轮；模型显式输出 null 释放） */
+  heldMisconception?: {
+    concept: string;
+    statement: string;
+    why?: string | null;
+    source?: string | null;
+    createdTurn?: number;
+  } | null;
   phaseFocus?: 'opening' | 'understanding' | 'proposal_evaluation' | 'trying' | 'blocked' | 'verifying' | 'ready_to_close' | string;
   feltUnderstood?: number;
   problemClarity?: number;

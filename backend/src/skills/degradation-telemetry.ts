@@ -27,6 +27,8 @@ export type DegradationFaultCategory =
   | 'MODEL_ARITHMETIC_MISMATCH'
   /** 模型把答案键（expectedKeywords 要点）写进了学生可见文本（题干/选项/hint/reply）——照抄即可骗过判分 */
   | 'MODEL_ANSWER_LEAK'
+  /** 新检查点在展示前缺少可用答案键（选择题无 correctOptionIds / id 不在 options 内）——丢弃该题，避免不可判分的题上屏 */
+  | 'MODEL_ANSWER_KEY_MISSING'
   /** 代码裁决判错的作答回合，老师回复仍出现肯定语（话术与判分脱钩，拍板 #5 切口1） */
   | 'MODEL_AFFIRMATION_MISMATCH'
   /** 失败检查点概念的**后续回合**（非提交轮）仍出现肯定语（#84 实证；提交轮口径见 MODEL_AFFIRMATION_MISMATCH） */

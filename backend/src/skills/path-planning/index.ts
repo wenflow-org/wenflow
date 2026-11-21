@@ -171,6 +171,19 @@ export function coercePathPlanningParsed(parsed: any, materials?: PromptMaterial
  * report 只进日志（还只在有 gapNote 时打），路径落库后无从复核。
  * 现在本报告随 path-planning 输出落进 `aiPromptTemplate._generation.budgetConservation`。
  */
+
+/**
+ * 三层学时口径（2026-11-21，禁止混用）：
+ * 1. **规划目标带**（本常量）：提示词让模型自检的 aim band，来自内容体量锚；
+ *    不是对学习者的硬承诺，也不是代码判死的边界。
+ * 2. **平台确定性校正容差**（PLATFORM_BUDGET_CORRECTION_BAND）：代码在落库前兜底
+ *    放大/缩小的容差；只用于「模型明显欠填/超填」的确定性校正，不写成用户文案。
+ * 3. **明确硬时间限制**：用户明说的总可投入时间或 deadline——这是硬约束，路径不得超出，
+ *    也不得反向按日历容量铺满（见 path-planning-hints 的 objectiveScopeHours 口径）。
+ */
+export const PLANNING_TARGET_BAND = { min: 0.7, max: 1.2 } as const;
+export const PLATFORM_BUDGET_CORRECTION_BAND = { min: 0.6, max: 1.8 } as const;
+
 export interface BudgetConservationReport {
   target: number;
   before: number;
@@ -219,8 +232,8 @@ export function enforceBudgetConservation(
     return Number.isFinite(v) && v > 0 ? v : Math.max(0.5, stageAnchor);
   });
   const before = hours.reduce((a: number, b: number) => a + b, 0);
-  const floor = 0.6 * target;
-  const ceiling = 1.8 * target;
+  const floor = PLATFORM_BUDGET_CORRECTION_BAND.min * target;
+  const ceiling = PLATFORM_BUDGET_CORRECTION_BAND.max * target;
   const effectiveCeiling = Math.min(ceiling, capacitySum);
   let clampReason: BudgetConservationReport['clampReason'] = 'none';
   // 放大用「按剩余空间比例」的迭代重分配：均匀因子会在部分阶段已顶容量时填不到 target

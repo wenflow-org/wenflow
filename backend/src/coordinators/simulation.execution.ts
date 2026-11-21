@@ -16,6 +16,7 @@ import goalConversationService from '../services/learning/goal-conversation.serv
 import { getSimulationAgentConfig } from '../services/agentConfig.service';
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
+import { buildProbeAnswers, extractProbePrompts, type ProbePrompt } from '../virtual-lab/probe-answers';
 import { simulatedNowOr, isSimulatedClockActive } from '../services/virtual-lab/simulation-clock-context';
 import type { SimulationMilestone, StageResults, VirtualSessionWithProfile } from '../virtual-lab/vlab-types';
 import type {
@@ -807,6 +808,19 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
       lastRuntimeEnvelope: virtualReplyResult.runtimeEnvelope || virtualReplyResult.output?.runtimeEnvelope || null,
     });
     
+    // C1（2026-11-21）：确认轮把上一轮方案里的前置自测作答一并提交。
+    // 题目在上一轮 goalResult 的 confirmedProposal 里抽出并落 stageResults.goal.probePrompts；
+    // 作答按画像 struggleConcepts 确定性生成（命中卡点→答错，否则答对）。
+    const priorProbePrompts = Array.isArray(existingGoalState.probePrompts)
+      ? existingGoalState.probePrompts as ProbePrompt[]
+      : [];
+    const probeAnswers = currentGoalLearnerState.readyToAdvance === true
+      ? buildProbeAnswers(
+          priorProbePrompts,
+          Array.isArray(profile.struggleConcepts) ? profile.struggleConcepts : []
+        )
+      : [];
+
     const goalResponseStart = Date.now();
     await ctx.assertCurrentSessionLeaseOwned(input.sessionId);
     const goalResult = await ctx.retryLearnUpstream(input.sessionId, 'goal-conversation-turn', () =>
@@ -828,7 +842,8 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
           //（显式拒绝不得代签），防卡死仍由 goal agent 侧轮次上限承担。
           ...(process.env.VIRTUAL_LEARNER_PROXY_CONFIRM === '1'
             ? { confirmProposal: shouldAutoConfirmGoalProposal(currentGoalLearnerState) }
-            : {})
+            : {}),
+          ...(probeAnswers.length ? { probeAnswers } : {})
         }
       )
     );
@@ -838,6 +853,11 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
     const goalResponseTriage = (goalResult.internal.ext?.goalConversation as
       | { responseTriage?: { mode?: string } | null }
       | undefined)?.responseTriage ?? null;
+    // C1：把本轮方案里的前置自测题落到 stageResults，供下一轮确认时作答。
+    // 抽不到题时写空数组，避免上一轮旧题在新方案上继续生效。
+    const nextProbePrompts = extractProbePrompts(
+      (goalResult.internal.ext?.goalConversation as { confirmedProposal?: unknown } | undefined)?.confirmedProposal
+    );
 
     logs.push({
       timestamp: new Date().toISOString(),
@@ -893,6 +913,7 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         concernPool,
         disclosedConcerns: nextDisclosedConcerns,
         responseTriage: goalResponseTriage,
+        probePrompts: nextProbePrompts,
       });
       logs.push({
         timestamp: new Date().toISOString(),
@@ -949,7 +970,8 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         concernPool,
         disclosedConcerns: nextDisclosedConcerns,
         // 分诊命中率遥测：落 stageResults.goal.responseTriage（无迁移）
-        responseTriage: goalResponseTriage
+        responseTriage: goalResponseTriage,
+        probePrompts: nextProbePrompts,
       });
       
       logs.push({
@@ -965,6 +987,15 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         }
       });
       
+    } else {
+      // 非收束轮也要把本轮探测题落库，否则下一轮确认时 stageResults 里没有题可答。
+      await ctx.updateStageResults(input.sessionId, 'goal', {
+        ...existingGoalState,
+        probePrompts: nextProbePrompts,
+        learnerState: finalGoalLearnerState,
+        concernPool,
+        disclosedConcerns: nextDisclosedConcerns,
+      });
     }
 
     await ctx.addSessionLogs(input.sessionId, logs);

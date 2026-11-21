@@ -147,37 +147,27 @@ export async function recordAssistedMemoryRecallOutcomes(input: {
 }
 
 /**
- * 组装 assisted 模式的学习者记忆快照（knowledgeSnapshot 用）：
- * 当前任务概念为锚 + 画像已掌握/易混淆 + 到期复习点 + 最近成果。
+ * 组装 assisted 模式的 knowledgeSnapshot：**学习者页面可见的本节知识点看板**。
+ *
+ * 2026-11-21（黑盒边界审计）：只放「当前任务锚点 + 本课知识点」，不再混入画像的
+ * mastered/dueReview/struggling。后者是长期记忆，走 learnerMemory；混进看板会让
+ * 虚拟学习者的自评过度贴合教师后台判定，掩盖 memory-curate 想捕捉的认知偏差。
  */
-export async function buildAssistedKnowledgeSnapshot(
-  userId: string,
+export function buildAssistedKnowledgeSnapshot(
   currentTask: SimulationTask | null,
   currentMilestone: SimulationMilestone | null,
   lessonKnowledgePoints: Array<{ name: string; status: string; progress: number }> = []
-): Promise<Array<{ name: string; status: string; progress: number }>> {
-  const memory = await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null);
+): Array<{ name: string; status: string; progress: number }> {
   const anchor = currentTask?.linkedConcept || currentMilestone?.coreConceptId
     || currentTask?.title || currentMilestone?.title || '当前任务概念';
   const lessonItems = lessonKnowledgePoints.filter(
     (item) => item && typeof item.name === 'string' && item.name.trim()
   );
-  // 优先级：本课看板 > 当前任务锚点 > 画像先验。先放高优先级项占位（同时锁定排序位置），
-  // 画像项只在同名键缺席时补位——Map.set 的 last-wins 语义在这里会把降级后的
-  // 「learning/40」覆盖回画像的「mastered/100」，判决器与模拟器就看不到本课对账结果。
+  // 本课看板 > 当前任务锚点：同名以本课对账结果为准（含判错降级后的 learning/40）。
   const deduped = new Map<string, { name: string; status: string; progress: number }>();
   const keyOf = (item: { name: string }) => String(item.name).trim().toLowerCase();
   deduped.set(keyOf({ name: String(anchor) }), { name: String(anchor), status: 'learning', progress: 40 });
   for (const item of lessonItems) deduped.set(keyOf(item), item);
-  const priorItems = [
-    ...(memory?.mastered || []).map((item) => ({ name: item.name, status: 'mastered', progress: 100 })),
-    ...(memory?.dueReview || []).map((item) => ({ name: item.name, status: 'review', progress: item.progress })),
-    ...(memory?.struggling || []).map((item) => ({ name: item.name, status: 'learning', progress: 30 })),
-  ];
-  for (const item of priorItems) {
-    const key = keyOf(item);
-    if (!deduped.has(key)) deduped.set(key, item);
-  }
   return Array.from(deduped.values()).slice(0, 8);
 }
 
@@ -250,7 +240,7 @@ export async function persistAssistedLearnerMemory(
       source: 'assisted',
       selfState: effectiveSelfState,
       curatedConcepts: curated
-        ? { mastered: curated.masteredConcepts.map((m) => m.name), struggling: curated.struggleConcepts.map((s) => s.name) }
+        ? { mastered: curated.masteredConcepts, struggling: curated.struggleConcepts.map((s) => s.name), transferEvidence: curated.transferEvidence }
         : null,
       // 判决降级（P1-6 收口）：把本课被判错降级的概念从画像 knownConcepts 移除，
       // 否则 union-only 回写会让降级只在"本课看板"生效，下一课又读回 mastered。
@@ -272,6 +262,7 @@ export async function persistAssistedLearnerMemory(
         mastered: curated.masteredConcepts,
         struggling: curated.struggleConcepts,
         selfCalibration: curated.selfCalibration,
+        selfCalibrationBias: curated.selfCalibrationBias,
       } : undefined,
       milestoneTitle: null,
     });
@@ -292,7 +283,9 @@ export async function runAssistedMemoryCurator(
   masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>;
   struggleConcepts: Array<{ name: string; blocker: string; severity: string }>;
   selfCalibration: string;
+  selfCalibrationBias: 'accurate' | 'overestimate' | 'underestimate' | 'unknown';
   memoryDelta: string;
+  transferEvidence: import('../skills/simulation-memory-curate').TransferEvidence[];
 } | null> {
   try {
     const profile = session.virtual_learner_profiles;
@@ -362,7 +355,14 @@ export async function runAssistedMemoryCurator(
     return {
       masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
       struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
+      transferEvidence: Array.isArray(output.transferEvidence) ? output.transferEvidence : [],
       selfCalibration: typeof output.selfCalibration === 'string' ? output.selfCalibration : '',
+      selfCalibrationBias: output.selfCalibrationBias === 'accurate'
+        || output.selfCalibrationBias === 'overestimate'
+        || output.selfCalibrationBias === 'underestimate'
+        || output.selfCalibrationBias === 'unknown'
+        ? output.selfCalibrationBias
+        : 'unknown',
       memoryDelta: typeof output.memoryDelta === 'string' ? output.memoryDelta : '',
     };
   } catch (error) {

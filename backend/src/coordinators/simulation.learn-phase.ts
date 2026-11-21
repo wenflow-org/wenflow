@@ -19,11 +19,13 @@ import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessi
 import { evaluateLessonContractGate, type LessonContractGate } from '../services/ai-teaching/lesson-contract';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { executeSkill, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition } from '../skills';
+import type { HeldMisconception } from '../skills/simulation-learn-turn';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/teaching-wrapup';
 import simulatedDayService from '../services/virtual-lab/simulated-day.service';
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import { writeProfileConceptsAfterLesson } from '../virtual-lab/learner-memory';
+import { detectTeacherOverload } from '../virtual-lab/cognitive-load';
 import type { SimulationMilestone, StageResults, TeachingState } from '../virtual-lab/vlab-types';
 import type { SimulationContext, SimulationLogEntry, ConversationHistoryItem } from './simulation.types';
 import { LEARN_AUTO_TURN_CAP } from './simulation.constants';
@@ -1097,6 +1099,28 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         return hit ? { statement: hit.statement, why: hit.why ?? null, source: hit.source ?? null } : null;
       },
     });
+    // 稳定误区（2026-11-21）：受控错误命中真人误区时写入跨轮持有项；最多持有 3 轮，
+    // 防止模型把「一个错误直觉」拖成整节课都无法收束。老师在反例轮说服后，模型显式输出
+    // heldMisconception=null 即修正。
+    const lessonTurn = Number(taskRuntime.turns) || 0;
+    const previousHeld = mergedLearnerState?.heldMisconception || null;
+    const heldMisconception: HeldMisconception | null =
+      controlledError.forced && controlledError.targetMisconception && controlledError.targetConcept
+        ? {
+            concept: controlledError.targetConcept,
+            statement: controlledError.targetMisconception.statement,
+            why: controlledError.targetMisconception.why ?? null,
+            source: controlledError.targetMisconception.source ?? null,
+            createdTurn: lessonTurn,
+          }
+        : previousHeld && lessonTurn - Number(previousHeld.createdTurn ?? 0) < 3
+          ? previousHeld
+          : null;
+    // 工作记忆超载（2026-11-21）：判决与叙事共用同一份代码信号，避免判决说"会"、演员说"乱"。
+    const overloadSignal = detectTeacherOverload({
+      message: lastAssistantMessage,
+      tolerance: profile.profile?.cognitiveLoadTolerance ?? null,
+    });
     let epistemicGrounding: any = null;
     try {
       // P1-7：判决器内容失明——此前 payload 只有画像/任务/看板，判决器看不到"老师本轮讲了什么"，
@@ -1130,6 +1154,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           description: currentTask.description || null,
         },
         knowledgeSnapshot,
+        overloadSignal,
+        ...(heldMisconception ? { heldMisconception } : {}),
         visibleContext: judgeVisibleContext,
         ...(pendingCheckpoint ? { pendingCheckpoint } : {}),
         previousLearnerState: mergedLearnerState,
@@ -1147,6 +1173,20 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             ?? epistemicGrounding?.errorPattern
             ?? (controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null),
           masteryProb: 0.15,
+        };
+      }
+      // 工作记忆超载：判决器若仍判对，按代码信号兜底覆写（与 blackbox 同口径）。
+      if (overloadSignal.overloaded && epistemicGrounding?.sampledCorrectness !== false) {
+        const overloadConcept = (currentTask as { linkedConcept?: string | null }).linkedConcept
+          || currentTask.title
+          || null;
+        const rawMastery = Number(epistemicGrounding?.masteryProb);
+        epistemicGrounding = {
+          ...(epistemicGrounding || {}),
+          sampledCorrectness: false,
+          blockedConcept: overloadConcept,
+          errorPattern: '单轮信息量过载，没接住',
+          masteryProb: Number.isFinite(rawMastery) ? Math.min(rawMastery, 0.3) : 0.3,
         };
       }
     } catch (groundingError) {
@@ -1218,6 +1258,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         description: currentTask.description || null,
       },
       knowledgeSnapshot,
+      overloadSignal,
+      ...(heldMisconception ? { heldMisconception } : {}),
       learnerMemory: learnerMemoryForSimulator,
       ...(memoryRecall.length ? { memoryRecall } : {}),
       ...(pendingCheckpoint ? { pendingCheckpoint } : {}),

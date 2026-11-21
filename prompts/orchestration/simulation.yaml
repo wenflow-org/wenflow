@@ -113,10 +113,18 @@ fields:
     promptRole: proposal-output
     valueType: array<object>
     description: 学习者自己觉得没学会的概念（name/blocker/severity）
+  - fieldId: transferEvidence
+    promptRole: proposal-output
+    valueType: array<object>
+    description: 远迁移证据（concept/kind/evidence），供掌握门判定
   - fieldId: selfCalibration
     promptRole: proposal-output
     valueType: string
     description: 学习者本轮自评可靠度与校准说明
+  - fieldId: selfCalibrationBias
+    promptRole: proposal-output
+    valueType: string
+    description: 机器读取的校准判决（accurate/overestimate/underestimate/unknown）
   - fieldId: memoryDelta
     promptRole: public-reply
     valueType: string
@@ -368,12 +376,26 @@ routings:
     accumulate: false
     notes: auto — 任务完成后由仿真执行链自动触发（simulation.definition.ts 第 9 步，simulation.execution.ts:115 → simulation.memory.ts:308）
   - agentId: skill:simulation-memory-curate
+    fieldId: transferEvidence
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+    notes: auto — 任务完成后由仿真执行链自动触发；远迁移证据供掌握门（simulation.memory.ts:243 → virtual-lab/learner-memory.ts）
+  - agentId: skill:simulation-memory-curate
     fieldId: selfCalibration
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
     notes: auto — 任务完成后由仿真执行链自动触发（simulation.definition.ts 第 9 步，simulation.execution.ts:115 → simulation.memory.ts:308）
+  - agentId: skill:simulation-memory-curate
+    fieldId: selfCalibrationBias
+    render: visible
+    handoff: [simulation-agent]
+    internal: false
+    accumulate: false
+    notes: auto — 任务完成后由仿真执行链自动触发；机器校准判决（simulation.memory.ts:265 → virtual-lab/learner-memory.ts）
   - agentId: skill:simulation-memory-curate
     fieldId: memoryDelta
     render: visible

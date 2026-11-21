@@ -289,9 +289,9 @@ export async function loadTeachTurnKnowledgeAssets(
     }>;
   } | null;
 }> {
-  // 知识看板快照：当前任务概念为锚 + 学习者记忆（已掌握/到期复习/易混淆/最近成果）
-  const knowledgeSnapshot = await buildAssistedKnowledgeSnapshot(
-    userId,
+  // 知识看板快照：只放学习者页面可见的「当前任务锚点 + 本课知识点」；
+  // 长期记忆（已掌握/到期复习/易混淆/最近成果）走 learnerMemory，不混进看板。
+  const knowledgeSnapshot = buildAssistedKnowledgeSnapshot(
     currentTask,
     currentMilestone,
     lessonKnowledgePoints

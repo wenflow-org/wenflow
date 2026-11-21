@@ -5,21 +5,18 @@ import {
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
+import {
+  PATH_REVIEW_DIMENSION_KEYS,
+  PATH_REVIEW_PASS_THRESHOLD,
+  computePathReviewScore,
+  validatePathReviewOutput,
+  type PathReviewDimensions,
+} from './contract';
+
+export { PATH_REVIEW_PASS_THRESHOLD } from './contract';
 
 // File-as-Truth：systemPrompt 以 prompts/skill.path-reviewer.md 为唯一事实源
 export const PATH_REVIEWER_PROMPT = loadPromptFile('skill:path-reviewer')?.systemPrompt || '';
-
-const DIMENSION_KEYS = ['clarity', 'integrity', 'depth', 'practicality', 'pertinence'] as const;
-const DIMENSION_WEIGHTS: Record<string, number> = {
-  clarity: 0.2,
-  integrity: 0.25,
-  depth: 0.2,
-  practicality: 0.2,
-  pertinence: 0.15,
-};
-
-/** 评审通过阈值（与 score 同源，#172-6）：finalScore < 此值即判未通过，由 path-generation.core 复用同一定义。 */
-export const PATH_REVIEW_PASS_THRESHOLD = 0.75;
 
 export const pathReviewerDefinition: SkillDefinition = {
   name: 'path-reviewer',
@@ -53,34 +50,11 @@ export const pathReviewerDefinition: SkillDefinition = {
   }
 };
 
-function clamp01(value: any): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.5;
-}
-
-function normalizeDimensions(raw: any): Record<string, number> {
-  const dims: Record<string, number> = {};
-  for (const key of DIMENSION_KEYS) {
-    dims[key] = clamp01(raw?.[key]);
-  }
-  return dims;
-}
-
-function computeOverall(dims: Record<string, number>): number {
-  let total = 0;
-  let weight = 0;
-  for (const key of DIMENSION_KEYS) {
-    total += dims[key] * DIMENSION_WEIGHTS[key];
-    weight += DIMENSION_WEIGHTS[key];
-  }
-  return weight > 0 ? total / weight : 0.5;
-}
-
 function normalizeIssues(raw: any): Array<{ dimension: string; severity: string; description: string; suggestion: string }> {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item: any) => ({
-      dimension: typeof item?.dimension === 'string' && DIMENSION_KEYS.includes(item.dimension as any) ? item.dimension : 'clarity',
+      dimension: typeof item?.dimension === 'string' && (PATH_REVIEW_DIMENSION_KEYS as readonly string[]).includes(item.dimension) ? item.dimension : 'clarity',
       severity: ['low', 'medium', 'high'].includes(item?.severity) ? item.severity : 'medium',
       description: typeof item?.description === 'string' ? item.description.trim().slice(0, 300) : '',
       suggestion: typeof item?.suggestion === 'string' ? item.suggestion.trim().slice(0, 300) : '',
@@ -88,12 +62,14 @@ function normalizeIssues(raw: any): Array<{ dimension: string; severity: string;
     .filter((item) => item.description);
 }
 
+/**
+ * 归一化前校验：五个维度必须齐全且在 [0,1]，低分必须带返工指令。
+ * 失败即抛（callPrompt 会按 retryStrategy 重试）；重试耗尽后调用方记「证据不足」。
+ */
 export function validatePathReviewerOutput(parsed: any) {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { valid: false as const, failureReason: 'PATH_REVIEWER_OUTPUT_NOT_OBJECT' };
-  }
-  if (typeof parsed.score !== 'number' && parsed.score !== undefined) {
-    return { valid: false as const, failureReason: 'PATH_REVIEWER_SCORE_INVALID' };
+  const verdict = validatePathReviewOutput(parsed);
+  if (verdict.valid === false) {
+    return { valid: false as const, failureReason: verdict.failureReason };
   }
   return { valid: true as const };
 }
@@ -122,11 +98,13 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
             prerequisiteTree: payload.prerequisiteTree || null,
           }),
       normalizeOutput: (parsed, _payload) => {
-        const dims = normalizeDimensions(parsed?.dimensions);
-        const modelScore = clamp01(parsed?.score);
-        // 确定性兜底：模型自报总分若与分项加权偏差 >0.05，则以分项重新加权为准（防自报总分与分项不一致）。
-        const recomputedOverall = computeOverall(dims);
-        const finalScore = Math.abs(modelScore - recomputedOverall) > 0.05 ? recomputedOverall : modelScore;
+        const verdict = validatePathReviewOutput(parsed);
+        if (verdict.valid === false) {
+          // 理论上 callPrompt 已用 validateParsedOutput 拦过一次；这里防归一化绕过校验。
+          throw new Error(verdict.failureReason);
+        }
+        const dims: PathReviewDimensions = verdict.dimensions;
+        const finalScore = verdict.score;
         return {
           score: finalScore,
           dimensions: dims,
@@ -148,7 +126,7 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
       }),
       retryStrategy: {
         maxAttempts: 2,
-        onValidationFail: ({ failureReason }) => `请只输出一个路径评审 JSON 对象，必须包含 score/dimensions/issues/passed 字段。上次失败原因：${failureReason}`,
+        onValidationFail: ({ failureReason }) => `请只输出一个路径评审 JSON 对象，必须包含 dimensions（clarity/integrity/depth/practicality/pertinence 五项 0-1 数字）、score、issues、passed 字段；总分 < 0.75 时必须给出具体 replanInstructions。上次失败原因：${failureReason}`,
       },
     }, input);
 
@@ -156,17 +134,16 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
       throw new Error(result.error?.message || 'PATH_REVIEWER_INVALID');
     }
 
-    // 总分与 dimensions 加权一致性（确定性兜底，防 LLM 自报总分与分项不一致）
-    const recomputedOverall = computeOverall(result.output.dimensions);
-    const finalScore = Math.abs(result.output.score - recomputedOverall) > 0.05
-      ? recomputedOverall
-      : result.output.score;
+    // 总分与 dimensions 加权一致性（确定性兜底，防 LLM 自报总分与分项不一致）：
+    // normalizeOutput 已按同一公式重算；这里再算一次，保证 skill 直调也同一口径。
+    const dimensions = result.output.dimensions as PathReviewDimensions;
+    const finalScore = computePathReviewScore(dimensions);
 
     return {
       success: true,
       output: {
         score: finalScore,
-        dimensions: result.output.dimensions,
+        dimensions,
         issues: result.output.issues,
         // #172-6①：passed 与 score 同源——用确定性重算的 finalScore 判定，不再采信模型自报的 passed。
         // 模型若自报 passed=true 但 finalScore<0.75，这里照样判未通过。

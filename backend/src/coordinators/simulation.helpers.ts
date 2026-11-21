@@ -344,7 +344,13 @@ export function parseProfileData(profileRecord: VirtualLearnerProfileRow): Virtu
   const profileData = safeJsonParse<VirtualLearnerProfileData>(profileRecord.profile, {});
   const knownConcepts = safeJsonParse<string[]>(profileRecord.knownConcepts, []);
   const struggleConcepts = safeJsonParse<string[]>(profileRecord.struggleConcepts, []);
-  const personalityTraits = safeJsonParse<PersonalityTraits>(profileRecord.personalityTraits, {});
+  // A1（2026-11-21）：traits 列是权威源；老数据/创建链路常把它嵌在 profile JSON 里，
+  // 列空时必须回退读取，否则同一份人设在库里、模拟器却永远拿到 {}（实测 186 个画像命中）。
+  const traitsFromColumn = safeJsonParse<PersonalityTraits>(profileRecord.personalityTraits, {});
+  const traitsFromProfile = profileData?.personalityTraits;
+  const personalityTraits = Object.keys(traitsFromColumn).length
+    ? traitsFromColumn
+    : (traitsFromProfile && typeof traitsFromProfile === 'object' ? traitsFromProfile : {});
 
   return {
     id: profileRecord.id,
