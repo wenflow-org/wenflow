@@ -313,12 +313,17 @@ sandbox:teaching-agent.evaluation.sessionLss
 sandbox:teaching-agent.interactionProfile
 sandbox:teaching-agent.knowledge.points
 sandbox:teaching-agent.knowledge.state
+sandbox:teaching-agent.knowledgeState
 sandbox:teaching-agent.knowledgeStateSummary
+sandbox:teaching-agent.lastLessonRecap
 sandbox:teaching-agent.learner.learnerProjection
 sandbox:teaching-agent.learner.persona
 sandbox:teaching-agent.learnerPrediction
+sandbox:teaching-agent.learningSignal
 sandbox:teaching-agent.learningState
+sandbox:teaching-agent.lessonReport
 sandbox:teaching-agent.pedagogy.strategies
+sandbox:teaching-agent.priorLearningContext
 sandbox:teaching-agent.scenario
 sandbox:teaching-agent.scenario.interactionProfile
 sandbox:teaching-agent.scenario.taskMaterial
@@ -410,6 +415,7 @@ sandbox:simulation-agent.forcedCorrectness
 sandbox:simulation-agent.friction
 sandbox:simulation-agent.frictionBudget
 sandbox:simulation-agent.goalState
+sandbox:simulation-agent.heldMisconception
 sandbox:simulation-agent.knowledgeSnapshot
 sandbox:simulation-agent.knownConcepts
 sandbox:simulation-agent.learner
@@ -418,6 +424,7 @@ sandbox:simulation-agent.learnerPrivateState
 sandbox:simulation-agent.learnerState
 sandbox:simulation-agent.memoryRecall
 sandbox:simulation-agent.metricCompleteness
+sandbox:simulation-agent.overloadSignal
 sandbox:simulation-agent.pathProposal
 sandbox:simulation-agent.pendingCheckpoint
 sandbox:simulation-agent.persona
@@ -432,6 +439,7 @@ sandbox:simulation-agent.publicTrace
 sandbox:simulation-agent.recentPersonaHints
 sandbox:simulation-agent.recentScenarioHints
 sandbox:simulation-agent.refereeTrace
+sandbox:simulation-agent.samplingDirectives
 sandbox:simulation-agent.story
 sandbox:simulation-agent.storyMeta
 sandbox:simulation-agent.struggleConcepts
