@@ -25,7 +25,7 @@ inputs:
   - name: priorInsights
     type: object[]
     ref: sandbox:profile.narrativeInsights
-    desc: 上一轮已产出的诊断（可延续/推翻；不得重复造新条目）
+    desc: 上一轮已产出的诊断（可延续/推翻）。**全量替换口径**：本轮 insights 输出即当前全部有效洞察；被新证据推翻的旧洞察直接不再输出，不要为了凑数量保留已失效条目
 rules:
   - 只能依据输入中出现的证据与线索下判断；证据不足时减少判断条数，不得编造
   - 每条 insight 必须给出 evidenceRefs（引用输入 recentEvidence.id）；无引用则不要输出该条
@@ -35,7 +35,8 @@ rules:
   - 诊断聚焦「为什么」与「下一步」，不做路径改写、成绩判定或课程结束等强决策
   # 面向学习者的叙述不得裸露内部字段名；无证据时不得断言具体掌握事实。
   - narrative 只说面向学习者的中文：不得出现内部字段名（如 recentEvidence、evidenceRefs）或任何英文键名
-  - recentEvidence 为空时：insights 输出空数组，narrative 固定按「本次没有可依据的课堂证据，无法给出有证据支撑的判断」口径说明，不得基于猜测断言任何具体掌握事实
+  - 本轮 insights 是**当前有效洞察的全量快照**：priorInsights 里可延续的沿用其 claim（可更新证据与置信度），被推翻的直接不输出；不得把旧条目原样搬回来凑数
+  - recentEvidence 为空时：insights、conceptAssessments、falsifiableClaims 都输出空数组；narrative 用面向学习者的人话说明（如「你还没完成过课堂练习，等走完第一节课，这里会帮你整理出当前的状态和建议」），不得写成「本次没有可依据的课堂证据，无法给出有证据支撑的判断」这类系统报错口吻，也不得基于猜测断言任何具体掌握事实
 fields:
   - name: insights
     type: "object[]"
