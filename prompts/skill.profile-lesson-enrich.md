@@ -1,6 +1,6 @@
 ---
 agentId: skill:profile-lesson-enrich
-coreHash: 2e68391244c60343c5718465addac4a99c384c1d5996ddc5c182b0cd58af7a38
+coreHash: b6832b4a4e1ff09929d836559000f3292b617f1262fabf053bea3809e8ad328c
 coreVersion: 1
 temperature: 0.4
 maxTokens: 64000
@@ -30,10 +30,10 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 
 1. 只输出 6 个字段：conceptLedger、reusableFoundations、blockedFoundations、transferSignals、recurringConfusions、knowledgeStateSummary
 2. 结论必须稳健，不夸大，不凭空发明输入里没有的知识点或混淆
-3. conceptLedger 每项只需给出 label（概念白话标签）与 misconceptionRisk（low|medium|high）； 概念身份键、熟悉度、迁移就绪度、证据条数**由系统按知识看板与证据行计算**，不要输出， 也不要为它们做额外推断（输出了也会被系统覆盖）
+3. conceptLedger 每项只需给出 label（概念白话标签）与 misconceptionRisk（low|medium|high）； 概念身份键、熟悉度、迁移就绪度、证据条数**由系统按知识看板与证据行计算**，不要输出， 也不要为它们做额外推断（输出了也会被系统覆盖）；sourcePaths / sourceTasks 同样由系统 按 lesson:completed 事件自带的 pathId / taskId 确定性回填，不要抄写任何路径/任务 ID
 4. transferSignals 每项只需给出 label、readiness（low|medium|high）与 confidence（0-1）； readiness 若与看板状态冲突，以看板为准
 5. 如果输入提供了 transferGoal：transferSignals 应优先覆盖与该迁移目标直接相关的概念（迁移意图锚定）， 并如实标注其就绪度；若本课证据不足以支撑该目标的迁移，不要虚报 high，可给 low/medium 或省略
-6. 如果输入提供了 lessonReport（课堂契约报告）：它是主线达成度的**平台确定式证据**，与 wrapup 冲突时以它为准—— missingKcs 里的概念不得在 conceptLedger 中标为高熟悉度，应进 blockedFoundations（或 recurringConfusions，若有对应卡点）； met=false 时 knowledgeStateSummary 必须点明「本节契约未达成」及缺口（缺哪些 KC 的证据/独立证据不足）； parkingLot 是课上未展开、课后待处理的问题，只能作为后续线索，不得当作已掌握或已解决
+6. 如果输入提供了 lessonReport（课堂契约报告）：它是主线达成度的**平台确定式证据**，与 wrapup 冲突时以它为准—— missingKcs 里的概念不得放进 reusableFoundations（conceptLedger 只输出 label 与 misconceptionRisk，无熟悉度可言），应进 blockedFoundations（或 recurringConfusions，若有对应卡点）； met=false 时 knowledgeStateSummary 必须点明「本节契约未达成」及缺口（缺哪些 KC 的证据/独立证据不足）； parkingLot 是课上未展开、课后待处理的问题，只能作为后续线索，不得当作已掌握或已解决
 7. recurringConfusions 只记录对话或事件中反复出现的卡住/混淆模式，confidence 范围 0-1
 8. reusableFoundations 关注"这节课后可复用的稳定基础"
 9. blockedFoundations 关注"仍不稳定、会阻塞后续学习的前置"
@@ -43,11 +43,11 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 ## 输出字段
 
 - conceptLedger · object[] — 概念台账，每项结构：
-{ "label": 概念白话标签, "misconceptionRisk": "low|medium|high",
-  "sourcePaths": ["来源路径 ID"], "sourceTasks": ["来源任务 ID"] }
+{ "label": 概念白话标签, "misconceptionRisk": "low|medium|high" }
 说明：conceptKey / familiarity / transferReadiness / evidenceCount / masteryScore 不在输出里——
 它们由系统按输入 knowledgeState 的 kcId、status/progress 与证据行确定性计算
-（masteryScore 为 0-1 数值掌握度，与画像/图谱同一口径）。
+（masteryScore 为 0-1 数值掌握度，与画像/图谱同一口径）；sourcePaths / sourceTasks 由系统
+按 lesson:completed 事件自带的 pathId / taskId 回填，不要输出。
 只输出能在输入里找到的概念（知识看板概念，或对话/事件中确实出现过的）。
 - reusableFoundations · string[] — 课后可复用的稳定基础
 - blockedFoundations · string[] — 仍不稳定、会阻塞后续学习的前置

@@ -127,6 +127,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'teachingState.classroomEventHistory',
     'learner.learnerProjection',
     'knowledge.state',
+    // profile-learning-predict 的硬证据 inputs（2026-11-21 硬证据注入）：lessonReport 是
+    // 上一节平台确定式契约产物（sessionArtifacts.lessonReport），knowledgeState 是课堂知识看板
+    // ——两个键由编排/事件链产出，prediction 载荷按声明键引用（ref 只标来源，非键名）。
+    'lessonReport',
+    'knowledgeState',
     'controls.teachingControlContext',
     'classroomContext',
     'classroomEventContext',
@@ -150,6 +155,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // fatigueSignal 由 learningState 分类派生；不登记会让 --strict 判 sandbox-path-unregistered。
     'knowledgeStateSummary',
     'taskContext',
+    // 2026-11-21 教学开场契约补齐：teaching-opening 编排层直接注入的上一课摘要 /
+    // 结构化前序 / 交付形式偏好，此前只在 rules 里消费、inputs 未声明，字段血缘断链。
+    'lastLessonRecap',
+    'priorLearningContext',
+    'learningSignal',
   ],
   'profile-agent': [
     'snapshot.dynamicState',
@@ -180,6 +190,12 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'learnerState',
     'currentTask',
     'knowledgeSnapshot',
+    // 2026-11-21：代码计算的单轮信息负荷（工作记忆超载信号，编排层直接注入）
+    'overloadSignal',
+    // 2026-11-21：编排层分层采样坐标（persona-designer 硬约束）
+    'samplingDirectives',
+    // 2026-11-21：跨轮持有的错误直觉（受控错误轮写入，最多 3 轮）
+    'heldMisconception',
     // epistemic-grounding 声明 ref: sandbox:simulation.forcedCorrectness（编排层受控错误采样指令，
     // simulation.learn-phase 直接注入、无路由行）。此前该 core 文件缺 ref 而 schema 不合法，
     // 全量扫描/编译工具链与 CI prompts:core:check 因此一直红（2026-10-04 修复）。

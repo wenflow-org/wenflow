@@ -396,7 +396,13 @@ export async function completeTask(data: CompleteTaskData) {
             status: { not: 'completed' }
           }
         });
-        if (remainingTasks === 0) {
+        // 渐进式路径：后续阶段在解锁前没有 subtasks，单看 remainingTasks 会在
+        // 当前阶段收尾时误判「整条路径已完成」（剩余 locked 阶段随后才被设计出任务）。
+        // 必须同时没有未完成里程碑，才算整条路径走完。
+        const remainingMilestones = await tx.milestones.count({
+          where: { learningPathId: pathId, status: { not: 'completed' } }
+        });
+        if (remainingTasks === 0 && remainingMilestones === 0) {
           const completedMilestones = await tx.milestones.count({ where: { learningPathId: pathId, status: 'completed' } });
           const completedPath = await tx.learning_paths.updateMany({
             where: { id: pathId, status: { not: 'completed' } },
@@ -558,9 +564,11 @@ export async function completeTask(data: CompleteTaskData) {
       logger.warn('更新学习连续天数失败（不影响任务完成）:', error);
     }
 
-    // 基于学习者状态中心生成学习报告
-    let learningReport: { reasoning?: string; suggestion?: string; recommendations?: string[] } | undefined;
-    
+    // 基于学习者状态中心生成学习报告。
+    // 2026-11-21 止血：其中 reasoning/suggestion 的 LLM 生成（profile-progress-report）已停调用
+    // ——前端零消费、每次任务完成白跑一次 LLM；服务层固定回传 null，仅保留免 LLM 的规则化 recommendations。
+    let learningReport: { reasoning?: string | null; suggestion?: string | null; recommendations?: string[] } | undefined;
+
     try {
       const progressResult = await learnerProgressService.evaluateTaskCompletion(data.userId, {
         taskTitle: subtask.title,
@@ -570,8 +578,8 @@ export async function completeTask(data: CompleteTaskData) {
       });
 
       learningReport = {
-        reasoning: progressResult.metrics?.reasoning,
-        suggestion: progressResult.metrics?.suggestion,
+        reasoning: progressResult.reasoning,
+        suggestion: progressResult.suggestion,
         recommendations: progressResult.recommendations
       };
     } catch (error) {

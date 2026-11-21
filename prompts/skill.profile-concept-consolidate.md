@@ -1,6 +1,6 @@
 ---
 agentId: skill:profile-concept-consolidate
-coreHash: b950862274ca5bc6f89820fee862b337442c74f3f48a61cefdf06974ba271de0
+coreHash: 9d12472a8169db8863257fc2bc76f5f7cc3e4e73192c9e8e68087f42c88832a2
 coreVersion: 1
 temperature: 0.2
 maxTokens: 64000
@@ -19,6 +19,11 @@ failurePolicy: propagate
 - learner：学习者画像投影（长期特征）
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 - state（不推进）：平台维护的主记忆快照（当前值，含 stage）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「candidates（object[]）」`user:conceptConsolidation.candidates`（用户/平台） — 待归并候选 [{ conceptKey, occurrences, pathTitles }]；conceptKey 是唯一可引用的原文键
+- 「canonicalWhitelist（string[]）」`user:conceptConsolidation.canonicalWhitelist`（用户/平台） — 上一轮尚未执行的待办规范键名单（均为 candidates 里出现过的 conceptKey）；给 merges 时优先从它里挑 canonical
+- 「aliasMap（object）」`user:conceptConsolidation.aliasMap`（用户/平台） — 已知「别名 → 规范名」映射（键值均为 candidates 里的 conceptKey）；作为归并先验，不作强制来源
 
 ## 执行规则
 

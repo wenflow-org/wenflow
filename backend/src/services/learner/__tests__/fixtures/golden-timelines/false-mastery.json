@@ -1,0 +1,70 @@
+{
+  "id": "false-mastery",
+  "title": "虚假掌握快照：学生口头说懂了，但 lessonReport.met=false 且含 missingKcs",
+  "learnerSnapshot": {
+    "snapshotVersion": 1,
+    "scope": "teaching",
+    "profile": { "name": "口快手慢的学习者" },
+    "dynamicState": {
+      "metrics": { "lss": 5, "ktl": 6, "lf": 4, "lsb": 0 },
+      "recentTrend": "flat",
+      "fatigueRisk": "low",
+      "recommendedPacing": "steady",
+      "srlPhase": "perform"
+    },
+    "learningControlState": { "paceMode": "steady" },
+    "knowledgeMemory": {
+      "globalSignals": {
+        "masteredConcepts": [],
+        "fragileConcepts": ["数组的 map 与 for 循环的区别"],
+        "strugglingConcepts": ["数组的 map 与 for 循环的区别"],
+        "severeStrugglingConcepts": []
+      },
+      "globalBackground": {
+        "reusableFoundations": ["能口述数组遍历的用途"],
+        "blockedFoundations": [],
+        "conceptLedger": [
+          { "conceptKey": "数组的 map 与 for 循环的区别", "label": "数组的 map 与 for 循环的区别", "misconceptionRisk": "high", "lastSeenAt": "2026-11-20T10:00:00.000Z" }
+        ],
+        "recurringConfusions": [],
+        "transferSignals": [],
+        "knowledgeStateSummary": "上节课学习者能说清 map 的用途，但未取得独立写出 map 回调的证据；map 与 for 循环的等价改写仍属试探阶段。"
+      },
+      "currentPath": {
+        "learningPathId": "lp_golden_1",
+        "pathTitle": "JS 数组方法入门",
+        "progress": 0.4,
+        "currentPosition": { "milestoneId": "ms1", "taskId": "tk2" },
+        "prerequisiteGaps": [],
+        "conceptStates": [
+          { "conceptKey": "数组的 map 与 for 循环的区别", "label": "数组的 map 与 for 循环的区别", "status": "struggling" }
+        ],
+        "recentEvidence": [
+          { "taskId": "tk1", "signal": "incomplete", "conceptKeys": ["数组的 map 与 for 循环的区别"], "happenedAt": "2026-11-20T10:00:00.000Z" }
+        ]
+      }
+    },
+    "replanSignal": null
+  },
+  "previousSession": {
+    "id": "sess_golden_1",
+    "status": "completed",
+    "teachingState": {
+      "sessionArtifacts": {
+        "lessonReport": {
+          "met": false,
+          "coveredKcs": ["kc_map_basic"],
+          "missingKcs": ["kc_map_callback_independent", "kc_map_for_equivalence"],
+          "independentCount": 0,
+          "exitTicket": { "passed": false, "reason": "独立改写未通过" }
+        }
+      }
+    }
+  },
+  "predictionOpts": {
+    "fatigueSignal": "low",
+    "knowledgeStateSummary": "上节课学习者能说清 map 的用途，但未取得独立写出 map 回调的证据；map 与 for 循环的等价改写仍属试探阶段。",
+    "taskContext": { "title": "用 map 改写 for 循环", "learningObjectives": ["数组的 map 与 for 循环的区别"] }
+  },
+  "expectationsNote": "确定性层断言 contractGaps={met:false,missingKcs:[2 条],exitTicketPassed:false} 进入预测载荷且排在 evidence 键首；LLM 契约层断言缺口进 blockedFoundations 而非 reusableFoundations。"
+}

@@ -1,6 +1,6 @@
 ---
 agentId: skill:profile-state-review
-coreHash: dc79bff368c7833c688f3d7b2748bca26b6f4be9cc053417eb1fdb88463394c6
+coreHash: ce9bd8474a1f09e682e0e191ba602c61175a1357f979d8632c18b8e050643521
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -23,7 +23,7 @@ failurePolicy: propagate
 - 「learnerDigest（object）」`sandbox:profile.snapshot.dynamicState`（编排注入） — 学习者状态摘要（confidenceLevel/recentTrend/节奏与卡点线索）
 - 「knowledgeDigest（object）」`sandbox:profile.snapshot.knowledgeMemory.currentPath`（编排注入） — 知识线索摘要（当前路径的掌握/脆弱/先修缺口线索）
 - 「recentEvidence（object[]）」`sandbox:teaching.session.evidence`（编排注入） — 最近课堂证据 [{ id, signal, concepts[], at }]；insight.evidenceRefs 只能引用其中出现过的 id
-- 「priorInsights（object[]）」`sandbox:profile.narrativeInsights`（编排注入） — 上一轮已产出的诊断（可延续/推翻；不得重复造新条目）
+- 「priorInsights（object[]）」`sandbox:profile.narrativeInsights`（编排注入） — 上一轮已产出的诊断（可延续/推翻）。**全量替换口径**：本轮 insights 输出即当前全部有效洞察；被新证据推翻的旧洞察直接不再输出，不要为了凑数量保留已失效条目
 
 ## 执行规则
 
@@ -34,7 +34,8 @@ failurePolicy: propagate
 5. 输出严格 JSON 对象，不要 markdown 代码块、解释文字或多余文本
 6. 诊断聚焦「为什么」与「下一步」，不做路径改写、成绩判定或课程结束等强决策
 7. narrative 只说面向学习者的中文：不得出现内部字段名（如 recentEvidence、evidenceRefs）或任何英文键名
-8. recentEvidence 为空时：insights 输出空数组，narrative 固定按「本次没有可依据的课堂证据，无法给出有证据支撑的判断」口径说明，不得基于猜测断言任何具体掌握事实
+8. 本轮 insights 是**当前有效洞察的全量快照**：priorInsights 里可延续的沿用其 claim（可更新证据与置信度），被推翻的直接不输出；不得把旧条目原样搬回来凑数
+9. recentEvidence 为空时：insights、conceptAssessments、falsifiableClaims 都输出空数组；narrative 用面向学习者的人话说明（如「你还没完成过课堂练习，等走完第一节课，这里会帮你整理出当前的状态和建议」），不得写成「本次没有可依据的课堂证据，无法给出有证据支撑的判断」这类系统报错口吻，也不得基于猜测断言任何具体掌握事实
 
 ## 输出字段
 

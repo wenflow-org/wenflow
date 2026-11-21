@@ -25,6 +25,10 @@ export interface InsightRecord {
   predictedAt: string;
   outcome: InsightCalibrationOutcome;
   checkedAt: string | null;
+  /** 2026-11-21 可证伪断言专用（insightType='falsifiable_claim'）：检验时机，v1 仅存档供审计 */
+  checkOn?: string;
+  /** 2026-11-21 可证伪断言专用：期望（如「仍不稳」「已能独立完成」），结算方向由它决定 */
+  expect?: string;
 }
 
 export interface InsightCalibrationPayload {
@@ -47,6 +51,10 @@ export interface NewInsightRecord {
   insightType: string;
   conceptKeys: string[];
   predictedAt: string;
+  /** 2026-11-21 可证伪断言专用（可选）：检验时机（next_lesson|next_task|next_review），存档供审计 */
+  checkOn?: string;
+  /** 2026-11-21 可证伪断言专用（可选）：期望描述，决定结算方向（正向=期望变稳 / 其余=预期仍不稳） */
+  expect?: string;
 }
 
 const MIN_SAMPLE = 5;
@@ -75,6 +83,17 @@ export function computeReliability(records: InsightRecord[]): InsightReliability
   return { n, hits, misses, hitRate: n >= MIN_SAMPLE ? hits / n : null };
 }
 
+/**
+ * 可证伪断言的期望方向判定（口径 v1：规则化，不解析自由文本语义）。
+ * - 正向期望（断言学生「已能独立完成/通过/掌握/稳了/不再卡」）：概念**已稳**才算命中；
+ * - 其余（默认按「预期仍不稳/仍卡」处理，诊断断言多数是风险预告）：概念**仍不稳**才算命中。
+ */
+export function evaluateClaimExpectation(expectText: string | undefined, stillUnstable: boolean): boolean {
+  const text = String(expectText || '').trim();
+  const positive = /独立(?:完成|做)|已能|不再(?:卡|出错|混淆|卡壳)|(?:能够|可以)?独立|通过|掌握|稳定|稳了|做对|自己(?:能)?(?:做|写|取)/.test(text);
+  return positive ? !stillUnstable : stillUnstable;
+}
+
 class InsightCalibrationService {
   async getRecords(userId: string, pathId?: string | null): Promise<InsightRecord[]> {
     const row = await prisma.learner_projections.findUnique({
@@ -87,11 +106,16 @@ class InsightCalibrationService {
   async getReliability(
     userId: string,
     pathId?: string | null,
-    options: { excludeInsightTypes?: string[] } = {},
+    options: { excludeInsightTypes?: string[]; onlyInsightTypes?: string[] } = {},
   ): Promise<InsightReliability> {
     const records = await this.getRecords(userId, pathId);
     const excluded = new Set(options.excludeInsightTypes ?? []);
-    return computeReliability(excluded.size > 0 ? records.filter((r) => !excluded.has(r.insightType)) : records);
+    const only = options.onlyInsightTypes ? new Set(options.onlyInsightTypes) : null;
+    const filtered = records.filter((r) => {
+      if (excluded.has(r.insightType)) return false;
+      return only ? only.has(r.insightType) : true;
+    });
+    return computeReliability(filtered);
   }
 
   /** 追加待核对洞察（按 claim 去重；已存在的 claim 不重复记录）。 */
@@ -111,6 +135,8 @@ class InsightCalibrationService {
         predictedAt: item.predictedAt,
         outcome: 'pending',
         checkedAt: null,
+        ...(item.checkOn ? { checkOn: String(item.checkOn) } : {}),
+        ...(item.expect ? { expect: String(item.expect) } : {}),
       });
     }
     await this.save(userId, pathId, records);
@@ -120,6 +146,10 @@ class InsightCalibrationService {
   /**
    * 核对 pending 记录：机会事件到达后按「相关概念是否仍不稳」判定 hit/miss/unknown。
    * 未到机会事件的保持 pending。
+   * 2026-11-21 可证伪断言（insightType='falsifiable_claim'）：同用机会事件触发（v1 不细分
+   * checkOn 的三种时机，先统一在下一个机会点结算；checkOn 存档供审计），但结算方向由
+   * expect 决定（evaluateClaimExpectation）——正向期望（「已能独立完成」）要概念**已稳**
+   * 才算命中，默认（风险预告「仍不稳」）要概念**仍不稳**才算命中。
    */
   async resolvePending(
     userId: string,
@@ -149,7 +179,9 @@ class InsightCalibrationService {
         continue;
       }
       const stillUnstable = record.conceptKeys.some((key) => unstable.has(normalizeKey(key)));
-      record.outcome = stillUnstable ? 'hit' : 'miss';
+      record.outcome = record.insightType === 'falsifiable_claim'
+        ? (evaluateClaimExpectation(record.expect, stillUnstable) ? 'hit' : 'miss')
+        : (stillUnstable ? 'hit' : 'miss');
       record.checkedAt = now;
       changed = true;
     }

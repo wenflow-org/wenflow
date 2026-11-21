@@ -114,6 +114,12 @@ export async function buildTeachingTurnInput(
         focusConcepts: context.learnerPrediction.focusConcepts,
         rationale: context.learnerPrediction.rationale,
         reliability: context.learnerPrediction.reliability,
+        // 2026-11-21 硬证据来源清单：下游「可靠性双轨」规则靠它区分「无实证样本但看得到硬证据」
+        // 与「既无样本又无证据（才可忽略）」；缺省不注入该键（与 toneDetail 同一口径）
+        ...(Array.isArray((context.learnerPrediction as { evidence?: string[] }).evidence)
+          && (context.learnerPrediction as { evidence?: string[] }).evidence!.length > 0
+          ? { evidence: (context.learnerPrediction as { evidence?: string[] }).evidence }
+          : {}),
         // 有原文才携带（缺失时不注入该键，旧行为不变）
         ...(learnerPredictionDetail?.toneDetail ? { toneDetail: learnerPredictionDetail.toneDetail } : {}),
         ...(learnerPredictionDetail?.depthDetail ? { depthDetail: learnerPredictionDetail.depthDetail } : {}),

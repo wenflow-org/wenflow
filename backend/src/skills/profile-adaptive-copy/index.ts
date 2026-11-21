@@ -134,6 +134,19 @@ function buildPrompt(input: AdaptiveGuidanceCopyInput): string {
   return JSON.stringify(ordered, null, 2);
 }
 
+function isEmptyState(input: AdaptiveGuidanceCopyInput): boolean {
+  if (!input.path) return true;
+  const tasks = input.learningState?.tasks;
+  // 旧调用方/测试载荷可能没有 tasks 字段：有路径且无计数时按非空处理，避免误伤。
+  if (!tasks || typeof tasks !== 'object') return false;
+  return !(
+    Number(tasks.total) > 0
+    || Number(tasks.started) > 0
+    || Number(tasks.completed) > 0
+    || Number(tasks.inProgress) > 0
+  );
+}
+
 // 静态兜底构造器：模型链路失败时按**入参 view** 出本视图口径的文案（两个视图各有自己的分支）。
 // #187 之前 learning-state 页的 copy 是 dashboard 快照借来的——本构造器的 learning-state 分支
 // 因此长期只被"快照缺失"这一条极窄路径命中。现在 learning-state 由调用方按本视图生成/兜底。
@@ -158,7 +171,10 @@ export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanc
       : '结合最近趋势看节奏、负荷和掌握情况，再决定继续推进还是先调整。',
   };
 
-  const todayActions = view === 'dashboard'
+  const empty = isEmptyState(input);
+  const todayActions = empty
+    ? [{ title: '先定一个学习目标', desc: '说说你想解决的具体问题，系统会帮你排出第一步。', action: '开始规划', to: 'create-goal' }]
+    : view === 'dashboard'
     ? [
         { title: '继续上次学习', desc: '从当前任务接着推进。', action: '继续学习', to: 'continue-learning' },
         { title: '查看学习状态', desc: '看看当前节奏和负荷。', action: '查看状态', to: 'learning-state' },
@@ -173,11 +189,17 @@ export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanc
     headline: headlineMap[view],
     subtitle: subtitleMap[view],
     todayActions,
-    pathHint: view === 'learning-state' ? `先结合当前路径「${pathTitle}」判断状态来源。` : `当前围绕「${pathTitle}」推进。`,
-    nextStep: pace === 'slow' ? '先把内容压小一点，稳定推进。' : '继续沿着当前焦点往前走。',
-    paceHint: pace === 'slow' ? '当前建议放慢节奏，优先消化当前内容。' : '当前节奏正常，可以继续推进。',
-    emptyStateCopy: '先从一个具体目标开始，系统会帮你生成下一步。',
-    warningCopy: recentTrend === 'declining' ? '最近状态有些下滑，建议先回顾再前进。' : '当前没有明显风险。',
+    pathHint: empty
+      ? '还没有学习路径，先从一个具体目标开始。'
+      : view === 'learning-state' ? `先结合当前路径「${pathTitle}」判断状态来源。` : `当前围绕「${pathTitle}」推进。`,
+    nextStep: empty
+      ? '先定一个具体目标，系统会帮你排出第一步。'
+      : pace === 'slow' ? '先把内容压小一点，稳定推进。' : '继续沿着当前焦点往前走。',
+    paceHint: empty
+      ? '先从一个小目标开始，不用一次规划完整条路。'
+      : pace === 'slow' ? '当前建议放慢节奏，优先消化当前内容。' : '当前节奏正常，可以继续推进。',
+    emptyStateCopy: empty ? '先从一个具体目标开始，系统会帮你生成下一步。' : '',
+    warningCopy: empty ? '' : recentTrend === 'declining' ? '最近状态有些下滑，建议先回顾再前进。' : '',
   };
 }
 
@@ -209,6 +231,10 @@ function normalizeTodayActions(
   input: AdaptiveGuidanceCopyInput,
   fallbackActions: AdaptiveGuidanceCopyOutput['todayActions']
 ): AdaptiveGuidanceCopyOutput['todayActions'] {
+  // 空态没有路径/任务：任何「继续/看路径」深链都点不开，统一改成创建目标。
+  if (isEmptyState(input)) {
+    return [{ title: '先定一个学习目标', desc: '说说你想解决的具体问题，系统会帮你排出第一步。', action: '开始规划', to: 'create-goal' }];
+  }
   if (!Array.isArray(items)) return fallbackActions;
   const mapped = items.slice(0, 3).map((item: any) => ({
     title: safeText(item?.title) || '继续学习',

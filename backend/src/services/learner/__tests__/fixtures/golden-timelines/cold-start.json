@@ -1,0 +1,40 @@
+{
+  "id": "cold-start",
+  "title": "纯冷启动快照（0 节课）：不编造历史、三数组全空、预测无硬证据",
+  "learnerSnapshot": {
+    "snapshotVersion": 1,
+    "scope": "teaching",
+    "profile": { "name": "新学习者", "learning": { "level": null } },
+    "dynamicState": {
+      "metrics": { "lss": 0, "ktl": 0, "lf": 0, "lsb": 0 },
+      "recentTrend": null,
+      "fatigueRisk": null,
+      "recommendedPacing": null,
+      "srlPhase": null
+    },
+    "learningControlState": { "paceMode": "steady" },
+    "knowledgeMemory": {
+      "globalSignals": { "masteredConcepts": [], "fragileConcepts": [], "strugglingConcepts": [], "severeStrugglingConcepts": [] },
+      "globalBackground": {
+        "reusableFoundations": [],
+        "blockedFoundations": [],
+        "conceptLedger": [],
+        "recurringConfusions": [],
+        "transferSignals": [],
+        "knowledgeStateSummary": ""
+      },
+      "currentPath": null
+    },
+    "replanSignal": null
+  },
+  "previousSession": null,
+  "predictionOpts": {
+    "fatigueSignal": "low",
+    "knowledgeStateSummary": "",
+    "taskContext": { "title": "认识变量与赋值", "learningObjectives": ["变量"] }
+  },
+  "stateReviewInput": {
+    "learnerDigest": "期望空",
+    "knowledgeDigest": "期望空"
+  }
+}

@@ -303,7 +303,11 @@ function familiarityAndReadinessFromBoard(state: { status: string; progress: num
   }
 }
 
-function normalizeLedgerItem(item: any, resolver: ConceptKeyResolver) {
+function normalizeLedgerItem(
+  item: any,
+  resolver: ConceptKeyResolver,
+  sourceContext: { pathId?: string; taskId?: string } = {},
+) {
   const familiarity = ['seen', 'practiced', 'understood', 'stable'].includes(item?.familiarity)
     ? item.familiarity
     : 'seen';
@@ -329,8 +333,8 @@ function normalizeLedgerItem(item: any, resolver: ConceptKeyResolver) {
     familiarity: derived?.familiarity ?? familiarity,
     transferReadiness: derived?.transferReadiness ?? transferReadiness,
     misconceptionRisk,
-    sourcePaths: safeArray(item?.sourcePaths).map((value) => normalizeText(value)).filter(Boolean),
-    sourceTasks: safeArray(item?.sourceTasks).map((value) => normalizeText(value)).filter(Boolean),
+    sourcePaths: sourceContext.pathId ? [sourceContext.pathId] : [],
+    sourceTasks: sourceContext.taskId ? [sourceContext.taskId] : [],
     // 证据计数真实化：模型未给出时按 0（0 就是 0，不虚报）；仅接受有限非负数。
     // 注意：落库聚合时会被确定性倒排计数覆盖——本字段的模型自报值没有计数规则，不作为读数。
     evidenceCount: Number.isFinite(Number(item?.evidenceCount)) ? Math.max(0, Number(item.evidenceCount)) : 0,
@@ -392,7 +396,10 @@ export async function lessonKnowledgeEnricher(input: LessonKnowledgeEnricherInpu
           const rawLabel = normalizeText(item?.label) || rawKey;
           return isLedgerEligibleConcept(rawKey, rawLabel, resolver, corpus);
         })
-        .map((item) => normalizeLedgerItem(item, resolver))
+        .map((item) => normalizeLedgerItem(item, resolver, {
+          pathId: input.taskContext?.learningPathId,
+          taskId: input.taskContext?.taskId,
+        }))
         .filter((item) => item.conceptKey && item.label);
       const signals = safeArray(obj.transferSignals)
         .map((item) => normalizeTransferSignal(item, resolver))

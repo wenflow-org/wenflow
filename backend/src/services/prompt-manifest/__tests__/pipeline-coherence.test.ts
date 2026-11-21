@@ -28,9 +28,12 @@ describe('teaching-turn 契约收口', () => {
   });
 
   it('完成候选不再要求“无提示独立完成”', () => {
-    const rule = rules.find((r) => r.includes('上一轮引导/提问下答对也算'));
+    // 措辞演进：早期是「上一轮引导/提问下答对也算」，契约分流后为「以上均含在你上一轮引导/提问下达成」
+    // ——意图不变：完成判定不把「无提示」当门槛，且不复活严格口径
+    const rule = rules.find((r) => r.includes('上一轮引导/提问下达成') || r.includes('上一轮引导/提问下答对也算'));
     expect(rule).toBeTruthy();
     expect(rule).not.toContain('无提示下独立完成');
+    expect(rule).toContain('isCompletionCandidate');
   });
 
   it('“答对”的无提示定义只用于掌握证据，不用于完成判定', () => {

@@ -1,0 +1,77 @@
+{
+  "id": "sustained-overload",
+  "title": "持续高负荷快照：连续两节受挫/疲劳，adaptive-copy 须转向恢复与减负",
+  "learnerSnapshot": {
+    "snapshotVersion": 1,
+    "scope": "teaching",
+    "profile": { "name": "连轴转的学习者" },
+    "dynamicState": {
+      "metrics": { "lss": 8, "ktl": 8, "lf": 9, "lsb": 0 },
+      "recentTrend": "declining",
+      "fatigueRisk": "high",
+      "recommendedPacing": "recover",
+      "srlPhase": "reflect"
+    },
+    "learningControlState": { "paceMode": "recover" },
+    "knowledgeMemory": {
+      "globalSignals": {
+        "masteredConcepts": ["变量声明与命名"],
+        "fragileConcepts": ["作用域与闭包边界"],
+        "strugglingConcepts": ["作用域与闭包边界", "this 的四种绑定"],
+        "severeStrugglingConcepts": ["this 的四种绑定"]
+      },
+      "globalBackground": {
+        "reusableFoundations": ["变量声明已稳"],
+        "blockedFoundations": ["this 的四种绑定仍不成体系"],
+        "conceptLedger": [
+          { "conceptKey": "作用域与闭包边界", "label": "作用域与闭包边界", "misconceptionRisk": "high", "lastSeenAt": "2026-11-21T02:00:00.000Z" },
+          { "conceptKey": "this 的四种绑定", "label": "this 的四种绑定", "misconceptionRisk": "high", "lastSeenAt": "2026-11-21T02:00:00.000Z" }
+        ],
+        "recurringConfusions": [
+          { "label": "this 的四种绑定", "pattern": "把箭头函数的 this 当成调用方绑定", "confidence": 0.8, "count": 2 }
+        ],
+        "transferSignals": [],
+        "knowledgeStateSummary": "连续两节课学习者处于高疲劳与受挫状态：this 绑定反复混淆，闭包边界仍未成形；已有概念只剩变量声明一项稳住。"
+      },
+      "currentPath": {
+        "learningPathId": "lp_golden_2",
+        "pathTitle": "JS 执行模型进阶",
+        "progress": 0.6,
+        "currentPosition": { "milestoneId": "ms2", "taskId": "tk5" },
+        "prerequisiteGaps": [
+          { "label": "作用域与闭包边界", "reason": "前置未稳，影响 this 理解", "severity": "high" }
+        ],
+        "conceptStates": [
+          { "conceptKey": "作用域与闭包边界", "label": "作用域与闭包边界", "status": "struggling" },
+          { "conceptKey": "this 的四种绑定", "label": "this 的四种绑定", "status": "struggling" }
+        ],
+        "recentEvidence": [
+          { "taskId": "tk4", "signal": "incomplete", "conceptKeys": ["this 的四种绑定"], "happenedAt": "2026-11-21T02:00:00.000Z" },
+          { "taskId": "tk3", "signal": "incomplete", "conceptKeys": ["作用域与闭包边界"], "happenedAt": "2026-11-20T02:00:00.000Z" }
+        ]
+      }
+    },
+    "replanSignal": null
+  },
+  "previousSession": {
+    "id": "sess_golden_2",
+    "status": "completed",
+    "teachingState": {
+      "sessionArtifacts": {
+        "lessonReport": {
+          "met": false,
+          "coveredKcs": ["kc_this_default_binding"],
+          "missingKcs": ["kc_this_arrow_binding"],
+          "independentCount": 0,
+          "exitTicket": { "passed": false, "reason": "箭头函数 this 判定错误" }
+        }
+      }
+    }
+  },
+  "predictionOpts": {
+    "fatigueSignal": "high",
+    "knowledgeStateSummary": "连续两节课学习者处于高疲劳与受挫状态：this 绑定反复混淆，闭包边界仍未成形；已有概念只剩变量声明一项稳住。",
+    "taskContext": { "title": "箭头函数与 this 绑定", "learningObjectives": ["this 的四种绑定"] }
+  },
+  "expectationsNote": "确定性层断言 paceMode='recover' 进预测载荷、fatigueSignal=high；LLM 契约层断言 adaptive-copy 的 paceHint/warningCopy 转向「调慢节奏、优先恢复」，不指责不复述读数。"
+}

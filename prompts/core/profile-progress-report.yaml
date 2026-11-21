@@ -1,4 +1,10 @@
 # v4 核心文件：profile-progress-report（SKILL_PROTOCOL_V4 §2）
+# 2026-11-21 消费面审计：唯一调用方 task-completion.service 把它放进 completeTask 返回值
+# （learningReport），但 frontend/src 无任何读取（grep learningReport = 0 命中），
+# 也没有独立卡片/路由消费；每次任务完成仍会白跑一次 LLM。
+# 2026-11-21 止血（产品确认）：服务层已停调用——LearnerProgressService 不再执行本 skill，
+# learningReport 的 reasoning/suggestion 固定回传 null（仅保留规则化 recommendations）；
+# 本声明保留以便回滚（恢复调用即恢复生成）。
 skillId: profile-progress-report
 baseVersion: 1
 identity: |

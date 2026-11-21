@@ -1,0 +1,130 @@
+{
+  "id": "misconception-reversal",
+  "title": "误解反转快照：第 1 节记录的 priorInsights 误解，在第 3 节 recentEvidence 已独立通过",
+  "learnerSnapshot": {
+    "snapshotVersion": 1,
+    "scope": "teaching",
+    "profile": {
+      "name": "扳回来的学习者"
+    },
+    "dynamicState": {
+      "metrics": {
+        "lss": 4,
+        "ktl": 5,
+        "lf": 3,
+        "lsb": 0
+      },
+      "recentTrend": "improving",
+      "fatigueRisk": "low",
+      "recommendedPacing": "steady",
+      "srlPhase": "perform"
+    },
+    "learningControlState": {
+      "paceMode": "steady"
+    },
+    "knowledgeMemory": {
+      "globalSignals": {
+        "masteredConcepts": [
+          "深拷贝与浅拷贝的边界"
+        ],
+        "fragileConcepts": [],
+        "strugglingConcepts": [],
+        "severeStrugglingConcepts": []
+      },
+      "globalBackground": {
+        "reusableFoundations": [
+          "深浅拷贝边界已能独立判别"
+        ],
+        "blockedFoundations": [],
+        "conceptLedger": [
+          {
+            "conceptKey": "深拷贝与浅拷贝的边界",
+            "label": "深拷贝与浅拷贝的边界",
+            "misconceptionRisk": "low",
+            "lastSeenAt": "2026-11-21T08:00:00.000Z"
+          }
+        ],
+        "recurringConfusions": [],
+        "transferSignals": [],
+        "knowledgeStateSummary": "此前把「改引用即改原对象」与浅拷贝混为一谈，第 3 节的独立判别题已全部做对，误解已消除。"
+      },
+      "currentPath": {
+        "learningPathId": "lp_golden_3",
+        "pathTitle": "JS 引用语义专题",
+        "progress": 0.7,
+        "currentPosition": {
+          "milestoneId": "ms3",
+          "taskId": "tk7"
+        },
+        "prerequisiteGaps": [],
+        "conceptStates": [
+          {
+            "conceptKey": "深拷贝与浅拷贝的边界",
+            "label": "深拷贝与浅拷贝的边界",
+            "status": "mastered"
+          }
+        ],
+        "recentEvidence": [
+          {
+            "taskId": "tk6",
+            "signal": "mastered",
+            "conceptKeys": [
+              "深拷贝与浅拷贝的边界"
+            ],
+            "happenedAt": "2026-11-21T08:00:00.000Z"
+          }
+        ]
+      }
+    },
+    "replanSignal": null
+  },
+  "previousSession": {
+    "id": "sess_golden_3",
+    "status": "completed",
+    "teachingState": {
+      "sessionArtifacts": {
+        "lessonReport": {
+          "met": true,
+          "coveredKcs": [
+            "kc_deep_vs_shallow"
+          ],
+          "missingKcs": [],
+          "independentCount": 2,
+          "exitTicket": {
+            "passed": true,
+            "reason": null
+          }
+        }
+      }
+    }
+  },
+  "predictionOpts": {
+    "fatigueSignal": "low",
+    "knowledgeStateSummary": "此前把「改引用即改原对象」与浅拷贝混为一谈，第 3 节的独立判别题已全部做对，误解已消除。",
+    "taskContext": {
+      "title": "结构化拷贝的应用场景",
+      "learningObjectives": [
+        "深拷贝与浅拷贝的边界"
+      ]
+    }
+  },
+  "stateReviewOpportunity": {
+    "opportunityAt": "2026-11-21T08:00:00.000Z",
+    "struggling": [],
+    "fragile": []
+  },
+  "expectationsNote": "确定性层断言：pending 误解洞察在第 3 节机会点结算（风险预告语义下概念已稳 → miss）；misconception-reversal 也验证 contractGaps.met=true 时预测不应被硬证据压成高风险。LLM 契约层断言 state-review 的全量快照机制真的把失效旧洞察清掉。",
+  "priorInsightsFixture": {
+    "note": "第 1 节 state-review 记下的误解洞察（已失效）；第 3 节刷新时应结算为 miss 并停止回注",
+    "insightRecord": {
+      "claim": "学习者仍把「改引用即改原对象」当成浅拷贝的预期行为",
+      "insightType": "misconception",
+      "conceptKeys": [
+        "深拷贝与浅拷贝的边界"
+      ],
+      "predictedAt": "2026-11-19T08:00:00.000Z",
+      "outcome": "pending",
+      "checkedAt": null
+    }
+  }
+}

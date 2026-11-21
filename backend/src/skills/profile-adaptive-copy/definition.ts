@@ -38,7 +38,8 @@ export const adaptiveGuidanceCopyRuntimeDefinition: RuntimeDefinitionRecord = {
   },
   capabilities: ['adaptive-copy', 'dashboard-copy', 'learning-guidance'],
   defaultMaxTokens: 64000,
-  defaultTemperature: 0.6,
+  // 与 prompts/core/profile-adaptive-copy.yaml params.temperature 对齐（参数一致性：core 为真源）
+  defaultTemperature: 0.45,
   source: 'code',
   managedByCode: true,
 };

@@ -177,6 +177,12 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
       evidence: 'backend/src/services/ai-teaching/teaching-turn-engine.ts:222',
     },
     {
+      // 2026-11-21 预测器硬证据注入：learnerPrediction.evidence（来源清单）随 reliability 同管道透传
+      key: 'evidence',
+      owner: 'scenario.learnerPrediction',
+      evidence: 'backend/src/services/ai-teaching/teaching-turn-preparation.ts:206（learnerPrediction 整对象透传，含 evidence）',
+    },
+    {
       key: 'sameTaskHistory',
       owner: 'lastLessonRecap.sameTaskHistory',
       evidence: 'prompts/core/teaching-opening.yaml 规则「sameTaskHistory.lastUnresolvedPoints」',
@@ -194,6 +200,12 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
       key: 'reliability',
       owner: 'scenario.learnerPrediction',
       evidence: 'backend/src/services/ai-teaching/teaching-turn-shared.ts:96（learnerPredictionPayload.reliability）',
+    },
+    {
+      // 2026-11-21 预测器硬证据注入：与 reliability 同管道透传，规则按「可靠性双轨口径」消费
+      key: 'evidence',
+      owner: 'scenario.learnerPrediction',
+      evidence: 'backend/src/services/ai-teaching/teaching-turn-shared.ts（learnerPredictionPayload.evidence，非空才携带）',
     },
     {
       key: 'sameTaskHistory',

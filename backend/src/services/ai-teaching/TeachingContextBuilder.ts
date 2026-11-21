@@ -20,6 +20,7 @@ import { learningPredictorDefinition, type LearningPredictorOutput } from '../..
 import { getRequestContext, runInAgentScope } from '../../gateway/api-gateway/context';
 import { AI_TEACHING_AGENT_ID } from './teaching-turn-shared';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
+import { loadRetrievabilityHints } from './retention-hints';
 import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 import type { ReviewPlan } from '../memory/review-plan.service';
 import { buildMasteredLastSeenAtMap } from './anchor-probe-emit';
@@ -45,6 +46,7 @@ import {
   computeTemporalGap,
   fetchLatestPriorSessionEndTime,
   fetchPriorLearningRecap,
+  readPreviousLessonReport,
   readRecentFrustrationStreak,
   resolveTemporalLongGapThresholdDays,
 } from './teaching-context-recap';
@@ -166,6 +168,10 @@ async function buildTeachingScenarioContextImpl(
     scope: 'teaching' as const,
   };
   const learnerSnapshot = await loadLearnerSnapshotForContext(learnerSnapshotInput, options);
+  // 独立成功率带（§7 P1-1）：只用**代码裁决**的检查点结果驱动档位；
+  // 无样本 → hold → 退回旧的 canIncrease 口径（行为与改造前一致）。
+  // 2026-11-21 提升为变量：同一次代码裁决结果还要作为预测器硬证据（checkpointEvidence）复用，不再重复查询。
+  const successBand = await resolveSuccessBandVerdict(userId, { pathId: path.id }).catch(() => null);
   const learnerProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot, {
     // 任务级难度：由学习者状态（课内=本路径、全局=总负担）确定档位，代码判定、可审计（不用 LLM）
     taskDifficulty: decideTaskDifficulty({
@@ -188,9 +194,7 @@ async function buildTeachingScenarioContextImpl(
       // 情感（软传感器，§4.5）：取**上一节课**留下的连续受挫轮数——软传感器只允许降档/减速，
       // 服务内部把它归入 LOAD_BASED_DECREASE_REASONS（结构上不可能成为升档依据）。
       recentFrustrationStreak: readRecentFrustrationStreak(previousSession),
-      // 独立成功率带（§7 P1-1）：只用**代码裁决**的检查点结果驱动档位；
-      // 无样本 → hold → 退回旧的 canIncrease 口径（行为与改造前一致）
-      successBand: await resolveSuccessBandVerdict(userId, { pathId: path.id }).catch(() => null),
+      successBand,
     }),
   });
   // Q8 延迟锚题数据供给修复：从**未截断**的权威来源为所有已掌握概念派生 lastSeenAt。
@@ -483,6 +487,20 @@ async function buildTeachingScenarioContextImpl(
   // - 已有该任务未回写的预测记录 → 复用（重试/恢复不重复调 LLM）
   // - 无 → await LLM 预测（≤8s，超时降级 null）→ 记录校准行
   // - 失败/超时 → null，教学照常
+  // 2026-11-21 硬证据注入：除摘要外再喂 4 类**代码产出**的确定性证据（上一节契约缺口 / 代码裁决
+  // 检查点正误 / FSRS 快忘旧知 / 负荷档位），让预测从「读摘要手猜」变「看证据判」——评审
+  // 2026-11-21 核实 predict 是画像层唯一完全脱离硬证据的环节。证据齐全度随 prediction.evidence
+  // 下发，供下游在 reliability 不足（新用户冷启动）时仍可采纳方向性判断。
+  const previousLessonReport = readPreviousLessonReport(previousSession);
+  const retentionHints = await loadRetrievabilityHints(userId);
+  const hardEvidence = {
+    contractGaps: previousLessonReport,
+    checkpointEvidence: successBand && successBand.sample > 0
+      ? { rate: successBand.rate, sample: successBand.sample }
+      : undefined,
+    retentionHints: retentionHints.length > 0 ? retentionHints : undefined,
+    paceMode: (learnerSnapshot.learningControlState as { paceMode?: 'recover' | 'push' | 'steady' } | null | undefined)?.paceMode,
+  };
   context.learnerPrediction = await buildLearnerPrediction(userId, path.id, task.id, milestone?.id, previousSession?.id, {
     fatigueSignal: learningState ? classifyLoad({ ktl: learningState.ktl, lf: learningState.lf }).fatigueRisk : undefined,
     // issue #194：摘要取自本次教学上下文已加载的画像快照，与 conceptLedger 等同一数据源；
@@ -493,6 +511,7 @@ async function buildTeachingScenarioContextImpl(
       knowledgeType: (task as any).knowledgeType,
       learningObjectives: primaryConcepts,
     },
+    hardEvidence,
   });
 
   return context;
@@ -543,6 +562,21 @@ export async function buildLearnerPrediction(
      * （knowledgeMemory.globalBackground.knowledgeStateSummary）取，不再由本函数直查 learner_evidence。
      */
     knowledgeStateSummary?: string;
+    /**
+     * 2026-11-21 硬证据（全部可选、代码产出）：上一节契约缺口 / 代码裁决检查点正误 /
+     * FSRS 快忘旧知 / 负荷档位。只在真正调 LLM 的分支下发；复用分支不重调 LLM，
+     * 但 evidence 清单仍按当前上下文计算（描述"解读该预测可用的确定性证据面"）。
+     */
+    hardEvidence?: {
+      contractGaps?: {
+        met?: boolean;
+        missingKcs?: string[];
+        exitTicketPassed?: boolean | null;
+      };
+      checkpointEvidence?: { rate: number | null; sample: number };
+      retentionHints?: Array<{ concept: string; retrievability: number }>;
+      paceMode?: 'recover' | 'push' | 'steady';
+    };
   },
 ): Promise<LearnerPredictionContext | null> {
   const cooldownKey = `${userId}:${taskId}`;
@@ -571,7 +605,7 @@ export async function buildLearnerPrediction(
         // P1-13 / #181：DB 复用路径同样保真原文（此前只回枚举，第 2 回合起丢失）
         toneDetail: existing.toneDetail ?? null,
         depthDetail: existing.depthDetail ?? null,
-      });
+      }, predictionEvidenceSources(opts.hardEvidence));
     }
 
     // 1b) 预测器近期失败过：冷却期内直接跳过，避免每个回合重复等待超时（最坏 +8s/回合）
@@ -582,6 +616,14 @@ export async function buildLearnerPrediction(
     // 2) 无记录 → LLM 预测（读取画像快照里的最近知识状态摘要）+ 超时保护
     // issue #194：摘要来自画像（快照 globalBackground），不再绕过画像直查 learner_evidence。
     const summary = opts.knowledgeStateSummary?.trim() || undefined;
+    // 硬证据键序：与 skill buildUserPayload 的声明序一致（contractGaps > checkpointEvidence >
+    // retentionHints > paceMode），缺失键不占位（skill 侧同样会跳过 null/undefined）
+    const he = opts.hardEvidence ?? {};
+    const evidencePayload: Record<string, unknown> = {};
+    if (he.contractGaps !== undefined) evidencePayload.contractGaps = he.contractGaps;
+    if (he.checkpointEvidence !== undefined) evidencePayload.checkpointEvidence = he.checkpointEvidence;
+    if (he.retentionHints !== undefined) evidencePayload.retentionHints = he.retentionHints;
+    if (he.paceMode !== undefined) evidencePayload.paceMode = he.paceMode;
     const controller = new AbortController();
     llmController = controller;
     // issue #182 ④：executor 以 options.abortSignal 覆盖请求级信号（skills/executor.ts:241-242），
@@ -595,11 +637,13 @@ export async function buildLearnerPrediction(
           fatigueSignal: opts.fatigueSignal || 'low',
           knowledgeStateSummary: summary || '无历史摘要',
           taskContext: opts.taskContext,
+          ...evidencePayload,
         }
       : {
           knowledgeStateSummary: summary || '无历史摘要',
           fatigueSignal: opts.fatigueSignal || 'low',
           taskContext: opts.taskContext,
+          ...evidencePayload,
         }, {
       // issue #182 ②：硬超时抛 SKILL_TIMEOUT（skills/executor.ts:363-381）→ 计入失败率，
       // 原 Promise.race 版本超时记为成功、从失败率里消失，监控看不见预测器故障。
@@ -626,7 +670,7 @@ export async function buildLearnerPrediction(
       summaryEcho: summary?.slice(0, 300),
     });
 
-    return await withReliability(userId, prediction);
+    return await withReliability(userId, prediction, predictionEvidenceSources(opts.hardEvidence));
   } catch (error) {
     const code = (error as { code?: string } | null | undefined)?.code;
     if (code === 'SKILL_TIMEOUT') {
@@ -650,16 +694,41 @@ export async function buildLearnerPrediction(
   }
 }
 
-/** 附加实证可靠性（样本 ≥ MIN 才给，防小样本误导） */
-async function withReliability(userId: string, prediction: LearningPredictorOutput): Promise<LearnerPredictionContext> {
+/**
+ * 当前上下文可用的硬证据来源清单（代码产出，非 LLM 自报）。
+ * 复用分支同样计算：它描述的是"解读这条预测时可用的确定性证据面"，
+ * 供下游在 reliability 不足（新用户 outcome 样本 <5）时仍可采纳方向性判断。
+ */
+function predictionEvidenceSources(
+  hardEvidence: Parameters<typeof buildLearnerPrediction>[5]['hardEvidence'],
+): string[] {
+  if (!hardEvidence) return [];
+  return [
+    hardEvidence.contractGaps !== undefined ? 'contract_gaps' : null,
+    hardEvidence.checkpointEvidence !== undefined ? 'checkpoint_evidence' : null,
+    hardEvidence.retentionHints !== undefined ? 'retention_hints' : null,
+    hardEvidence.paceMode !== undefined ? 'pace_mode' : null,
+  ].filter((x): x is string => !!x);
+}
+
+/**
+ * 附加实证可靠性（样本 ≥ MIN 才给，防小样本误导）+ 硬证据来源清单。
+ * reliability 只回答「该预测器的历史校准置信」（outcome 样本数与命中率）；
+ * evidence 回答「这条预测是否建立在确定性证据上」——两者互补，后者不受冷启动限制。
+ */
+async function withReliability(
+  userId: string,
+  prediction: LearningPredictorOutput,
+  evidence: string[] = [],
+): Promise<LearnerPredictionContext> {
   try {
     const stats = await predictionCalibrationService.empiricalStats(userId);
     const reliable = stats.total >= PREDICTION_RELIABILITY_MIN_SAMPLE
       ? { total: stats.total, stallHitRate: stats.stallHitRate }
       : null;
-    return { ...prediction, reliability: reliable };
+    return { ...prediction, reliability: reliable, evidence };
   } catch {
-    return { ...prediction, reliability: null };
+    return { ...prediction, reliability: null, evidence };
   }
 }
 
@@ -672,6 +741,13 @@ function safeParseStringArray(raw: string | null | undefined): string[] {
     return [];
   }
 }
+
+/**
+ * 上一节课的平台确定式契约事实（lessonReport 投影，代码产出）。
+ * 2026-11-21 迁至 teaching-context-recap（golden timelines 回放也要用，纯函数无需重模块导入）；
+ * TeachingContextBuilder 经 `export * from './teaching-context-recap'` 保持既有导入面。
+ */
+export { readPreviousLessonReport } from './teaching-context-recap';
 
 /** 行为投影器（LLM-KT Behavioral Dynamics Projector）：近期回合级行为动态压缩 */
 export async function fetchBehavioralProfile(

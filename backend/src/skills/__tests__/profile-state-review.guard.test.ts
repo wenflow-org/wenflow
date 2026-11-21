@@ -43,6 +43,23 @@ describe('profile-state-review evidenceRefs 护栏', () => {
     expect(out.narrative).toBe('n')
   })
 
+  it('掌握度只接收有效枚举和可回指的证据，保留同批负证据', async () => {
+    const spec = await capturedSpec(baseInput([{ id: 'ev1' }]))
+    const out = spec.normalizeOutput({
+      conceptAssessments: [
+        { conceptKey: 'malformed', observed: '未掌握', evidenceRefs: ['ev1'] },
+        { conceptKey: 'missing', evidenceRefs: ['ev1'] },
+        { conceptKey: 'invented', observed: 'mastered', evidenceRefs: ['missing'] },
+        { conceptKey: 'negative', observed: 'not', evidenceRefs: ['ev1', 'missing', 'ev1'] },
+        { conceptKey: 'positive', observed: 'mastered', evidenceRefs: ['ev1'] },
+      ],
+    })
+    expect(out.conceptAssessments).toEqual([
+      expect.objectContaining({ conceptKey: 'negative', observed: 'not', evidenceRefs: ['ev1'] }),
+      expect.objectContaining({ conceptKey: 'positive', observed: 'mastered', evidenceRefs: ['ev1'] }),
+    ])
+  })
+
   it('无已知证据集时，仅要求至少一条引用', async () => {
     const spec = await capturedSpec(baseInput([]))
     const out = spec.normalizeOutput({

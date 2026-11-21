@@ -4,6 +4,7 @@
  * 只放不依赖回合内可变状态的纯函数与小助手；processStudentMessage 主回路仍留在引擎。
  */
 import { logger } from '../../utils/logger';
+import { parseAssessmentQuestion } from '../../utils/assessment-question';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { normalizeForKeywordMatch } from './checkpoint-shared';
 import { deriveTeachingRuntimeSignals, withTimeoutSignal } from './teaching-classroom-flow';
@@ -358,40 +359,13 @@ export async function generateExitTicketForLesson(input: {
       throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'EXIT_TICKET_FAILED');
     }
     const out: any = result?.output ?? result;
-    const question = typeof out?.question === 'string' ? out.question.trim() : '';
-    const conceptName = typeof out?.conceptName === 'string' ? out.conceptName.trim() : '';
+    const question = parseAssessmentQuestion(out);
+    const conceptName = coreKcs.find((kc) => kc.name === out?.conceptName)?.name;
     if (!question || !conceptName) return null;
-    const type = out.type === 'single_choice' || out.type === 'multi_choice' || out.type === 'short_answer'
-      ? out.type
-      : 'short_answer';
-    const options = Array.isArray(out.options)
-      ? out.options
-          .filter((option: any) => option && typeof option.id === 'string' && typeof option.text === 'string')
-          .slice(0, 4)
-          .map((option: any) => ({ id: option.id.trim(), text: option.text.trim() }))
-      : [];
-    const optionIds = new Set(options.map((option: { id: string }) => option.id));
-    const correctOptionIds: string[] = type !== 'short_answer' && Array.isArray(out.correctOptionIds)
-      ? Array.from(new Set(out.correctOptionIds
-          .filter((id: any) => typeof id === 'string' && optionIds.has(id.trim()))
-          .map((id: string) => id.trim())))
-      : [];
-    const expectedKeywords = type === 'short_answer' && Array.isArray(out.expectedKeywords)
-      ? out.expectedKeywords
-          .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
-          .map((keyword: string) => keyword.trim().slice(0, 40))
-          .slice(0, 3)
-      : [];
-    // 无答案键的题不落库：终检必须能确定性判分，否则会变成「模型说了算」。
-    if (type !== 'short_answer' && (options.length < 2 || correctOptionIds.length === 0)) return null;
-    if (type === 'short_answer' && expectedKeywords.length === 0) return null;
     return {
       id: `et_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      question,
-      type,
+      ...question,
       conceptName,
-      ...(type !== 'short_answer' ? { options, correctOptionIds } : {}),
-      ...(type === 'short_answer' ? { expectedKeywords } : {}),
       askedAt: new Date().toISOString(),
       status: 'pending',
       attempts: Math.max(1, input.attempts + 1),
@@ -498,8 +472,10 @@ export function gradePendingExitTicket(input: {
   formatMiss: boolean;
 } {
   let state = input.exitTicketState;
+  const invalidPendingId = state?.status === 'pending' && !parseAssessmentQuestion(state) ? state.id : null;
+  if (invalidPendingId !== null) state = null;
   const history: ExitTicket[] = Array.isArray(input.exitTicketHistory)
-    ? (input.exitTicketHistory as ExitTicket[]).filter((item) => !!item && typeof item === 'object')
+    ? (input.exitTicketHistory as ExitTicket[]).filter((item) => !!item && typeof item === 'object' && item.id !== invalidPendingId)
     : [];
   // 历史里的「格式未识别」不计入失败次数；否则学生两次整句作答就把终检额度耗尽，
   // 契约永久 met=false，结算门再也过不去（2026-11-20 真课实测死局）。

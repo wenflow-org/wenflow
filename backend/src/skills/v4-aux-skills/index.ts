@@ -13,6 +13,7 @@
  */
 import { callPrompt } from '../../composers/prompt-composer';
 import { JSON_OUTPUT_RETRY_STRATEGY } from '../json-output-retry';
+import { parseAssessmentQuestion } from '../../utils/assessment-question';
 import { currentTeachingSessionId } from '../../services/ai-teaching/teaching-session-context';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import type { PromptCallContext } from '../../composers/types';
@@ -340,19 +341,6 @@ function normalizeConceptName(value: any): string {
   return String(value ?? '').trim().toLowerCase().replace(/\s+/g, '');
 }
 
-function coerceExitTicketOptions(value: any): Array<{ id: string; text: string }> {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item: any): { id: string; text: string } | null => {
-      if (!item || typeof item !== 'object') return null;
-      const id = asTrimmedString(item.id);
-      const text = asTrimmedString(item.text);
-      return id && text ? { id, text } : null;
-    })
-    .filter((item: { id: string; text: string } | null): item is { id: string; text: string } => item !== null)
-    .slice(0, 4);
-}
-
 /**
  * 单题生成（2026-11-19）：课末终检与 24–72h 延迟保持探针共用同一份「出题 + 答案键」契约。
  * 两者只在 prompt 语义上不同；判分与证据归因都在调用方（judgeCheckpointAnswer）。
@@ -373,46 +361,19 @@ async function teachingProbeHandler(
       recentDialogue: Array.isArray(d.recentDialogue) ? d.recentDialogue.slice(-8) : [],
     }),
     normalize: (parsed, d) => {
-      const question = asTrimmedString(parsed?.question);
-      const options = coerceExitTicketOptions(parsed?.options);
-      const wantsChoice = parsed?.type === 'single_choice' || parsed?.type === 'multi_choice';
-      const type: 'short_answer' | 'single_choice' | 'multi_choice' = wantsChoice && options.length >= 2
-        ? parsed.type
-        : 'short_answer';
-      const optionIds = new Set(options.map((option) => option.id));
-      const correctOptionIds = type !== 'short_answer' && Array.isArray(parsed?.correctOptionIds)
-        ? Array.from(new Set(parsed.correctOptionIds
-            .filter((id: any) => typeof id === 'string' && optionIds.has(id.trim()))
-            .map((id: string) => id.trim())))
-        : [];
-      const expectedKeywords = type === 'short_answer' && Array.isArray(parsed?.expectedKeywords)
-        ? parsed.expectedKeywords
-            .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
-            .map((keyword: string) => keyword.trim().slice(0, 40))
-            .slice(0, 3)
-        : [];
+      const question = parseAssessmentQuestion(parsed);
+      if (!question) throw new Error(`${errorPrefix}_QUESTION_OR_ANSWER_KEY_INVALID`);
       const coreNames = (Array.isArray(d.coreKcs) ? d.coreKcs : [])
         .map((kc: any) => asTrimmedString(kc?.name))
         .filter(Boolean);
       const declared = asTrimmedString(parsed?.conceptName);
-      const conceptName = coreNames.find((name: string) => normalizeConceptName(name) === normalizeConceptName(declared))
-        || coreNames[0]
-        || '';
-      if (!question) throw new Error(`${errorPrefix}_QUESTION_MISSING`);
+      const conceptName = coreNames.find((name: string) => normalizeConceptName(name) === normalizeConceptName(declared));
       if (!conceptName) throw new Error(`${errorPrefix}_CONCEPT_MISSING`);
-      if (type !== 'short_answer' && correctOptionIds.length === 0) throw new Error(`${errorPrefix}_ANSWER_KEY_MISSING`);
-      if (type === 'short_answer' && expectedKeywords.length === 0) throw new Error(`${errorPrefix}_ANSWER_KEY_MISSING`);
-      return {
-        question,
-        type,
-        conceptName,
-        ...(type !== 'short_answer' ? { options, correctOptionIds } : {}),
-        ...(type === 'short_answer' ? { expectedKeywords } : {}),
-      };
+      return { ...question, conceptName };
     },
-    coerceParse: (parsed) => (parsed && typeof parsed === 'object'
-      ? { ...parsed, options: coerceExitTicketOptions(parsed.options) }
-      : parsed),
+    validate: (parsed) => parseAssessmentQuestion(parsed)
+      ? { valid: true }
+      : { valid: false, failureReason: `${errorPrefix}_QUESTION_OR_ANSWER_KEY_INVALID: 单选仅一个答案；选项 ID 必须唯一且答案键须命中选项；简答须有有效要点。` },
   });
 }
 
@@ -507,15 +468,22 @@ async function learnerStateReviewHandler(input: any) {
         .filter((item: any) => item.evidenceRefs.length > 0)
         .slice(0, 5);
       const conceptAssessments = (Array.isArray(parsed?.conceptAssessments) ? parsed.conceptAssessments : [])
-        .filter((item: any) => item && asTrimmedString(item.conceptKey))
-        .slice(0, 20)
-        .map((item: any) => ({
-          conceptKey: asTrimmedString(item.conceptKey),
-          observed: item.observed === 'not' ? 'not' : 'mastered',
-          masteryBand: ['low', 'medium', 'high'].includes(item.masteryBand) ? item.masteryBand : 'medium',
-          rationale: asTrimmedString(item.rationale),
-          evidenceRefs: Array.isArray(item.evidenceRefs) ? item.evidenceRefs.map((x: any) => asTrimmedString(x)).filter(Boolean) : [],
-        }));
+        .flatMap((item: any) => {
+          const conceptKey = asTrimmedString(item?.conceptKey);
+          if (!conceptKey || (item.observed !== 'mastered' && item.observed !== 'not')) return [];
+          const evidenceRefs = Array.isArray(item.evidenceRefs)
+            ? [...new Set<string>(item.evidenceRefs.map(asTrimmedString).filter((ref: string) => knownEvidenceIds.has(ref)))]
+            : [];
+          if (!evidenceRefs.length) return [];
+          return [{
+            conceptKey,
+            observed: item.observed,
+            masteryBand: ['low', 'medium', 'high'].includes(item.masteryBand) ? item.masteryBand : 'medium',
+            rationale: asTrimmedString(item.rationale),
+            evidenceRefs,
+          }];
+        })
+        .slice(0, 20);
       const falsifiableClaims = (Array.isArray(parsed?.falsifiableClaims) ? parsed.falsifiableClaims : [])
         .filter((item: any) => item && asTrimmedString(item.claim))
         .slice(0, 3)

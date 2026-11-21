@@ -95,6 +95,7 @@ describe('LearningService.completeTask milestone progression', () => {
     tasks[0].status = 'completed'
     tasks[1].status = 'in_progress'
     tasks[2].status = 'todo'
+    tasks[2].milestoneId = 'milestone-2'
     milestones[0].status = 'active'
     milestones[0].completedAt = null
     milestones[1].status = 'locked'
@@ -162,7 +163,10 @@ describe('LearningService.completeTask milestone progression', () => {
           return milestone
         }),
         count: jest.fn(async ({ where }: any) => milestones
-          .filter(item => item.learningPathId === where.learningPathId && item.status === where.status).length)
+          .filter(item => item.learningPathId === where.learningPathId
+            && (typeof where.status === 'string'
+              ? item.status === where.status
+              : !where.status?.not || item.status !== where.status.not)).length)
       },
       learning_paths: {
         update: jest.fn(async ({ data }: any) => {
@@ -228,6 +232,20 @@ describe('LearningService.completeTask milestone progression', () => {
     expect(mockAddXp).toHaveBeenCalledTimes(2)
     expect(outbox.map(item => item.eventType)).toEqual(['task:completed', 'task:completed', 'path:completed'])
     expect(mockUpdateLearningMetrics).not.toHaveBeenCalled()
+  })
+
+  it('渐进式：后续阶段尚无任务时，完成当前阶段最后任务不会把整条路径标成完成', async () => {
+    // 模拟渐进式设计：stage 2 已解锁但任务还在后台生成，此时路径里「未完成任务数」为 0，
+    // 但仍有 locked/active 里程碑。仅凭 remainingTasks=0 会把路径误判为 completed。
+    tasks[2].milestoneId = 'milestone-undesigned'
+
+    await learningService.completeTask({ taskId: 'task-2', userId })
+
+    expect(tasks[1].status).toBe('completed')
+    expect(milestones[0].status).toBe('completed')
+    expect(milestones[1].status).toBe('active')
+    expect(path).toEqual(expect.objectContaining({ status: 'active', completedMilestones: 1 }))
+    expect(outbox.map(item => item.eventType)).not.toContain('path:completed')
   })
 
   it('任务在事务获得父级写锁前被替换时返回冲突而不是伪造已完成', async () => {

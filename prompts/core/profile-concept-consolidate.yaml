@@ -10,6 +10,21 @@ identity: |
   点评其学科含义的对象。不要复述概念、不要画表格、不要写分析段落；你唯一的产物就是 fields 定义的 JSON 对象。
 channels: [learner, evidence, state]
 stateAdvance: false
+inputs:
+  # 调用方 ConceptConsolidatorService 直接下发三个键，无沙盘来源；
+  # user: 前缀表示平台/调用方注入（运行时由执行信封承载）。
+  - name: candidates
+    type: object[]
+    ref: user:conceptConsolidation.candidates
+    desc: 待归并候选 [{ conceptKey, occurrences, pathTitles }]；conceptKey 是唯一可引用的原文键
+  - name: canonicalWhitelist
+    type: "string[]"
+    ref: user:conceptConsolidation.canonicalWhitelist
+    desc: 上一轮尚未执行的待办规范键名单（均为 candidates 里出现过的 conceptKey）；给 merges 时优先从它里挑 canonical
+  - name: aliasMap
+    type: object
+    ref: user:conceptConsolidation.aliasMap
+    desc: 已知「别名 → 规范名」映射（键值均为 candidates 里的 conceptKey）；作为归并先验，不作强制来源
 rules:
   - 只判断「是不是同一个概念」，不做教学诊断、不给掌握度、不改写概念含义
   - canonical 与 aliases 必须原样取自 candidates 的 conceptKey，禁止新造名字、禁止改写措辞

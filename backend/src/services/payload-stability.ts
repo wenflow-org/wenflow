@@ -81,7 +81,7 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
   },
   'profile-learning-predict': {
     stable: ['fatigueSignal', 'knowledgeStateSummary'],
-    note: '疲劳信号与历史摘要稳定；taskContext 后置',
+    note: '疲劳信号与历史摘要稳定；taskContext 与硬证据键（contractGaps/checkpointEvidence/retentionHints/paceMode，声明序）后置',
   },
 };
 

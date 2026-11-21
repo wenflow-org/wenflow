@@ -257,7 +257,7 @@ export interface TeachingScenarioContext {
   } | null;
 }
 
-/** 预测上下文（P2 闭环：预测 + 实证可靠性一起交给教学 Agent） */
+/** 预测上下文（P2 闭环：预测 + 实证可靠性 + 硬证据来源一起交给教学 Agent） */
 export interface LearnerPredictionContext {
   stallRisk: number;
   predictedTone: 'smooth' | 'struggle' | 'fatigue';
@@ -266,6 +266,15 @@ export interface LearnerPredictionContext {
   rationale: string;
   /** 实证可靠性（来自校准记录，不是 LLM 自报）；样本不足（<5）为 null */
   reliability: { total: number; stallHitRate: number | null } | null;
+  /**
+   * 2026-11-21 硬证据来源清单（代码产出，非 LLM 自报）：本轮预测建立在哪些确定性证据上。
+   * 取值：contract_gaps（上一节契约缺口）/ checkpoint_evidence（代码裁决检查点正误）/
+   * retention_hints（FSRS 快忘旧知）/ pace_mode（负荷档位）。
+   * 与 reliability 互补：reliability 只回答「历史校准置信」（新用户必然 <5），
+   * evidence 回答「这条预测是否看得到硬证据」——evidence 非空时下游不得以 reliability
+   * 不足为由忽略预测的方向性判断。
+   */
+  evidence: string[];
 }
 
 /**

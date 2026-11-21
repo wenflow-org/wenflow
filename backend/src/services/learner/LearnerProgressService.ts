@@ -1,6 +1,5 @@
-import { executeSkill, auxSkillDefinitionMap } from '../../skills';
 import { calculateCognitiveEngagement, CognitiveEngagementInput } from '../learning/cognitive-engagement.service';
-import { getLearningMetrics, calculateLSS as calculateDisplayLss } from '../metrics/LearningMetricService';
+import { calculateLSS as calculateDisplayLss } from '../metrics/LearningMetricService';
 import type { LearningSignal, ProgressMetrics } from '../../agents/protocol';
 
 const THRESHOLDS = {
@@ -40,8 +39,11 @@ export interface LearnerProgressResult {
   signal: LearningSignal;
   metrics: ProgressMetrics;
   recommendations: string[];
-  reasoning?: string;
-  suggestion?: string;
+  // 2026-11-21 止血：profile-progress-report 的唯一下游（completeTask 的 learningReport）
+  // 前端零消费，但每次任务完成都白跑一次 LLM。服务层停调用，字段固定回传 null
+  // 保住外部响应形状；提示词声明（prompts/core/profile-progress-report.yaml）保留以便回滚。
+  reasoning: string | null;
+  suggestion: string | null;
 }
 
 class LearnerProgressService {
@@ -50,35 +52,22 @@ class LearnerProgressService {
     const updatedMetrics = this.recordTaskCompletion(data, currentMetrics);
     const signals = this.detectSignals(updatedMetrics, data);
     const recommendations = this.generateRecommendations(updatedMetrics, signals);
-    // 权威学习状态指标（KTL/LF/LSS，0-100 display，与看板 /api/metrics 同源）：
-    // 本服务的 getCurrentMetrics() 是「单任务快照」，其 KTL/LF 恒 0，不能作为报告输入。
-    const authoritative = await getLearningMetrics(userId).catch(() => null);
-    const report = await this.generateLearningReport(updatedMetrics, signals, {
-      taskTitle: data.taskTitle,
-      timeSpent: data.timeSpent,
-      difficulty: data.subjectiveDifficulty ?? data.difficulty
-    }, userId, authoritative);
-
-    return this.buildResult(updatedMetrics, signals, recommendations, report);
+    return this.buildResult(updatedMetrics, signals, recommendations);
   }
 
   private buildResult(
     metrics: ProgressMetrics,
     signals: LearningSignal[],
-    recommendations: string[],
-    report?: { reasoning?: string; suggestion?: string }
+    recommendations: string[]
   ): LearnerProgressResult {
     const signal = signals[0] || { type: 'struggling' as const, intensity: 0, timestamp: new Date().toISOString() };
     return {
       signal,
-      metrics: {
-        ...metrics,
-        reasoning: report?.reasoning,
-        suggestion: report?.suggestion
-      },
+      metrics,
       recommendations,
-      reasoning: report?.reasoning,
-      suggestion: report?.suggestion
+      // profile-progress-report 已停调用（前端零消费、白跑 LLM）：字段回传 null 保持响应形状
+      reasoning: null,
+      suggestion: null
     };
   }
 
@@ -233,58 +222,6 @@ class LearnerProgressService {
     }
 
     return [...new Set(recommendations)].slice(0, 5);
-  }
-
-  private async generateLearningReport(
-    metrics: ProgressMetrics,
-    signals: LearningSignal[],
-    taskData: { taskTitle?: string; timeSpent?: number; difficulty?: number },
-    userId?: string,
-    authoritative?: { lss: number; ktl: number; lf: number; lsb: number } | null
-  ): Promise<{ reasoning: string; suggestion: string }> {
-    const fallback = {
-      reasoning: '基于当前学习数据，你正在稳步推进学习进度。继续保持当前的学习节奏。',
-      suggestion: '建议继续保持当前的学习节奏，遇到困难时及时回顾之前的知识点。',
-    };
-
-    try {
-      const signalDescriptions = signals.map((s) => {
-        const typeMap: Record<string, string> = {
-          'fatigue-high': '疲劳度较高',
-          accelerating: '学习加速',
-          decelerating: '学习减速',
-          struggling: '遇到困难',
-          mastery: '掌握良好',
-          'lane-change': '重点转移',
-          frustration: '感到挫折'
-        };
-        return `${typeMap[s.type] || s.type}: 强度 ${Math.round(s.intensity * 100)}%${s.context ? ` (${s.context})` : ''}`;
-      }).join('；');
-
-      return await executeSkill(auxSkillDefinitionMap['profile-progress-report'], {
-        task: {
-          title: taskData.taskTitle || '未知任务',
-          timeSpent: taskData.timeSpent || 0,
-          difficulty: taskData.difficulty || 5,
-        },
-        metrics: {
-          completionRate: Math.round(metrics.completionRate * 100),
-          // KTL/LF/LSS 优先取权威学习状态（0-100 display）；无记录时回退本服务单任务快照
-          ktl: authoritative?.ktl ?? metrics.ktl ?? 0,
-          lf: authoritative?.lf ?? metrics.lf ?? 0,
-          lss: authoritative?.lss ?? metrics.lss ?? 0,
-        },
-        signals: signalDescriptions || '无明显信号',
-        __fallback: fallback,
-        __prompt: {
-          userId,
-          requestPath: '/services/learner/progress-report',
-          callerAgentId: 'profile-agent',
-        },
-      });
-    } catch {
-      return fallback;
-    }
   }
 }
 

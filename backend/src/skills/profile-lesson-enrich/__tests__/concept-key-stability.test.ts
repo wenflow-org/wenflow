@@ -69,6 +69,48 @@ describe('profile-lesson-enrich · conceptKey 稳定性', () => {
     expect(result.output?.conceptLedger?.[0].conceptKey).toBe('kc-2a');
   });
 
+  // 2026-11-21：sourcePaths/sourceTasks 不再让模型抄 UUID，由事件元数据确定性回填。
+  it('模型自报的 sourcePaths/sourceTasks 被事件 pathId/taskId 覆盖', async () => {
+    mockModelOutput({
+      conceptLedger: [{
+        conceptKey: 'kc-2a',
+        label: '锚点之间的性质差异与勾连顺序',
+        familiarity: 'practiced',
+        transferReadiness: 'medium',
+        misconceptionRisk: 'low',
+        sourcePaths: ['bogus-path-id'],
+        sourceTasks: ['bogus-task-id'],
+        evidenceCount: 1,
+      }],
+    });
+
+    const result = await lessonKnowledgeEnricher({
+      knowledgeState: KNOWLEDGE_STATE as any,
+      taskContext: { learningPathId: 'lp_event_1', taskId: 'st_event_1' },
+    });
+    expect(result.output?.conceptLedger?.[0].sourcePaths).toEqual(['lp_event_1']);
+    expect(result.output?.conceptLedger?.[0].sourceTasks).toEqual(['st_event_1']);
+  });
+
+  it('事件元数据缺失时 sourcePaths/sourceTasks 输出空数组（不沿用模型自报值）', async () => {
+    mockModelOutput({
+      conceptLedger: [{
+        conceptKey: 'kc-2a',
+        label: '锚点之间的性质差异与勾连顺序',
+        familiarity: 'practiced',
+        transferReadiness: 'medium',
+        misconceptionRisk: 'low',
+        sourcePaths: ['bogus-path-id'],
+        sourceTasks: ['bogus-task-id'],
+        evidenceCount: 1,
+      }],
+    });
+
+    const result = await lessonKnowledgeEnricher({ knowledgeState: KNOWLEDGE_STATE as any });
+    expect(result.output?.conceptLedger?.[0].sourcePaths).toEqual([]);
+    expect(result.output?.conceptLedger?.[0].sourceTasks).toEqual([]);
+  });
+
   it('看板外的隐性概念不进台账（台账=看板概念），但仍作为线索保留在 recurringConfusions', async () => {
     mockModelOutput({
       conceptLedger: [{ conceptKey: '  Distinguish Clue-Material  ', label: '  Distinguish Clue-Material  ', familiarity: 'seen', transferReadiness: 'low', misconceptionRisk: 'low', evidenceCount: 0 }],

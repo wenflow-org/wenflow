@@ -4,7 +4,7 @@ jest.mock('../../composers/prompt-composer', () => ({
   callPrompt: mockCallPrompt,
 }))
 
-import { adaptiveGuidanceCopy } from '../profile-adaptive-copy'
+import { adaptiveGuidanceCopy, buildFallback } from '../profile-adaptive-copy'
 
 const INPUT = {
   view: 'dashboard' as const,
@@ -170,5 +170,42 @@ describe('adaptiveGuidanceCopy · 视图口径（#187）', () => {
     const result = await adaptiveGuidanceCopy(INPUT)
 
     expect(result.output.todayActions.map((item) => item.to)).toEqual(['learning-state', 'continue-learning'])
+  })
+
+  it('空态（无路径）兜底：主操作必须是 create-goal，且 emptyStateCopy 有内容', () => {
+    const fallback = buildFallback({
+      view: 'dashboard',
+      learnerSnapshot: { profile: { name: '小明' } },
+      learningState: { tasks: { completed: 0, total: 0, inProgress: 0, started: 0 } },
+    })
+    expect(fallback.todayActions[0]).toMatchObject({ to: 'create-goal' })
+    expect(fallback.emptyStateCopy).not.toBe('')
+    expect(fallback.warningCopy).toBe('')
+  })
+
+  it('空态（有路径但任务数为 0）时，模型给的 continue-learning 深链也被改成 create-goal', async () => {
+    const emptyInput = {
+      ...INPUT,
+      learningState: { tasks: { completed: 0, total: 0, inProgress: 0, started: 0 } },
+    }
+    mockCallPrompt.mockImplementation(async (spec: any) => ({
+      success: true,
+      output: spec.normalizeOutput(PROMPT_ALIGNED_LLM_OUTPUT, emptyInput),
+      debug: {},
+    }))
+
+    const result = await adaptiveGuidanceCopy(emptyInput)
+    expect(result.output.todayActions).toHaveLength(1)
+    expect(result.output.todayActions[0]).toMatchObject({ to: 'create-goal' })
+  })
+
+  it('非空态：正常路径动作不被空态兜底改写', async () => {
+    mockCallPrompt.mockImplementation(async (spec: any) => ({
+      success: true,
+      output: spec.normalizeOutput(PROMPT_ALIGNED_LLM_OUTPUT, INPUT),
+      debug: {},
+    }))
+    const result = await adaptiveGuidanceCopy(INPUT)
+    expect(result.output.todayActions[0].to).toBe('continue-learning')
   })
 })

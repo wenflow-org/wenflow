@@ -72,6 +72,12 @@ export interface LearnerStateReviewPayload {
   /** 诊断可信度（3b）：历史断言命中率；样本 <5 时 hitRate 为 null */
   calibration?: InsightReliability | null;
   /**
+   * 可证伪断言命中率（2026-11-21 核销台账）：只统计 diagnosis.falsifiableClaims 的
+   * LLM 显式断言（insightType='falsifiable_claim'，按 expect 方向结算），
+   * 与 calibration（混合了规则派生卡点的洞察命中率）分开读；样本 <5 时 hitRate 为 null。
+   */
+  claimCalibration?: InsightReliability | null;
+  /**
    * Q7 多源真值裁决留痕：每个诊断概念的来源拆解（谁赢了 / 分歧度 / 元认知校准 / 缺源标注）。
    * 落进本评审投影（`learner_projections` scope=review），可审计、可回溯；无诊断时为 null。
    */
@@ -242,9 +248,31 @@ class LearnerStateReviewService {
         })),
       );
     }
+    // 2026-11-21 可证伪断言入账（此前全仓零消费——checkOn/expect 从未被读取）：与洞察同一
+    // insight-records 账本，insightType='falsifiable_claim'；结算在下一次评审刷新的
+    // resolvePending 里按 expect 方向判定，命中率单独成列（不混进洞察命中率）。
+    if (diagnosis?.falsifiableClaims?.length) {
+      await insightCalibrationService.recordInsights(
+        userId,
+        primaryPath.id,
+        diagnosis.falsifiableClaims.map((item) => ({
+          claim: item.claim,
+          insightType: 'falsifiable_claim',
+          conceptKeys: conceptsForClaimText(item.claim, learnerSnapshot),
+          predictedAt: generatedAt,
+          checkOn: item.checkOn,
+          expect: item.expect,
+        })),
+      );
+    }
     const calibration = await insightCalibrationService.getReliability(userId, primaryPath.id, {
       // 重排归因的断言单独成列（replan_attribution）：不混进状态评审的命中率
       excludeInsightTypes: ['replan_attribution'],
+    });
+    // 可证伪断言的命中率单独成列（2026-11-21 核销台账）：回答「这个画像大脑是在精准预判
+    // 还是事后诸葛亮」——洞察命中率混合了规则派生卡点，claims 只统计 LLM 的显式可证伪断言
+    const claimCalibration = await insightCalibrationService.getReliability(userId, primaryPath.id, {
+      onlyInsightTypes: ['falsifiable_claim'],
     });
 
     const payload: LearnerStateReviewPayload = {
@@ -259,6 +287,7 @@ class LearnerStateReviewService {
       diagnosis,
       beliefs,
       calibration,
+      claimCalibration,
       truthDiscovery,
     };
 
@@ -312,7 +341,9 @@ async function runModelDiagnosis(
         .catch(() => []),
     });
     const output: any = (result as any)?.output;
-    if (output && (output.insights?.length || output.conceptAssessments?.length || output.narrative)) {
+    // 2026-11-21 修复：此前只输出 falsifiableClaims（无 insights/assessments/narrative）时整份
+    // diagnosis 被丢弃——断言是评审的核心产物之一，不应因其它字段为空而蒸发。
+    if (output && (output.insights?.length || output.conceptAssessments?.length || output.narrative || output.falsifiableClaims?.length)) {
       return {
         source: 'model',
         diagnosis: {
@@ -385,6 +416,31 @@ function conceptsForEvidenceRefs(
     }
   }
   return Array.from(out);
+}
+
+/**
+ * claim 文本 → 概念键（2026-11-21 可证伪断言专用）：断言没有 evidenceRefs，
+ * 用「概念标签/键与 claim 文本互相包含」从台账与本路径概念态里认领，取 ≤3 个。
+ * 认领不到 → conceptKeys 为空 → 结算时按 unknown 处理（不计入命中率），与洞察口径一致。
+ */
+function conceptsForClaimText(claim: string, snapshot: any): string[] {
+  const text = normalizeConceptKey(claim);
+  if (!text) return [];
+  const knowledgeMemory = snapshot?.knowledgeMemory;
+  const ledger = Array.isArray(knowledgeMemory?.globalBackground?.conceptLedger)
+    ? knowledgeMemory.globalBackground.conceptLedger
+    : [];
+  const pathStates = Array.isArray(knowledgeMemory?.currentPath?.conceptStates)
+    ? knowledgeMemory.currentPath.conceptStates
+    : [];
+  const candidates = new Set<string>();
+  for (const item of [...pathStates, ...ledger]) {
+    const identity = (typeof item?.conceptKey === 'string' && item.conceptKey.trim()) || (typeof item?.label === 'string' && item.label.trim()) || '';
+    const normIdentity = normalizeConceptKey(identity);
+    if (!normIdentity || normIdentity.length < 2) continue;
+    if (text.includes(normIdentity) || normIdentity.includes(text)) candidates.add(identity);
+  }
+  return Array.from(candidates).slice(0, 3);
 }
 
 /** 从快照取最近证据，赋予稳定引用 id（诊断输出的 evidenceRefs 引用它）。 */

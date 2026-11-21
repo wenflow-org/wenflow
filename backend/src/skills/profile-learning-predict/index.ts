@@ -51,6 +51,19 @@ export interface LearningPredictorInput {
     knowledgeType?: string;
     learningObjectives?: string[];
   };
+  /** 2026-11-21 硬证据注入（全部可选、代码产出，非 LLM 转述）：缺失时调用方不传 */
+  /** 上一节平台确定式契约事实（lessonReport 投影）：最硬的证据，优先级高于摘要 */
+  contractGaps?: {
+    met?: boolean;
+    missingKcs?: string[];
+    exitTicketPassed?: boolean | null;
+  };
+  /** 近期代码裁决检查点独立成功率（judgedBy='code'）；sample=0 时调用方不传 */
+  checkpointEvidence?: { rate: number | null; sample: number };
+  /** FSRS 保持率偏低的记忆锚点（<0.8，≤5 条）：哪些旧知快忘了 */
+  retentionHints?: Array<{ concept: string; retrievability: number }>;
+  /** 当前负荷档位（代码判定） */
+  paceMode?: 'recover' | 'push' | 'steady';
 }
 
 export interface LearningPredictorOutput {
@@ -136,6 +149,11 @@ export async function learningPredictor(
             : '无历史摘要',
       };
       if (p.taskContext && typeof p.taskContext === 'object') ordered.taskContext = p.taskContext;
+      // 2026-11-21 硬证据键（声明顺序：contractGaps > checkpointEvidence > retentionHints > paceMode），
+      // 置于 taskContext 之后、按声明序固定键序；缺失的键不占位
+      for (const key of ['contractGaps', 'checkpointEvidence', 'retentionHints', 'paceMode'] as const) {
+        if (p[key] !== undefined && p[key] !== null) ordered[key] = p[key];
+      }
       // 保留声明外的额外键（不丢信息），置于稳定段之后
       for (const key of Object.keys(p)) {
         if (!(key in ordered)) ordered[key] = p[key];

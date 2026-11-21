@@ -404,3 +404,34 @@ export function buildPriorMilestoneMastery(learnerSnapshot: any): TeachingScenar
     }));
 }
 
+
+/**
+ * 上一节课的平台确定式契约事实（lessonReport 投影，代码产出）。
+ * 缺上一节 / 无 sessionArtifacts / 产物不是对象 → undefined（预测器按无该证据处理）。
+ * missingKcs 截到前 5 条：预测输入不需要全量缺口清单，够定方向即可。
+ * 导出：profile golden timelines 回放（profile-golden-timelines.test.ts）用它把夹具
+ * 里的上一节 teachingState 折算成预测硬证据，钉住「契约缺口进预测载荷」的接线。
+ */
+export function readPreviousLessonReport(previousSession?: { teachingState?: Record<string, any> | null } | null): {
+  met?: boolean;
+  missingKcs?: string[];
+  exitTicketPassed?: boolean | null;
+} | undefined {
+  const artifacts = (previousSession?.teachingState as {
+    sessionArtifacts?: { lessonReport?: Record<string, unknown> } | null;
+  } | null | undefined)?.sessionArtifacts;
+  const report = artifacts?.lessonReport;
+  if (!report || typeof report !== 'object') return undefined;
+  const missingKcs = Array.isArray(report.missingKcs)
+    ? report.missingKcs.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5)
+    : undefined;
+  const exitTicket = (report as { exitTicket?: { passed?: unknown } }).exitTicket;
+  const exitTicketPassed = exitTicket && typeof exitTicket === 'object' && typeof exitTicket.passed === 'boolean'
+    ? exitTicket.passed
+    : null;
+  return {
+    met: typeof report.met === 'boolean' ? report.met : undefined,
+    ...(missingKcs !== undefined ? { missingKcs } : {}),
+    exitTicketPassed,
+  };
+}
