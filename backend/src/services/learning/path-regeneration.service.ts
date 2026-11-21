@@ -70,6 +70,33 @@ export function extractStoredSourceConversationId(aiPromptTemplate?: string | nu
   return undefined
 }
 
+/**
+ * 重生成锁快照（资料跟路径生成走）：从原路径模板的资料 pack 快照提取 materialId 集合，
+ * 作为显式挂载列表回传给 path.coordinator——重试/重生成/重建不再重新扫库，
+ * 同一条路径的资料集在其生命周期内保持稳定（重扫会因资料库变化悄悄换掉路径资料）。
+ * 模板没有资料 pack（或全无 materialId）时返回 undefined：不携带字段 = 沿用存量自动语义。
+ */
+export function extractPathMaterialIds(parsed: Record<string, any> | null | undefined): string[] | undefined {
+  if (!parsed) return undefined
+  const candidates = [
+    parsed?.sceneFraming?.normalizedInput?.resources?.materials,
+    parsed?.normalizedInput?.resources?.materials,
+    parsed?.normalizedInputSnapshot?.resources?.materials,
+  ]
+  for (const list of candidates) {
+    if (!Array.isArray(list)) continue
+    const ids: string[] = []
+    for (const entry of list) {
+      const materialId = typeof entry?.pack?.materialId === 'string'
+        ? entry.pack.materialId
+        : (typeof entry?.materialId === 'string' ? entry.materialId : null)
+      if (materialId && !ids.includes(materialId)) ids.push(materialId)
+    }
+    if (ids.length > 0) return ids
+  }
+  return undefined
+}
+
 export function buildStoredGoalPathRequest(path: RegenerablePath, adjustments?: string | null) {
   const parsed = parsePromptTemplate(path.aiPromptTemplate)
   const goalFinalPayload = parsed?.goalFinalPayload && typeof parsed.goalFinalPayload === 'object'
@@ -99,6 +126,16 @@ export function buildStoredGoalPathRequest(path: RegenerablePath, adjustments?: 
     goalHandoffFields: goalFinalPayload.goalHandoffFields && typeof goalFinalPayload.goalHandoffFields === 'object'
       ? goalFinalPayload.goalHandoffFields
       : undefined,
+    // 重生成锁快照（资料跟路径生成走）：优先读 goalFinalPayload.materialIds（显式挂载随
+    // GoalPathRequest 持久化，失败占位路径重试时 packs 尚未写入），回落到资料 pack 快照。
+    // 显式空数组必须原样保留（[] = 显式不挂载，重生成零注入，不得回退扫库）；
+    // 两者皆无（老模板且零资料注入）=不携带字段，保持存量自动语义。
+    ...(() => {
+      const storedIds = Array.isArray(goalFinalPayload.materialIds)
+        ? goalFinalPayload.materialIds.map((id: unknown) => String(id || '').trim()).filter(Boolean)
+        : extractPathMaterialIds(parsed);
+      return storedIds !== undefined ? { materialIds: storedIds } : {};
+    })(),
   }
 }
 
@@ -143,6 +180,10 @@ export async function buildGoalPathRequestFromConversation(path: RegenerablePath
     prerequisiteCheckResults: Array.isArray(collectedData.understanding?.prerequisiteCheckResults)
       ? collectedData.understanding.prerequisiteCheckResults
       : null,
+    // 重生成锁快照：沿用原路径注入的资料集（显式口径），不再重新扫库
+    ...(extractPathMaterialIds(parsePromptTemplate(path.aiPromptTemplate))
+      ? { materialIds: extractPathMaterialIds(parsePromptTemplate(path.aiPromptTemplate)) }
+      : {}),
   }
 }
 

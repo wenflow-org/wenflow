@@ -200,3 +200,38 @@ describe('#176-4 goal 资料排序会话级缓存', () => {
     expect(mockSelectMaterialsRanked).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('显式挂载分支（资料跟路径生成走，2026-11-21）', () => {
+  it('materialIds 提供时跳过排序选择，按挂载顺序直取记录，全部 selectedForPath=true', async () => {
+    const result = await collectGoalUploadedMaterialSummaries('user-1', '任意 query', {
+      conversationId: 'conv-explicit',
+      materialIds: ['b-health', 'a-python'],
+    });
+
+    expect(mockSelectMaterialsRanked).not.toHaveBeenCalled();
+    expect(result.map((item) => item.name)).toEqual(['健康饮食指南.md', 'Python 循环入门.md']);
+    expect(result.every((item) => item.selectedForPath === true)).toBe(true);
+    expect(result.every((item) => item.libraryOmitted === 0)).toBe(true);
+  });
+
+  it('挂载 id 缺失/非上传来源 → 忽略该项，不阻塞其余', async () => {
+    const result = await collectGoalUploadedMaterialSummaries('user-1', 'q', {
+      materialIds: ['missing-id', 'a-python'],
+    });
+
+    expect(result.map((item) => item.name)).toEqual(['Python 循环入门.md']);
+  });
+
+  it('显式空数组 → 零注入，且不进排序链路', async () => {
+    const result = await collectGoalUploadedMaterialSummaries('user-1', 'q', { materialIds: [] });
+
+    expect(result).toEqual([]);
+    expect(mockSelectMaterialsRanked).not.toHaveBeenCalled();
+  });
+
+  it('不提供 materialIds（undefined）→ 沿用自动排序语义（存量/VL 兼容）', async () => {
+    await collectGoalUploadedMaterialSummaries('user-1', 'q', {});
+
+    expect(mockSelectMaterialsRanked).toHaveBeenCalledTimes(1);
+  });
+});

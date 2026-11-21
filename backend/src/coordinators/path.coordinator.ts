@@ -14,7 +14,7 @@ import {
   buildPackFromMaterialAsync,
   MAX_UPLOAD_MATERIAL_PACKS,
 } from '../services/materials/material-pack.builder';
-import { readMaterial, type MaterialRecord } from '../services/materials/material-store';
+import { readMaterial, readRecord, type MaterialRecord } from '../services/materials/material-store';
 import { materialRecordHasPhraseHit, selectMaterialsRanked } from '../services/materials/material-selection.service';
 import { applyMaterialRerankGate } from '../services/materials/material-rerank.service';
 import { partitionMaterialNeeds, deriveMaterialNeedsFromGoalText, mergeDeclaredAndDerivedNeeds } from '../services/materials/material-need-origin';
@@ -335,6 +335,12 @@ export interface GoalPathRequest {
   confidenceScores?: any;
   /** 澄清契约（2026-11-20 Phase 2）：Goal 的第一性产物，Path 直接读它而不是身份标签 */
   clarification?: ClarificationContract | null;
+  /**
+   * 显式挂载资料 id 列表（资料跟路径生成走）。数组（含 []）=显式口径：只按这些 id 直取
+   * 记录建 pack，跳过资料库排序与 rerank 闸，[] 表示零注入；undefined（存量/VL/直连
+   * POST /paths/generate）=沿用资料库自动扫库语义，行为与今天一致。
+   */
+  materialIds?: string[];
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -946,53 +952,84 @@ class PathCoordinator {
     ]
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
       .join(' ');
-    // 资料库选择：词面排序 + 决策模型重排（jev-1.14.0，AUC 0.908；未配置/失败退词面序）。
-    const uploadSelection = uploadUserId
-      ? await selectMaterialsRanked({
-          userId: uploadUserId,
-          query: materialSelectionQuery,
-          limit: MAX_UPLOAD_MATERIAL_PACKS,
-          includeWeb: false,
-        })
-      : {
-          selected: [] as MaterialRecord[],
-          omitted: [] as MaterialRecord[],
-          total: 0,
-          strategy: 'recent' as const,
-          hasPhraseHit: false,
-        };
-    // 注入 rerank 闸门（2026-10-21 评测：bge-reranker-v2-m3 误杀≤2% 时拦 57.1%；
-    // 阈值 MATERIAL_RERANK_GATE_MIN_SCORE 缺省 0.29；未配置/失败 fail-open 全放行）。
-    const rerankGate = await applyMaterialRerankGate({
-      query: materialSelectionQuery,
-      records: uploadSelection.selected,
-    });
-    const gatedSelected = rerankGate.kept;
-    // 2026-10-21 离线对比裁决（doc/local/RESOURCE-LIBRARY-OPT-2026-10-20/INJECTION-GATE-COMPARISON.md）：
-    // 片段闸门拿去过滤注入会误杀"学科相关但措辞无 4 字重叠"的真引用资料（60 条真实路径里 9/15），
-    // 故这里只记录不过滤——无片段命中的名单进日志供观测。
-    const noPhraseHit = gatedSelected.filter(
-      (record) => !materialRecordHasPhraseHit(materialSelectionQuery, record)
-    );
-    if (uploadUserId && uploadSelection.total > 0) {
-      logger.info('[path-coordinator] 资料库选择', {
-        total: uploadSelection.total,
-        selected: gatedSelected.map((record) => record.name),
-        omitted: uploadSelection.omitted.map((record) => record.name),
-        gateDropped: rerankGate.dropped.map((record) => record.name),
-        gateApplied: rerankGate.applied,
-        noPhraseHit: noPhraseHit.map((record) => record.name),
-        strategy: uploadSelection.strategy,
-        query: materialSelectionQuery.slice(0, 120),
+    // 显式挂载分支（资料跟路径生成走）：请求携带 materialIds 数组（含 []）时只按给定 id
+    // 直取记录建 pack——顺序保留、所有权随 readRecord 校验、缺失/非上传来源忽略，
+    // **不做**资料库排序与 rerank 闸；[] 表示用户显式不挂载，零扫描零注入。
+    // undefined（存量会话 / VL / 直连 POST /paths/generate）=沿用资料库自动扫库语义。
+    const explicitMaterialIds = Array.isArray(input.materialIds)
+      ? input.materialIds.map((id) => String(id || '').trim()).filter(Boolean)
+      : null;
+    let gatedSelected: MaterialRecord[];
+    if (explicitMaterialIds !== null) {
+      const picked: MaterialRecord[] = [];
+      const missing: string[] = [];
+      for (const id of explicitMaterialIds) {
+        if (picked.some((record) => record.id === id)) continue;
+        const record = uploadUserId ? readRecord(uploadUserId, id) : null;
+        if (record && record.origin !== 'web') picked.push(record);
+        else missing.push(id);
+      }
+      gatedSelected = picked;
+      if (uploadUserId) {
+        logger.info('[path-coordinator] 资料挂载', {
+          mode: explicitMaterialIds.length === 0 ? 'explicit-empty' : 'explicit',
+          requested: explicitMaterialIds,
+          selected: picked.map((record) => record.name),
+          missing,
+          query: materialSelectionQuery.slice(0, 120),
+        });
+      }
+    } else {
+      // 资料库选择：词面排序 + 决策模型重排（jev-1.14.0，AUC 0.908；未配置/失败退词面序）。
+      const uploadSelection = uploadUserId
+        ? await selectMaterialsRanked({
+            userId: uploadUserId,
+            query: materialSelectionQuery,
+            limit: MAX_UPLOAD_MATERIAL_PACKS,
+            includeWeb: false,
+          })
+        : {
+            selected: [] as MaterialRecord[],
+            omitted: [] as MaterialRecord[],
+            total: 0,
+            strategy: 'recent' as const,
+            hasPhraseHit: false,
+          };
+      // 注入 rerank 闸门（2026-10-21 评测：bge-reranker-v2-m3 误杀≤2% 时拦 57.1%；
+      // 阈值 MATERIAL_RERANK_GATE_MIN_SCORE 缺省 0.29；未配置/失败 fail-open 全放行）。
+      const rerankGate = await applyMaterialRerankGate({
+        query: materialSelectionQuery,
+        records: uploadSelection.selected,
       });
-      if (gatedSelected.length > 0) {
-        try {
-          await collectBriefsWithDeadline(gatedSelected, 90_000);
-        } catch (error) {
-          logger.warn('[path-coordinator] 附件 brief 就绪失败（fail-open）', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+      gatedSelected = rerankGate.kept;
+      // 2026-10-21 离线对比裁决（doc/local/RESOURCE-LIBRARY-OPT-2026-10-20/INJECTION-GATE-COMPARISON.md）：
+      // 片段闸门拿去过滤注入会误杀"学科相关但措辞无 4 字重叠"的真引用资料（60 条真实路径里 9/15），
+      // 故这里只记录不过滤——无片段命中的名单进日志供观测。
+      const noPhraseHit = gatedSelected.filter(
+        (record) => !materialRecordHasPhraseHit(materialSelectionQuery, record)
+      );
+      if (uploadUserId && uploadSelection.total > 0) {
+        logger.info('[path-coordinator] 资料库选择', {
+          total: uploadSelection.total,
+          selected: gatedSelected.map((record) => record.name),
+          omitted: uploadSelection.omitted.map((record) => record.name),
+          gateDropped: rerankGate.dropped.map((record) => record.name),
+          gateApplied: rerankGate.applied,
+          noPhraseHit: noPhraseHit.map((record) => record.name),
+          strategy: uploadSelection.strategy,
+          query: materialSelectionQuery.slice(0, 120),
+        });
+      }
+    }
+
+    // 附件 brief 惰性就绪（两条分支同需求）：到点未就绪的照常以 pack 进路径（brief=null）。
+    if (gatedSelected.length > 0) {
+      try {
+        await collectBriefsWithDeadline(gatedSelected, 90_000);
+      } catch (error) {
+        logger.warn('[path-coordinator] 附件 brief 就绪失败（fail-open）', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 

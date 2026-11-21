@@ -56,7 +56,7 @@
         @dragleave.prevent="onBoxDragLeave"
         @drop.prevent="onBoxDrop"
       >
-        <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
+        <MaterialUploadArea ref="uploadRef" v-model="attachedMaterials" @change="materialCount = $event" />
         <label class="visually-hidden" for="goal-entry-input">你想解决什么</label>
         <div class="composer__box" :class="{ 'composer__box--dropping': boxDropping }">
           <button
@@ -441,7 +441,7 @@
           @dragleave.prevent="onBoxDragLeave"
           @drop.prevent="onBoxDrop"
         >
-          <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
+          <MaterialUploadArea ref="uploadRef" v-model="attachedMaterials" @change="materialCount = $event" />
           <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
           <div class="composer__box" :class="{ 'composer__box--dropping': boxDropping }">
             <button
@@ -599,7 +599,7 @@
              单一焦点，声明与「确认/再补充」抢同一块视觉重量；全断面唯一的 AI 声明出口
              是输入框正下方的 .chat__under-hint（移动端由底部导航档接管） -->
         <div v-if="materialCount" class="proposal__note">
-          <span>已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
+          <span>已挂载 {{ materialCount }} 份资料，将随本次目标进入路径生成；未挂载的资料库文件不会参与生成。</span>
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
 
@@ -669,6 +669,19 @@
             <button type="button" class="btn-primary btn-primary--lg" @click="proposalDismissed = true; proposalReviewRequested = false">回到对话</button>
           </div>
         </template>
+        <!-- 无路径终局（answer-only / no_path）：既不是硬阻断，也绝不是「路径已创建」。
+             服务端已显式落 terminalKind；这里给「继续补充目标」的出口，输入框保持可用，
+             下一次发送会把会话重新打开（后端 continueConversation 的 reopen 分支）。 -->
+        <template v-else-if="live.reopenableTerminal">
+          <span class="done-ring" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          </span>
+          <h2 class="proposal__title">本次对话已结束</h2>
+          <p class="proposal__generating-note">这次没有生成学习路径。想补充目标、换个方向或继续追问，直接在对话里发送即可。</p>
+          <div class="proposal__actions proposal__actions--center">
+            <button type="button" class="btn-primary btn-primary--lg" @click="continueSupplementalGoal">继续补充目标</button>
+          </div>
+        </template>
         <template v-else>
         <span class="done-ring">
           <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
@@ -718,6 +731,7 @@ import { isProbeAnswer, probeAnswerParts } from './probeAnswer';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
+import type { UploadedMaterial } from '@/api/materials';
 import { hasUserSession } from '@/utils/api';
 import { useUserStore } from '@/stores/user';
 import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid, clearGoalGenTracking, getGoalGenTracking, setGoalGenTracking } from '@/utils/sessionCleanup';
@@ -747,7 +761,7 @@ const INPUT_MAX = 4096;
    各占一整行把面板撑到要滚动；这两项改半宽小卡并排，面板一屏更装得下 */
 /* 双视图（初始态/会话态）各自渲染一份的错误条与输入提示，文案收成单源避免改一处漏一处 */
 const CONNECT_FAIL_MSG = '连接失败，没能开始对话。';
-const ATTACH_HINT = '添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框';
+const ATTACH_HINT = '挂载资料（进入本次路径生成）：从资料库勾选或上传新文件，也可以直接拖到输入框';
 const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
 /** 生成中发送键变成停止方块：补一句 hover 说明，纯图标按钮不靠自己猜 */
 const STOP_WAIT_HINT = '停止等待回复';
@@ -766,6 +780,7 @@ const chatPlaceholder = computed(() => {
       // 合并取舍：develop 的硬阻断分支 + 本分支「done 但确实没有路径」的兜底。
       // 只取 develop 会把「非硬阻断的异常无路径态」说成「路径已创建」（假成功正是它的反面）。
       if (live.hardBlocked) return '这一目标不会生成路径，可回对话补充说明';
+      if (live.reopenableTerminal) return '本次没有生成学习路径，可直接补充目标或继续追问';
       return live.learningPath
         ? '路径已创建，先在弹窗里选择下一步'
         : '本次没有生成学习路径，原因见弹窗';
@@ -880,6 +895,8 @@ function resetToEntry() {
   live.resetView();
   phase.value = 'preview';
   input.value = '';
+  // 挂载列表归零（资料跟路径生成走）：新目标干净起步，旧资料不会静默跟到下一次生成
+  attachedMaterials.value = [];
 }
 
 /** 路由 cid 恢复入口：失败且本地无会话可回退时明示——否则坏 cid 链接打开
@@ -1042,9 +1059,15 @@ function recentTime(at: number): string {
 /** 当前展示轮的快捷补充入口（快选为勾选语义：全部常驻，点选打勾，再点取消） */
 const currentQuickReplies = ref<Array<{ text: string; icon?: string }>>([]);
 
-/* ---------- 资料附件层（回形针内置输入框 + 输入框即拖放目标） ---------- */
+/* ---------- 资料挂载层（资料跟路径生成走）：挂载列表随对话走，随请求带给后端 ---------- */
 const uploadRef = ref<{ openPicker: () => void; addFiles: (files: File[]) => void } | null>(null);
 const materialCount = ref(0);
+/** 本次目标显式挂载的资料：MaterialUploadArea 双向维护；变化时整包同步进 useGoalLive，
+ *  随 start/reply/confirm 请求以 materialIds 带给后端（空列表 = 本次不注入资料）。 */
+const attachedMaterials = ref<UploadedMaterial[]>([]);
+watch(attachedMaterials, (list) => {
+  live.setAttachedMaterials(list.map((material) => material.id));
+});
 const boxDropping = ref(false);
 let boxDragDepth = 0;
 function onBoxDragEnter() { boxDragDepth++; boxDropping.value = true; }
@@ -1363,7 +1386,7 @@ function isGeneratingRecent(r: RecentGoalEntry): boolean {
     跟踪未建立（旧信封无 learningPath 等）回退原句，不做无凭据的宣称。
     分诊硬阻断终局不走本句：阻断卡有自己的说明（见模板 hardBlocked 分支）。 */
 const doneGenNote = computed(() => {
-  if (live.hardBlocked) return '';
+  if (live.hardBlocked || live.reopenableTerminal) return '';
   const lc = genTrack.value?.lc;
   if (!lc) return '阶段与任务还在生成中。';
   if (lc.status === 'failed' || lc.status === 'stale') return '生成没有完成，可在学习路径里重试。';
@@ -1551,7 +1574,11 @@ watch(
     if (!live.started && !live.conversationId) return;
     if (live.isCompleted || live.stage === 'completed' || live.stage === 'ready' || live.learningPath) {
       phase.value = 'done';
+      return;
     }
+    // 无路径终局被重新打开（用户「继续补充目标」后服务端把会话置回 proposing/understanding）：
+    // 收尾面板必须退出，否则新一轮的澄清/提案会被旧的 done 面板盖住。
+    if (phase.value === 'done') phase.value = 'preview';
   },
   { immediate: true }
 );
@@ -1584,6 +1611,14 @@ async function doConfirm() {
 /** 「继续微调方向」→ 退回聊天界面（2026-11-05 用户裁定）：方案本就活在对话流里，
     补充 = 发一条普通消息让 AI 更新方案；关浮层并聚焦聊天输入框，之后可从「查看方案」重开确认 */
 function supplementViaChat() {
+  proposalDismissed.value = true;
+  proposalReviewRequested.value = false;
+  void nextTick(() => chatInputEl.value?.focus());
+}
+
+/** 无路径终局（answer-only / no_path）：「继续补充目标」关掉结果面板并聚焦输入框。
+    会话不被锁死——下一次发送由后端重新打开同一会话继续处理。 */
+function continueSupplementalGoal() {
   proposalDismissed.value = true;
   proposalReviewRequested.value = false;
   void nextTick(() => chatInputEl.value?.focus());

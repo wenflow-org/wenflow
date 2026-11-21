@@ -7,7 +7,7 @@ const COORDINATOR_ID = 'goal-agent';
 class RequirementCoordinator {
   readonly id = COORDINATOR_ID;
 
-  async start(userId: string, goal: string, options?: { contextMode?: 'recent' | 'full' }) {
+  async start(userId: string, goal: string, options?: { contextMode?: 'recent' | 'full'; materialIds?: string[] }) {
     logger.info('[requirement-coordinator] start', {
       agentId: this.id,
       userId,
@@ -17,7 +17,7 @@ class RequirementCoordinator {
     return goalConversationService.startConversation(userId, goal, options);
   }
 
-  async step(conversationId: string, reply: string, userId: string, options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean; probeAnswers?: unknown[]; meta?: Record<string, number> | null }) {
+  async step(conversationId: string, reply: string, userId: string, options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean; probeAnswers?: unknown[]; materialIds?: string[]; meta?: Record<string, number> | null }) {
     logger.info('[requirement-coordinator] step', {
       agentId: this.id,
       userId,

@@ -204,7 +204,7 @@ interface GoalEnvelope {
   ext?: { goalConversation?: { understanding?: Record<string, unknown>; responseTriage?: { mode: string }; [key: string]: unknown } };
 }
 
-function buildAiResponse(overrides: { userVisible?: string; understanding?: Record<string, unknown>; stage?: string }) {
+function buildAiResponse(overrides: { userVisible?: string; understanding?: Record<string, unknown>; stage?: string; confirmedProposal?: unknown }) {
   return {
     userVisible: overrides.userVisible ?? '好的，我重新理解一下你的目标。',
     debug: { structuredOutputValid: true },
@@ -213,6 +213,7 @@ function buildAiResponse(overrides: { userVisible?: string; understanding?: Reco
       ext: {
         goalConversation: {
           understanding: overrides.understanding ?? BLOCKED_UNDERSTANDING,
+          confirmedProposal: overrides.confirmedProposal,
           nextQuestions: [],
           quickReplies: [],
           collected: {},
@@ -267,23 +268,24 @@ beforeEach(() => {
 });
 
 describe('completed 硬阻断会话：补充说明重判通过', () => {
-  it('追加新消息进对话并重新分诊，通过后按确认链路生成路径并回写 learningPathId', async () => {
-    // #162：重判通过只是撤掉分诊闸门，生成路径还要求会话里有一份可确认的提案。
-    // 这里先备上完整提案——若缺了它，下面「通过后生成」的断言就会落到「回到 proposing」上。
-    seedBlockedCompletedConversation({ confirmedProposal: CONFIRMABLE_PROPOSAL });
+  it('补充说明解除阻断后展示新提案，只在再次确认后建路径', async () => {
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
       userVisible: '明白，你想学的是可判定的冲煮知识本身。',
       understanding: REJUDGED_UNDERSTANDING,
+      confirmedProposal: CONFIRMABLE_PROPOSAL,
     }));
 
-    const result = await goalConversationService.continueConversation(
-      'conv-1',
-      '其实我想学的是注水手法和粉水比这些知识本身',
-      'user-1'
+    const reopened = await goalConversationService.continueConversation(
+      'conv-1', '其实我想学的是注水手法和粉水比这些知识本身', 'user-1'
     );
-
-    // 新消息真的被读取（模型重判回合发生），不再是 0 秒短路
+    expect(reopened.internal.core).toMatchObject({ stage: 'proposing', isCompleted: false, learningPath: null });
     expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(JSON.parse(conversationRecord.collectedData).messages).toContainEqual(expect.objectContaining({
+      role: 'user', content: '其实我想学的是注水手法和粉水比这些知识本身',
+    }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '确认新提案', 'user-1', { confirmProposal: true });
     expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
 
     // 返回成功与新生成的路径（占位 generating 态）
@@ -303,9 +305,7 @@ describe('completed 硬阻断会话：补充说明重判通过', () => {
       messages: Array<{ role: string; content: string }>;
       responseTriage: { mode: string };
     };
-    const lastUser = persisted.messages[persisted.messages.length - 2];
-    expect(lastUser).toEqual(expect.objectContaining({ role: 'user', content: '其实我想学的是注水手法和粉水比这些知识本身' }));
-    expect(persisted.messages[persisted.messages.length - 1].role).toBe('ai');
+    expect(persisted.messages).toContainEqual(expect.objectContaining({ role: 'user', content: '确认新提案' }));
 
     // 分诊按新 understanding 重算落库，并透传进路径生成请求
     expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'learning_path' }));
@@ -315,10 +315,9 @@ describe('completed 硬阻断会话：补充说明重判通过', () => {
   });
 
   it('重复补充说明不重复建路：已绑路径后返回已有路径（同一会话只允许一条活路径）', async () => {
-    // 首次补充说明要能生成路径，同样需要完整提案（#162 后置门禁）
-    seedBlockedCompletedConversation({ confirmedProposal: CONFIRMABLE_PROPOSAL });
-    mockExecuteSkill.mockResolvedValue(buildAiResponse({ understanding: REJUDGED_UNDERSTANDING }));
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({ understanding: REJUDGED_UNDERSTANDING, confirmedProposal: CONFIRMABLE_PROPOSAL }));
     await goalConversationService.continueConversation('conv-1', '其实我想学的是知识本身', 'user-1');
+    await goalConversationService.continueConversation('conv-1', '确认新提案', 'user-1', { confirmProposal: true });
     expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
     const boundPathId = conversationRecord.learningPathId;
     expect(boundPathId).toBeTruthy();
@@ -368,7 +367,7 @@ describe('completed 硬阻断会话：重判通过但无可用提案（#162 另�
 
     // 回到 proposing：可继续推进（不是 completed 终局、也不是硬阻断）
     const internal = result.internal as GoalEnvelope;
-    expect(internal.core.stage).toBe('proposing');
+    expect(internal.core.stage).toBe('understanding');
     expect(internal.core.isCompleted).toBe(false);
     expect(internal.core.learningPath).toBeNull();
     expect((internal.core as { hardBlocked?: boolean }).hardBlocked).toBe(false);
@@ -378,14 +377,13 @@ describe('completed 硬阻断会话：重判通过但无可用提案（#162 另�
     expect(result.userVisible).toBe('我先按你说的方向整理出一版提案，你确认后我再生成学习路径。');
 
     // 落库侧同步回到可推进态，避免下一次 /reply 又按 completed 短路
-    expect(conversationRecord.stage).toBe('proposing');
+    expect(conversationRecord.stage).toBe('understanding');
     expect(conversationRecord.status).toBe('active');
+    expect(JSON.parse(conversationRecord.collectedData).confirmedProposal).toBeNull();
   });
 
-  it('confirmedProposal 半截（只有方向与交付物、没有阶段）→ 同样不生成路径，回到 proposing', async () => {
-    seedBlockedCompletedConversation({
-      confirmedProposal: { learning_direction: '先练注水手法', first_deliverable: '一杯手冲咖啡', key_stages: [] },
-    });
+  it('本轮未给提案时清除旧提案，继续澄清', async () => {
+    seedBlockedCompletedConversation({ confirmedProposal: CONFIRMABLE_PROPOSAL });
     mockExecuteSkill.mockResolvedValue(buildAiResponse({ understanding: REJUDGED_UNDERSTANDING }));
 
     const result = await goalConversationService.continueConversation('conv-1', '补充说明一下', 'user-1');
@@ -394,7 +392,7 @@ describe('completed 硬阻断会话：重判通过但无可用提案（#162 另�
     expect(prismaMock.learning_paths.create).not.toHaveBeenCalled();
     expect(mockClaimPathCoreGeneration).not.toHaveBeenCalled();
     const internal = result.internal as GoalEnvelope;
-    expect(internal.core.stage).toBe('proposing');
+    expect(internal.core.stage).toBe('understanding');
     expect(internal.core.learningPath).toBeNull();
   });
 });
@@ -499,7 +497,7 @@ describe('非硬阻断终局的普通 completed 会话：行为不回归', () =>
     expect(internal.core.learningPath).toEqual({ id: 'lp-designing', status: 'active' });
   });
 
-  it('无路径且存档分诊非硬阻断 → 照旧短路返回，不触发 LLM（referral 但 judgeable）', async () => {
+  it('无路径且存档分诊非硬阻断 → 补充说明重新进入对话', async () => {
     conversationRecord.collectedData = JSON.stringify({
       messages: [],
       understanding: { real_problem: '没权限走审批' },
@@ -510,12 +508,12 @@ describe('非硬阻断终局的普通 completed 会话：行为不回归', () =>
 
     const result = await goalConversationService.continueConversation('conv-1', '还有个问题', 'user-1');
 
-    expect(mockExecuteSkill).not.toHaveBeenCalled();
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
-    expect(result.userVisible).toBe('学习路径已经生成，可以去查看啦！');
+    expect(result.userVisible).not.toContain('学习路径已经生成');
   });
 
-  it('无路径且无存档分诊 → 照旧短路返回，不触发 LLM', async () => {
+  it('历史无路径终态 → 可继续补充', async () => {
     conversationRecord.collectedData = JSON.stringify({
       messages: [],
       understanding: { real_problem: '随便聊聊' },
@@ -525,7 +523,8 @@ describe('非硬阻断终局的普通 completed 会话：行为不回归', () =>
 
     const result = await goalConversationService.continueConversation('conv-1', '在吗', 'user-1');
 
-    expect(mockExecuteSkill).not.toHaveBeenCalled();
-    expect(result.userVisible).toBe('学习路径已经生成，可以去查看啦！');
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.userVisible).not.toContain('学习路径已经生成');
   });
 });

@@ -37,11 +37,24 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
-import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_COMPLETED_USER_VISIBLE, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible, resolvePathCompletionUserVisible } from './goal-conversation.exit';
+import {
+  buildCompletedConversationResult,
+  buildHardBlockMessage,
+  buildHardBlockResult,
+  clearGoalTerminal,
+  isReopenableGoalTerminal,
+  markGoalTerminal,
+  PATH_COMPLETED_USER_VISIBLE,
+  PATH_GENERATING_USER_VISIBLE,
+  resolveConversationUserVisible,
+  resolveGoalTerminalKind,
+  resolvePathCompletionUserVisible,
+  type GoalTerminalKind,
+} from './goal-conversation.exit';
 import { getPathCompletionProjection } from './goal-conversation.path-projection';
 import { buildGoalConversationExt } from './goal-conversation.ext';
 import { buildClarificationShadowObservation } from './goal-clarification-contract';
-import { enforceClarificationGate } from './goal-clarification-gate';
+import { enforceClarificationConfirmationGate, enforceClarificationGate } from './goal-clarification-gate';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -69,6 +82,46 @@ interface GoalConversationOptions {
    * 入参是请求原始形态，逐项校验见 goal-probe-answers.normalizeProbeAnswerInput。
    */
   probeAnswers?: unknown[];
+  /**
+   * 显式挂载的资料 id 列表（资料跟路径生成走）：进入即整包覆盖会话挂载列表。
+   * undefined=调用方未声明（存量/VL 链路 → 沿用资料库自动扫库语义）；
+   * 数组（含 []）=显式口径——路径生成只使用这些资料，[] 表示零注入。
+   * 上限 GOAL_MATERIAL_ATTACH_LIMIT=3，与 MAX_UPLOAD_MATERIAL_PACKS 对齐。
+   */
+  materialIds?: string[];
+}
+
+/** 显式挂载上限：与 path 层 MAX_UPLOAD_MATERIAL_PACKS / GOAL_PATH_MATERIAL_LIMIT 同一数字。 */
+export const GOAL_MATERIAL_ATTACH_LIMIT = 3;
+
+/**
+ * 挂载列表输入净化：只留非空字符串、去重保序、截到上限。
+ * 输入不是数组时返回 undefined（调用方未声明）；是数组时恒返回数组（可能为空 = 显式不挂载）。
+ */
+export function sanitizeMaterialIdsInput(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const id = typeof item === 'string' ? item.trim() : '';
+    if (id && !seen.has(id)) seen.add(id);
+    if (seen.size >= GOAL_MATERIAL_ATTACH_LIMIT) break;
+  }
+  return [...seen];
+}
+
+/**
+ * goal_conversations.materialIds 列（JSON 文本）→ string[] | null。
+ * null=存量语义（列缺失/损坏 → 自动扫库兜底）；[] 与非空数组=显式口径。
+ */
+export function parseConversationMaterialIds(raw: string | null | undefined): string[] | null {
+  if (raw === null || raw === undefined) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.map((id) => String(id || '').trim()).filter(Boolean);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -329,6 +382,8 @@ class GoalConversationService {
     isCompleted?: boolean;
     learningPath?: any;
     userVisible?: string;
+    /** 显式终局类型（answer_only / no_path / hard_blocked / path_bound） */
+    terminalKind?: GoalTerminalKind;
     /**
      * 持久化快照回填（#159）：落库侧 updateCollectedData 是「字段缺席保留旧值」，
      * 但响应侧此前只取本轮模型输出。模型某轮没再复述 confirmedProposal（delta 语义缺席=不变，
@@ -357,7 +412,8 @@ class GoalConversationService {
           stage,
           confidence,
           isCompleted: overrides?.isCompleted ?? (stage === 'ready' || stage === 'completed'),
-          ...(overrides?.learningPath !== undefined ? { learningPath: overrides.learningPath } : {})
+          ...(overrides?.learningPath !== undefined ? { learningPath: overrides.learningPath } : {}),
+          ...(overrides?.terminalKind ? { terminalKind: overrides.terminalKind } : {})
         },
         ext: {
           goalConversation: {
@@ -478,7 +534,12 @@ class GoalConversationService {
   private buildConfirmedResult(
     conversationId: string,
     data: Record<string, any>,
-    learningPath: { id: string; status?: string; lifecycle?: string | null } | null
+    learningPath: {
+      id: string;
+      status?: string;
+      lifecycle?: string | null;
+      canStartLearning?: boolean | null;
+    } | null
   ) {
     // #228：与 GET 快照 / /reply 早退共用同一个分档函数（原先此处另写一份 status 判定）；
     // 未绑路径时保持「正在生成」，绝不谎称已生成。
@@ -486,6 +547,7 @@ class GoalConversationService {
       ? resolvePathCompletionUserVisible({
           lifecycle: learningPath.lifecycle,
           status: learningPath.status,
+          canStartLearning: learningPath.canStartLearning,
           readyText: PATH_COMPLETED_USER_VISIBLE,
         })
       : PATH_GENERATING_USER_VISIBLE;
@@ -498,7 +560,8 @@ class GoalConversationService {
           confidence: data.confidence || 0.9,
           isCompleted: true,
           // lifecycle 只是文案的输入，不进响应信封（保持既有 payload 形状）
-          learningPath: learningPath ? { id: learningPath.id, status: learningPath.status } : null
+          learningPath: learningPath ? { id: learningPath.id, status: learningPath.status } : null,
+          terminalKind: 'path_bound' as const
         },
         ext: {
           goalConversation: buildGoalConversationExt({
@@ -521,7 +584,14 @@ class GoalConversationService {
     return this.buildConfirmedResult(
       conversationId,
       latestData,
-      winnerPath ? { id: winnerPath.id, status: winnerPath.status, lifecycle: winnerPath.lifecycle } : null
+      winnerPath
+        ? {
+            id: winnerPath.id,
+            status: winnerPath.status,
+            lifecycle: winnerPath.lifecycle,
+            canStartLearning: winnerPath.canStartLearning,
+          }
+        : null
     );
   }
 
@@ -545,6 +615,9 @@ class GoalConversationService {
       // 负荷画像（虚拟学习者链路提供；真实用户为空 ⇒ 零写入、零行为变化）
       const loadProfile = normalizeLearnerLoadProfile(options?.learnerLoadProfile);
 
+      // 显式挂载资料（资料跟路径生成走）：本次请求声明的列表整包落库（复用/新建两分支同口径）。
+      // undefined=调用方未声明（VL 链路等）→ 不写列，沿用存量自动扫库语义。
+      const attachedMaterialIds = sanitizeMaterialIdsInput(options?.materialIds);
       if (conversation && !this.hasAiReplyInCollectedData(conversation)) {
         logger.warn('复用未完成的相同目标会话（防止重复 active 会话堆积）', {
           userId,
@@ -554,6 +627,12 @@ class GoalConversationService {
         if (loadProfile) {
           await this.persistLoadProfileIntoConversation(conversation.id, loadProfile);
         }
+        if (attachedMaterialIds) {
+          await prisma.goal_conversations.update({
+            where: { id: conversation.id },
+            data: { materialIds: JSON.stringify(attachedMaterialIds) }
+          });
+        }
       } else {
         conversation = await prisma.goal_conversations.create({
           data: {
@@ -562,6 +641,7 @@ class GoalConversationService {
             description: initialGoal,
             stage: 'understanding',
             messages: '[]', // 初始化为空 JSON 数组（后续 append 双写同步，见 saveMessage/updateConversationLifecycle）
+            ...(attachedMaterialIds ? { materialIds: JSON.stringify(attachedMaterialIds) } : {}),
             collectedData: JSON.stringify({
               messages: [],       // 对话历史
               collected: {},      // 已收集的信息
@@ -572,6 +652,7 @@ class GoalConversationService {
               structuredData: null,
               confidenceScores: null,
               learningPath: null,
+              clarificationContractVersion: 1,
               // 顶层承载负荷画像：后续 updateCollectedData / lifecycle 都是整包读改写，
               // 未知顶层键会被原样保留（不会被覆盖），故放在这里最稳。
               ...(loadProfile ? { learnerLoadProfile: loadProfile } : {})
@@ -604,6 +685,7 @@ class GoalConversationService {
       // Phase 3：契约不允许提案时，把本轮改写成澄清回合（默认开启，GOAL_CLARIFICATION_ENFORCE=0 回滚）。
       responseWithConversationId = enforceClarificationGate(responseWithConversationId, {
         conversationId: conversation.id,
+        requireContract: true,
         onBlocked: (info) => logger.warn('[goal-clarification-enforce] 提案已拦截并改写为澄清提问', info),
       });
 
@@ -611,9 +693,27 @@ class GoalConversationService {
       await this.saveMessage(conversation.id, 'ai', responseWithConversationId.userVisible, null, { quickReplies: openingGoalExt.quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
-      await this.updateCollectedData(conversation.id, responseWithConversationId);
+      const persistedOpeningData = await this.updateCollectedData(conversation.id, responseWithConversationId);
 
       const stage = this.resolveStageFromResponse(responseWithConversationId);
+      // 首轮即 completed 且没有提案：answer-only / not_judgeable 的合法收口。
+      // 显式落终局类型并把 status 一并收口，避免行停在 active、前端把无路径完成当成功。
+      if (stage === 'completed' && !persistedOpeningData?.confirmedProposal) {
+        await this.updateConversationLifecycle(conversation.id, 'completed', {
+          status: 'completed',
+          completedAt: new Date(),
+          mutateCollectedData: (data) => markGoalTerminal(data, 'answer_only'),
+        });
+        logger.info('首轮 answer-only / not_judgeable 收口，不生成学习路径', {
+          conversationId: conversation.id,
+        });
+        return this.toServiceResult(responseWithConversationId, conversation.id, {
+          stage: 'completed',
+          isCompleted: true,
+          terminalKind: 'answer_only',
+        });
+      }
+
       logger.info('对话会话创建成功', {
         conversationId: conversation.id,
         stage,
@@ -637,8 +737,8 @@ async continueConversation(
     options?: GoalConversationOptions
   ) {
       try {
-        // 获取当前对话状态
-        const conversation = await prisma.goal_conversations.findFirst({
+        // 获取当前对话状态（重开无路径终局时会重新读取，故用 let）
+        let conversation = await prisma.goal_conversations.findFirst({
           where: { id: conversationId, userId }
         });
 
@@ -646,24 +746,51 @@ async continueConversation(
           throw new Error('对话会话不存在');
         }
 
-        // 如果已经完成，直接返回
+        // 显式挂载资料（资料跟路径生成走）：reply 可中途调整挂载列表，整包覆盖语义。
+        // undefined=未声明 → 不写列（存量/VL 自动语义不变）；数组（含 []）=显式口径落库。
+        const attachedMaterialIds = sanitizeMaterialIdsInput(options?.materialIds);
+        if (attachedMaterialIds) {
+          await prisma.goal_conversations.update({
+            where: { id: conversation.id },
+            data: { materialIds: JSON.stringify(attachedMaterialIds) }
+          });
+          conversation = { ...conversation, materialIds: JSON.stringify(attachedMaterialIds) };
+        }
+
+        // 已完成的会话先按「显式终局类型」分流，不再把所有 completed 都当成同一种成功。
         if (conversation.status === 'completed') {
+          const completedData = JSON.parse(conversation.collectedData || '{}');
+          const terminalKind = resolveGoalTerminalKind(completedData, {
+            learningPathId: conversation.learningPathId,
+            status: conversation.status,
+          });
+
           // 硬阻断终局的补充说明重判（2026-10-29 H-1/H-2、M-10/M-11 修复）：
           // 存档分诊为硬阻断且尚未绑定路径的 completed 会话，/reply 的新消息不再 0 秒重放旧文案，
           // 而是追加进对话并对「原目标 + 补充说明」重新分诊，解除硬阻断则按确认链路生成路径。
-          // 其余形态（已绑路径 / 非硬阻断终局）保持原行为，不回归。
-          if (!conversation.learningPathId) {
+          if (!conversation.learningPathId && terminalKind === 'hard_blocked') {
             const rejudged = await rejudgeHardBlockedCompletion(this.rejudgeDeps(), conversation, userReply, userId, options);
             if (rejudged) return rejudged;
+            // 显式标记为硬阻断但存档分诊缺失：按可重开的无路径终局继续，不再造成死路。
           }
-          return buildCompletedConversationResult({
-            conversationId,
-            collectedData: conversation.collectedData,
-            learningPathId: conversation.learningPathId,
-            // #228：文案的权威信号是 lifecycle（活动 run 推导），不是路径 status——
-            // 这里注入的投影与 GET 快照同源，保证同一状态两接口给同一口径。
-            findPath: (id) => getPathCompletionProjection(id),
-          });
+
+          // 无路径的 answer-only / no_path 终局：重新打开会话，让本轮输入真正被模型读取。
+          // 旧实现无论说什么都 0 秒重放「已生成」/终局文案，用户补充目标完全无效。
+          if (!conversation.learningPathId && isReopenableGoalTerminal(terminalKind)) {
+            conversation = await this.reopenCompletedWithoutPath(conversation, completedData, userId);
+          } else if (!conversation.learningPathId && terminalKind === 'hard_blocked' && !conversation.learningPathId) {
+            // 硬阻断重判链已返回 null（存档证据缺失）→ 同样按可重开处理
+            conversation = await this.reopenCompletedWithoutPath(conversation, completedData, userId);
+          } else {
+            return buildCompletedConversationResult({
+              conversationId,
+              collectedData: conversation.collectedData,
+              learningPathId: conversation.learningPathId,
+              // #228：文案的权威信号是 lifecycle（活动 run 推导），不是路径 status——
+              // 这里注入的投影与 GET 快照同源，保证同一状态两接口给同一口径。
+              findPath: (id) => getPathCompletionProjection(id),
+            });
+          }
         }
 
         // 确认两通道（2026-11-08 确认动作减重）：
@@ -790,6 +917,7 @@ async continueConversation(
 
       responseWithConversationId = enforceClarificationGate(responseWithConversationId, {
         conversationId,
+        requireContract: JSON.parse(conversation.collectedData || '{}').clarificationContractVersion === 1,
         onBlocked: (info) => logger.warn('[goal-clarification-enforce] 提案已拦截并改写为澄清提问', info),
       });
 
@@ -821,12 +949,14 @@ async continueConversation(
         await this.updateConversationLifecycle(conversationId, 'completed', {
           status: 'completed',
           completedAt: new Date(),
+          mutateCollectedData: (data) => markGoalTerminal(data, 'answer_only'),
         });
         logger.info('模型输出 completed 且无提案，按 answer-only / not_judgeable 收口', { conversationId });
         return this.toServiceResult(responseWithConversationId, conversationId, {
           stage: 'completed',
           confidence,
           isCompleted: true,
+          terminalKind: 'answer_only',
           fallbackGoalExt,
         });
       }
@@ -869,6 +999,44 @@ async continueConversation(
     }
   }
 
+  /**
+   * 把「completed 但无路径」的可重开终局重新打开为可聊状态。
+   *
+   * 为什么必须重开：answer-only / no_path 只是「本次没有生成路径」，不是会话死亡。
+   * 旧实现把 `status=completed` 当唯一终态，后续 /reply 无论说什么都短路回放，
+   * 用户补充目标/追问完全无效，刷新后前端也只能看到假的「路径已创建」。
+   *
+   * CAS 语义：终局标记与 status 在同一次 lifecycle 写入中清除；并发写落败时重读最新行，
+   * 由调用方继续按最新状态处理（不重复 claim/生成）。
+   */
+  private async reopenCompletedWithoutPath(
+    conversation: any,
+    completedData: Record<string, any>,
+    userId: string
+  ) {
+    const hasProposal = Boolean(completedData?.confirmedProposal);
+    const nextStage = hasProposal ? 'proposing' : 'understanding';
+    await this.updateConversationLifecycle(conversation.id, nextStage, {
+      status: 'active',
+      completedAt: null,
+      expectedRevision: conversation.revision,
+      mutateCollectedData: (data) => {
+        clearGoalTerminal(data);
+        data.reopenedAt = new Date().toISOString();
+      },
+    });
+    const refreshed = await prisma.goal_conversations.findFirst({
+      where: { id: conversation.id, userId }
+    });
+    if (!refreshed) throw new Error('对话会话不存在');
+    logger.info('[goal-conversation] 无路径终局重新打开，继续本轮输入', {
+      conversationId: conversation.id,
+      nextStage,
+      hadProposal: hasProposal,
+    });
+    return refreshed;
+  }
+
   /** 导师上一条回复的尾部摘录（确认裁决输入）：取 collectedData.messages 最后一条 ai 的内容尾段。 */
   private lastAssistantExcerpt(data: any): string {
     const messages = Array.isArray(data?.messages) ? data.messages : [];
@@ -908,6 +1076,7 @@ async continueConversation(
           id: existingPath.id,
           status: existingPath.status,
           lifecycle: existingPath.lifecycle,
+          canStartLearning: existingPath.canStartLearning,
         });
       }
     }
@@ -920,13 +1089,14 @@ async continueConversation(
     const storedTriage = resolveResponseTriageFromCollectedData(data);
     const triagePending = (data as Record<string, unknown>)[RESPONSE_TRIAGE_PENDING_KEY];
 
-    // ── 硬阻断（2026-10-28 R4 外部评审 P0）：referral / emotional_support /
-    //    not_judgeable×physical_internalized 三类结论，不依赖 advisory/gated、也不允许
-    //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
-    const hardBlockTriage = storedTriage ?? triageGoalResponse({
+    // 当前验收不可判定时，以当前分诊替换旧的存档分诊；再次确认不能绕过硬门。
+    const currentTriage = triageGoalResponse({
       ...understanding,
-      clarification: (data as Record<string, unknown>).clarification,
+      clarification: data.clarification,
     });
+    const hardBlockTriage = isHardBlockResponseTriage(null, understanding)
+      ? currentTriage
+      : storedTriage ?? currentTriage;
     if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
       // #213：拒绝文案随终局落库（user 回合 + ai 拒绝回合同笔原子写入）。此前文案
       // 只进返回值，重载后用户只看到自己那句确认，无从知道为什么没生成路径。
@@ -939,6 +1109,7 @@ async continueConversation(
         mutateCollectedData: (currentData) => {
           currentData[RESPONSE_TRIAGE_KEY] = hardBlockTriage;
           delete currentData[RESPONSE_TRIAGE_PENDING_KEY];
+          markGoalTerminal(currentData, 'hard_blocked');
         },
       });
       logger.info('[goal-conversation] 分诊硬阻断：不生成学习路径', { conversationId, mode: hardBlockTriage.mode, confidence: hardBlockTriage.confidence, platformJudgment: (understanding as any)?.platform_judgment ?? (understanding as any)?.platformJudgment ?? null });
@@ -993,6 +1164,32 @@ async continueConversation(
       };
     }
 
+    const clarification = enforceClarificationConfirmationGate({
+      clarification: data.clarification,
+      requireContract: data.clarificationContractVersion === 1,
+    });
+    if (clarification.blocked && clarification.prompt) {
+      const prompt = clarification.prompt;
+      await this.updateConversationLifecycle(conversationId, 'understanding', {
+        status: 'active',
+        appendMessage: [
+          ...(saveUserTurn ? [{ role: 'user' as const, content: userReply }] : []),
+          { role: 'ai', content: prompt },
+        ],
+        mutateCollectedData: (currentData) => {
+          currentData.confirmedProposal = null;
+          clearGoalTerminal(currentData);
+        },
+      });
+      return {
+        userVisible: prompt,
+        internal: {
+          core: { conversationId, stage: 'understanding', confidence: data.confidence || 0, isCompleted: false },
+          ext: { goalConversation: { understanding, confirmedProposal: null, nextQuestions: [prompt], quickReplies: [] } },
+        },
+      };
+    }
+
     try {
       const { bound, placeholderPath, runId, seedResult } = await bindGeneratingPath(this.rejudgeDeps(), {
         conversation,
@@ -1008,6 +1205,8 @@ async continueConversation(
             false,
             userReply
           );
+          // 显式路径终局：与 learningPathId 同笔事务落库，重载后不再靠「有没有路径」猜终局语义。
+          markGoalTerminal(currentData, 'path_bound');
           // 自测作答一并落库（刷新后回看方案时仍能显示哪些题已答）
           if (incomingProbeAnswers.length > 0) {
             currentData.understanding = mergeProbeAnswersIntoUnderstanding(
@@ -1125,6 +1324,9 @@ async continueConversation(
       });
 
       const data = JSON.parse(conversation.collectedData);
+      // 显式挂载资料（资料跟路径生成走）：列非 null（含 []）=显式口径，summaries 只取挂载项；
+      // null=存量/VL 语义，继续按资料库自动排序选取。
+      const explicitMaterialIds = parseConversationMaterialIds(conversation.materialIds);
       const rawHistory = data.messages || [];
       // 落库/调用解耦（#160）：本轮用户消息在 callAI 之前已落库，若原样当历史喂入，
       // 同一句输入会既走 input 又出现在历史最后一条（重复喂给模型）。调用方声明后剔除。
@@ -1179,10 +1381,12 @@ async continueConversation(
         confirmProposal: options?.confirmProposal === true,
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent,
         // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
-        // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
+        // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键。
+        // 显式挂载（列非 null，含 []）时只取挂载项，不做资料库排序。
         uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery, {
           conversationId,
           surfaceGoal: (previousUnderstanding as { surface_goal?: string }).surface_goal,
+          ...(explicitMaterialIds !== null ? { materialIds: explicitMaterialIds } : {})
         })
       }, {
         // 会话标识进 envelope（与教学链 A6 同模式）：此前只有 SSE 流式路由在 ALS 注入
@@ -1537,6 +1741,9 @@ async continueConversation(
       });
     }
 
+    // 显式挂载资料（资料跟路径生成走）：随 GoalPathRequest 透传给 path.coordinator；
+    // null（列缺失）=存量/VL 自动扫库语义，不进载荷。
+    const explicitMaterialIds = parseConversationMaterialIds(conversation.materialIds);
     return {
       userId: conversation.userId,
       sourceConversationId: conversation.id,
@@ -1544,6 +1751,7 @@ async continueConversation(
       source: 'goal',
       mode: 'generate',
       rawGoal: conversation.description,
+      ...(explicitMaterialIds !== null ? { materialIds: explicitMaterialIds } : {}),
       visibleSummary: buildGoalPathVisibleSummary({
         understanding,
         confirmedProposal,
@@ -1758,7 +1966,10 @@ async continueConversation(
         learningPathId: learningPath?.id,
         learningPath: learningPath?.id
           ? { id: learningPath.id, status: learningPath.status }
-          : null
+          : null,
+        mutateCollectedData: learningPath?.id
+          ? (currentData) => markGoalTerminal(currentData, 'path_bound')
+          : undefined,
       });
 
       logger.info('学习路径重新生成成功', {
@@ -1776,7 +1987,8 @@ async continueConversation(
             stage: 'completed',
             confidence: 0.9,
             isCompleted: true,
-            learningPath
+            learningPath,
+            terminalKind: 'path_bound' as const
           },
           ext: {
             goalConversation: buildGoalConversationExt({ understanding, collected, clarification: data.clarification })
@@ -1881,6 +2093,13 @@ async continueConversation(
         conversation.status === 'completed'
         && !conversation.learningPathId
         && isHardBlockResponseTriage(resolveResponseTriageFromCollectedData(data), data.understanding || {}),
+      // 终局的显式、持久化原因（path_bound / hard_blocked / answer_only / no_path）。
+      // 前端恢复页据此区分「路径已创建」「硬阻断」「无路径可继续补充」三种完全不同的 UI，
+      // 不再用「completed + 无路径」猜。
+      terminalKind: resolveGoalTerminalKind(data, {
+        learningPathId: conversation.learningPathId,
+        status: conversation.status,
+      }),
       confidence: data.confidence || 0,
       createdAt: conversation.createdAt,
       completedAt: conversation.completedAt
@@ -2035,6 +2254,7 @@ export async function generateLearningPathFromConversation(conversationId: strin
         completedAt: new Date(),
         learningPathId: learningPath.id,
         learningPath: { id: learningPath.id, status: learningPath.status },
+        mutateCollectedData: (currentData) => markGoalTerminal(currentData, 'path_bound'),
       }
     );
   }

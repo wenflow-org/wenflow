@@ -63,6 +63,15 @@ export interface GoalRuntimeEnvelope {
   };
 }
 
+/**
+ * 会话终局类型（与后端 goal-conversation.exit.ts 对齐）：
+ * - path_bound：已绑定学习路径，终局不可再聊；
+ * - hard_blocked：分诊硬阻断，回复补充说明可重判；
+ * - answer_only：模型一句话直答收口，没有路径，可继续补充目标；
+ * - no_path：历史遗留/异常无路径终局（同样按可继续补充处理）。
+ */
+export type GoalTerminalKind = 'path_bound' | 'hard_blocked' | 'answer_only' | 'no_path';
+
 export interface GoalConversationEnvelope {
   userVisible: string;
   internal: {
@@ -77,6 +86,8 @@ export interface GoalConversationEnvelope {
       } | null;
       /** 分诊硬阻断终局（completed 且无路径，2026-11-05 P0）：前端据此展示阻断说明而非「路径已创建」 */
       hardBlocked?: boolean;
+      /** 显式、持久的终局类型：恢复/重开 UI 的唯一判据，不再用「completed + 无路径」猜 */
+      terminalKind?: GoalTerminalKind | null;
     };
     ext: {
       goalConversation: {
@@ -129,6 +140,11 @@ interface GoalConversationRequestOptions {
   probeAnswers?: GoalProbeAnswer[];
   /** 前端交互特征（认知负荷量测 · 可选，缺失走 absent 路径） */
   meta?: InteractionMeta;
+  /**
+   * 显式挂载资料 id 列表（资料跟路径生成走）：undefined=未声明；数组（含 []）=显式口径
+   * ——路径生成只使用这些资料，[] 表示零注入。整包覆盖会话挂载列表。
+   */
+  materialIds?: string[];
 }
 
 export async function startGoalConversation(
@@ -138,6 +154,7 @@ export async function startGoalConversation(
   const response = await api.post('/goal-conversation/start', {
     input: { text },
     contextMode: options.contextMode || 'recent',
+    ...(options.materialIds !== undefined ? { materialIds: options.materialIds } : {}),
     ...(options.meta ? { meta: options.meta } : {})
   }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
@@ -153,6 +170,10 @@ export async function replyGoalConversation(
     input: { text },
     contextMode: options.contextMode || 'recent',
     confirmProposal: options.confirmProposal === true,
+    // JSON（非流式）通道必须与 SSE 同权携带前置自测作答：传输层回退时
+    // 此前只带 confirmProposal，作答会在无提示的情况下丢失，后端判分键随之缺失。
+    ...(options.probeAnswers?.length ? { probeAnswers: options.probeAnswers } : {}),
+    ...(options.materialIds !== undefined ? { materialIds: options.materialIds } : {}),
     ...(options.meta ? { meta: options.meta } : {})
   }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
@@ -194,7 +215,7 @@ export interface GoalStreamHandlers {
 async function streamGoalRequest(
   action: GoalStreamAction,
   conversationId: string | null,
-  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; probeAnswers?: GoalProbeAnswer[]; adjustments?: string; meta?: InteractionMeta },
+  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; probeAnswers?: GoalProbeAnswer[]; adjustments?: string; meta?: InteractionMeta; materialIds?: string[] },
   handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
   const { onDelta, onActivity, signal } = handlers;
@@ -208,6 +229,7 @@ async function streamGoalRequest(
   }
   if (payload.confirmProposal === true) body.confirmProposal = true;
   if (payload.probeAnswers?.length) body.probeAnswers = payload.probeAnswers;
+  if (payload.materialIds !== undefined) body.materialIds = payload.materialIds;
   if (payload.adjustments !== undefined) body.adjustments = payload.adjustments;
   if (payload.meta !== undefined) body.meta = payload.meta;
 
@@ -284,7 +306,12 @@ export async function streamStartGoalConversation(
   options: GoalConversationRequestOptions = {},
   handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
-  return streamGoalRequest('start', null, { text, contextMode: options.contextMode, meta: options.meta }, handlers);
+  return streamGoalRequest('start', null, {
+    text,
+    contextMode: options.contextMode,
+    meta: options.meta,
+    materialIds: options.materialIds
+  }, handlers);
 }
 
 export async function streamReplyGoalConversation(
@@ -298,7 +325,8 @@ export async function streamReplyGoalConversation(
     contextMode: options.contextMode,
     confirmProposal: options.confirmProposal,
     probeAnswers: options.probeAnswers,
-    meta: options.meta
+    meta: options.meta,
+    materialIds: options.materialIds
   }, handlers);
 }
 

@@ -1,14 +1,17 @@
 /**
- * MaterialUploadArea：上传资料区的关键约束回归。
+ * MaterialUploadArea：资料挂载器（2026-11-21 语义重构）的关键约束回归。
  *
- * 约束来源（2026-09-22 定稿，2026-09-23 附件层移入输入框后更新）：
- *   1. 入口与格式说明在父级回形针按钮的 title 里，accept 只放开文本型扩展名；
- *   2. 上传失败（扫描件 / legacy .doc 等被后端拒收）时展示后端的中文原因，且**不进列表**；
- *   3. 同一文件可重复选择（input.value 必须清空，否则第二次选同名文件不触发 change）。
+ * 约束来源（资料跟路径生成走）：
+ *   1. chips 展示的是**本次目标显式挂载**的资料（v-model），不再等于用户资料库；
+ *   2. chip × = 从本次目标摘掉（emit 全量列表），**不调 DELETE /materials**——删文件只在 /library；
+ *   3. 挂载选择弹层：只列上传来源（联网资料不冒充），勾选回填，上限 3 份；
+ *   4. 上传成功 → 自动挂载；被拒收（扫描件等）→ 展示后端中文原因，且**不进挂载列表**；
+ *   5. accept 只放开文本型扩展名；同一文件可重复选择（input.value 必须清空）。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import MaterialUploadArea from '../MaterialUploadArea.vue';
+import type { UploadedMaterial } from '@/api/materials';
 
 const mockLibrary = vi.fn();
 const mockUpload = vi.fn();
@@ -64,58 +67,115 @@ beforeEach(() => {
   mockLibrary.mockResolvedValue(libraryOf([]));
 });
 
-describe('MaterialUploadArea', () => {
-  it('无资料时整体退场（display:none，不占输入框上方的行）', async () => {
+/** v-model 双向绑定挂载：把组件 emit 的列表回写进 props，模拟父页面的真实接法 */
+function mountVModel(initial: UploadedMaterial[] = []) {
+  const state = { value: initial as UploadedMaterial[] };
+  const wrapper = mount(MaterialUploadArea, {
+    props: { modelValue: state.value },
+    attrs: {
+      'onUpdate:modelValue': (value: UploadedMaterial[]) => {
+        state.value = value;
+        void wrapper.setProps({ modelValue: value });
+      },
+    },
+    global: mountGlobal,
+  });
+  return wrapper;
+}
+
+describe('MaterialUploadArea（挂载器语义）', () => {
+  it('库和挂载都为空时整体退场（不占输入框上方的行）', async () => {
     const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
     expect(w.classes()).toContain('mat-upload--empty');
-    expect(w.classes()).toContain('mat-upload--empty');
   });
 
-  it('chips 超过 4 份折叠为 +N，点击展开', async () => {
-    mockLibrary.mockResolvedValue(
-      libraryOf([1, 2, 3, 4, 5, 6].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` })))
-    );
+  it('库里有文件但未挂载 → 显示空态提示（资料不会静默进入路径生成）', async () => {
+    mockLibrary.mockResolvedValue(libraryOf([baseMaterial()]));
     const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
-    const chips = () => w.findAll('.mat-upload__chip:not(.mat-upload__chip--more)');
-    expect(chips().length).toBe(4); // 默认只显 4 份
-    const more = w.find('.mat-upload__chip--more');
-    expect(more.text()).toBe('+2');
-    await more.trigger('click');
-    expect(chips().length).toBe(6);
+    expect(w.classes()).not.toContain('mat-upload--empty');
+    expect(w.find('.mat-upload__note').text()).toContain('未挂载资料');
+    expect(w.find('.mat-upload__note').text()).toContain('进入路径生成');
+    // 库文件不再冒充已挂载 chips
+    expect(w.find('.mat-upload__chips').exists()).toBe(false);
   });
 
-  it('资料库超过 3 份时提示路径只选 3 份，且不把联网资料冒充上传附件', async () => {
+  it('v-model 挂载列表 → chips 展示；× 只摘挂载并 emit 全量列表，不删库文件', async () => {
+    const m1 = baseMaterial();
+    const m2 = baseMaterial({ id: 'm2', name: '笔记.md', charCount: 800 });
+    const w = mount(MaterialUploadArea, {
+      props: { modelValue: [m1, m2] },
+      global: mountGlobal,
+    });
+    await flushPromises();
+
+    const chips = w.findAll('.mat-upload__chip:not(.mat-upload__chip--more)');
+    expect(chips.length).toBe(2);
+    expect(chips[0].text()).toContain('指南.txt');
+
+    await w.find('.mat-upload__chip-x').trigger('click');
+    await flushPromises();
+
+    const updates = w.emitted('update:modelValue');
+    expect(updates).toBeTruthy();
+    const latest = (updates as unknown[][][]).at(-1)![0] as Array<{ id: string }>;
+    expect(latest.map((item) => item.id)).toEqual(['m2']);
+    // 关键：摘掉 ≠ 删除资料库文件
+    expect(mockRemove).not.toHaveBeenCalled();
+  });
+
+  it('挂载选择弹层：只列上传来源，勾选回填挂载列表，第 4 份被禁用', async () => {
     const uploads = [1, 2, 3, 4].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` }));
     const web = baseMaterial({ id: 'w1', name: '联网资料.md', origin: 'web' });
     mockLibrary.mockResolvedValue(libraryOf([...uploads, web]));
-    const w = mount(MaterialUploadArea, { global: mountGlobal });
+    const w = mount(MaterialUploadArea, {
+      props: { modelValue: [uploads[0], uploads[1], uploads[2]] },
+      global: mountGlobal,
+    });
     await flushPromises();
 
-    expect(w.find('.mat-upload__note').text()).toContain('资料库共 4 份');
-    expect(w.find('.mat-upload__note').text()).toContain('选用 3 份');
+    await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker();
+    await flushPromises();
+
+    const rows = w.findAll('.mat-upload__picker-row');
+    expect(rows.length).toBe(4); // 联网资料不进弹层
     expect(w.text()).not.toContain('联网资料.md');
+    // 前 3 份已挂载（勾选），第 4 份 disabled
+    const boxes = w.findAll('.mat-upload__picker-row input[type="checkbox"]');
+    expect((boxes[0].element as HTMLInputElement).checked).toBe(true);
+    expect((boxes[3].element as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('accept 只放开文本型扩展名，不含图片与 legacy .doc', async () => {
-    const w = mount(MaterialUploadArea, { global: mountGlobal });
+  it('弹层取消勾选 → emit 列表摘掉该项', async () => {
+    const m1 = baseMaterial();
+    const m2 = baseMaterial({ id: 'm2', name: '笔记.md', charCount: 800 });
+    mockLibrary.mockResolvedValue(libraryOf([m1, m2]));
+    const w = mount(MaterialUploadArea, {
+      props: { modelValue: [m1] },
+      global: mountGlobal,
+    });
     await flushPromises();
-    const accept = w.find('input[type="file"]').attributes('accept') || '';
-    expect(accept).toContain('.pdf');
-    expect(accept).toContain('.docx');
-    expect(accept).toContain('.pptx');
-    expect(accept).toContain('.txt');
-    expect(accept).not.toContain('.png');
-    expect(accept).not.toContain('.doc,');
+    await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker();
+    await flushPromises();
+
+    // m1 已挂载（勾选）→ 再点取消勾选
+    const firstBox = w.find('.mat-upload__picker-row input[type="checkbox"]');
+    expect((firstBox.element as HTMLInputElement).checked).toBe(true);
+    await firstBox.setValue(false);
+    await flushPromises();
+
+    const updates = w.emitted('update:modelValue');
+    const latest = (updates as unknown[][][]).at(-1)![0] as Array<{ id: string }>;
+    expect(latest).toEqual([]);
   });
 
-  it('上传成功 → 出现在列表并展示结构与字数', async () => {
+  it('上传成功 → 自动挂载（emit 含新项），完整元信息在 title', async () => {
     mockUpload.mockResolvedValue(baseMaterial());
     mockLibrary
       .mockResolvedValueOnce(libraryOf([]))
       .mockResolvedValueOnce(libraryOf([baseMaterial()]));
-    const w = mount(MaterialUploadArea, { global: mountGlobal });
+    const w = mountVModel();
     await flushPromises();
 
     await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
@@ -123,14 +183,16 @@ describe('MaterialUploadArea', () => {
     await flushPromises();
 
     expect(mockUpload).toHaveBeenCalledTimes(1);
+    const updates = w.emitted('update:modelValue');
+    const latest = (updates as unknown[][][]).at(-1)![0] as Array<{ id: string; name: string }>;
+    expect(latest.map((item) => item.id)).toEqual(['m1']);
     const chip = w.find('.mat-upload__chip');
     expect(chip.text()).toContain('指南.txt');
-    // 完整元信息在 title 里（chip 本体只放名字，避免输入框上方过吵）
     expect(chip.attributes('title')).toContain('1200 字');
     expect(chip.attributes('title')).toContain('3 个小标题');
   });
 
-  it('被拒收（扫描件）→ 展示后端中文原因，且不进列表', async () => {
+  it('被拒收（扫描件）→ 展示后端中文原因，且不进挂载列表', async () => {
     mockUpload.mockRejectedValue({ message: '这份文件没有可提取的文本（多为扫描件或图片型 PDF），暂时读不了' });
     const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
@@ -141,9 +203,10 @@ describe('MaterialUploadArea', () => {
 
     expect(w.find('.mat-upload__error').text()).toContain('没有可提取的文本');
     expect(w.find('.mat-upload__chips').exists()).toBe(false);
+    expect(w.emitted('update:modelValue')).toBeFalsy();
   });
 
-  it('多选时逐份处理：一份失败不影响其余', async () => {
+  it('多选上传时逐份处理并自动挂载：一份失败不影响其余', async () => {
     mockUpload
       .mockRejectedValueOnce({ message: '暂不支持 .doc' })
       .mockResolvedValueOnce(baseMaterial({ id: 'm2', name: '笔记.md', charCount: 800 }));
@@ -159,7 +222,40 @@ describe('MaterialUploadArea', () => {
 
     expect(mockUpload).toHaveBeenCalledTimes(2);
     expect(w.find('.mat-upload__error').text()).toContain('暂不支持 .doc');
-    expect(w.text()).toContain('笔记.md');
+    const updates = w.emitted('update:modelValue');
+    const latest = (updates as unknown[][][]).at(-1)![0] as Array<{ id: string }>;
+    expect(latest.map((item) => item.id)).toEqual(['m2']);
+  });
+
+  it('挂载满 3 份后再拖入上传：不自动追加并提示上限', async () => {
+    const attached = [1, 2, 3].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` }));
+    mockUpload.mockResolvedValue(baseMaterial({ id: 'm9', name: '新文件.txt' }));
+    const w = mount(MaterialUploadArea, {
+      props: { modelValue: attached },
+      global: mountGlobal,
+    });
+    await flushPromises();
+
+    await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
+      .addFiles([new File(['x'], '新文件.txt', { type: 'text/plain' })]);
+    await flushPromises();
+
+    expect(w.find('.mat-upload__error').text()).toContain('最多挂载 3 份');
+    const updates = w.emitted('update:modelValue');
+    // 满载时不上报新列表（挂载集不变）
+    expect(updates).toBeFalsy();
+  });
+
+  it('accept 只放开文本型扩展名，不含图片与 legacy .doc', async () => {
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
+    await flushPromises();
+    const accept = w.find('input[type="file"]').attributes('accept') || '';
+    expect(accept).toContain('.pdf');
+    expect(accept).toContain('.docx');
+    expect(accept).toContain('.pptx');
+    expect(accept).toContain('.txt');
+    expect(accept).not.toContain('.png');
+    expect(accept).not.toContain('.doc,');
   });
 
   it('选择文件后清空 input.value，保证同名文件可再次选择', async () => {
@@ -177,21 +273,5 @@ describe('MaterialUploadArea', () => {
 
     expect(mockUpload).toHaveBeenCalledTimes(1);
     expect(input.value).toBe('');
-  });
-
-  it('删除资料 → 从列表移除', async () => {
-    mockLibrary
-      .mockResolvedValueOnce(libraryOf([baseMaterial()]))
-      .mockResolvedValueOnce(libraryOf([]));
-    mockRemove.mockResolvedValue(undefined);
-    const w = mount(MaterialUploadArea, { global: mountGlobal });
-    await flushPromises();
-    expect(w.text()).toContain('指南.txt');
-
-    await w.find('.mat-upload__chip-x').trigger('click');
-    await flushPromises();
-
-    expect(mockRemove).toHaveBeenCalledWith('m1');
-    expect(w.text()).not.toContain('指南.txt');
   });
 });

@@ -304,6 +304,10 @@ export function normalizeSupportNeed(value: string | null | undefined): SupportN
  */
 export function triageGoalResponse(input: ResponseTriageInput | null | undefined): ResponseTriage {
   const understanding = asObject(input);
+  const platformJudgment = pickString(understanding, ['platformJudgment', 'platform_judgment']);
+  if (platformJudgment === 'not_judgeable') {
+    return { mode: 'referral', confidence: 'high', reasons: ['平台不可判定（not_judgeable），不建学习路径'] };
+  }
   // Phase 4：澄清契约优先。存在 contract 时，去向只由“请求属性”派生，
   // 不读 intent_type / primary_block_type / skill_nature 等身份标签。
   const clarification = understanding.clarification;
@@ -351,41 +355,8 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
   const painPoints = pickStringArray(understanding, ['painPoints', 'pain_points']);
   const supportNeed = normalizeSupportNeed(pickString(understanding, ['supportNeed', 'support_need']));
 
-  // 不可判定 × 实体内化技能覆盖（2026-10-28 Frontier R2 实证 F96/F97）：
-  // goal 已判 platform_judgment=not_judgeable + skill_nature=physical_internalized，
-  // 但 primary_block_type 仍常写成 capability，下游按 capability 会开学习路径。
-  // 平台闻不到/看不到/摸不到，只能给原理说明或转线下；一律走 referral 负向出口。
-  const platformJudgment = pickString(understanding, ['platformJudgment', 'platform_judgment']);
   const skillNature = pickString(understanding, ['skillNature', 'skill_nature']);
   const surfaceGoal = pickString(understanding, ['surfaceGoal', 'surface_goal']);
-  // skill_nature 分类会漂移（R5 实测 F96 手冲咖啡被写成 cognitive_internalized）。
-  // 平台判不了、文本又明显是感官通道（喝/闻/尝/听/手感/笔锋…）时，按实体内化处理，
-  // 避免同一条「咖啡风味」在 referral/learning_path 之间随机跳。
-  const sensoryText = [
-    surfaceGoal,
-    realProblem,
-    evidence,
-    ...painPoints,
-  ].filter(Boolean).join('；');
-  const sensoryInternalized = skillNature === 'cognitive_internalized'
-    // 2026-11-08 收紧：两路命中才算「感官判定对象」——
-    // ① 感官对象名词（口感/风味/音色…，天然 ≥2 字）独立成立；
-    // ② 单字通道词（听/喝/摸/闻/嗅/尝）必须与**辨别类动词**（分辨/听出/尝出…）共现。
-    // 旧口径「听」一个字命中即 referral，把「能听懂英语播客」这类可判定认知技能误终局
-    // （真机实证）；「喝一口咖啡就分辨烘焙」这类真感官判定仍命中（喝×分辨）。
-    && (
-      /(口感|风味|气味|味觉|嗅觉|音色|笔锋|手感|触感)/.test(sensoryText)
-      || (/(喝|尝|闻|嗅|听|摸)/.test(sensoryText)
-        && /(分辨|区分|辨认|听出|尝出|闻出|品出|辨出)/.test(sensoryText))
-    );
-  if (platformJudgment === 'not_judgeable'
-    && (skillNature === 'physical_internalized' || sensoryInternalized)) {
-    return {
-      mode: 'referral',
-      confidence: 'high',
-      reasons: ['平台不可判定（not_judgeable）× 纯感官/肢体内化技能：转线下真人指导，不建学习路径'],
-    };
-  }
 
   // 即时微操作覆盖（2026-10-27 外部审查，R8 冒烟 E10 实证）：
   // surface_goal 带当日死线词且 objectiveScopeHours ≤ 1.5 时，对话里「以后每个月还会遇到」
@@ -499,15 +470,11 @@ export function isHardBlockResponseTriage(
   triage: ResponseTriage | null | undefined,
   understanding: unknown
 ): boolean {
-  if (!triage) return false;
   const u = asObject(understanding);
-  const platformJudgment = pickString(u, ['platformJudgment', 'platform_judgment']);
-  const skillNature = pickString(u, ['skillNature', 'skill_nature']);
-  // 旧数据可能把这条确定性规则写成 learning_path；底层判定仍须硬阻断。
-  if (platformJudgment === 'not_judgeable' && skillNature === 'physical_internalized') return true;
-  if (triage.mode === 'emotional_support') return true;
-  if (triage.mode !== 'referral') return false;
-  return platformJudgment === 'not_judgeable' || skillNature === 'physical_internalized';
+  if (pickString(u, ['platformJudgment', 'platform_judgment']) === 'not_judgeable') return true;
+  if (triage?.mode === 'emotional_support') return true;
+  return triage?.mode === 'referral'
+    && pickString(u, ['skillNature', 'skill_nature']) === 'physical_internalized';
 }
 
 /** 第一轴：仅按 primary_block_type（"要学什么"）决定基础模式；support_need 由 applySupportNeed 叠加。 */

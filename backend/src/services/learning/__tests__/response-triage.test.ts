@@ -387,23 +387,22 @@ describe('感官技能分类漂移兜底（R5 F96）', () => {
     expect(t.mode).toBe('referral');
   });
 
-  it('not_judgeable + cognitive_internalized 但文本无感官词 → 落基础规则（2026-11-10 起：理解型无表现要求落 answer_only）', () => {
+  it('not_judgeable + cognitive_internalized 无感官词时也不排课', () => {
     const t = triageGoalResponse({
       surface_goal: '理解一个抽象数学定理的证明结构',
       primary_block_type: 'capability',
       platform_judgment: 'not_judgeable',
       skill_nature: 'cognitive_internalized',
     });
-    // 感官覆盖不触发（无感官词）→ 落基础规则；基础规则 2026-11-10 新增 answer_only 出口
-    //（理解型动词 × 无表现要求 × 三条件 0/3），不再落 learning_path。
-    expect(t.mode).toBe('answer_only');
+    expect(t.mode).toBe('referral');
+    expect(isHardBlockResponseTriage(t, { platform_judgment: 'not_judgeable' })).toBe(true);
   });
 
   it('单字通道词不再命中：「能听懂英语播客」不触发 referral（2026-11-08 真机误拦实证）', () => {
     const t = triageGoalResponse({
       surface_goal: '能听懂英语播客，听懂日常语速的讨论',
       primary_block_type: 'capability',
-      platform_judgment: 'not_judgeable',
+      platform_judgment: 'judgeable_output',
       skill_nature: 'cognitive_internalized',
     });
     expect(t.mode).not.toBe('referral');
@@ -510,16 +509,13 @@ describe('triageGoalResponse · 澄清契约优先（Phase 4）', () => {
     unknowns: [],
   };
 
-  it('有契约时忽略旧标签：skill_nature/physical 不再决定去处', () => {
-    const result = triageGoalResponse({
-      ...base,
-      clarification: base,
-      platform_judgment: 'not_judgeable',
-      skill_nature: 'physical_internalized',
-      primary_block_type: 'emotion_relationship',
-    } as never);
-    expect(result.mode).toBe('learning_path');
-    expect(result.reasons.join('')).toContain('澄清契约');
+  it('澄清契约不能绕过已明确的不可判定性', () => {
+    const input = { clarification: base, platform_judgment: 'not_judgeable', skill_nature: 'cognitive_internalized' };
+    const result = triageGoalResponse(input as never);
+    expect(result.mode).toBe('referral');
+    expect(isHardBlockResponseTriage({ mode: 'learning_path', confidence: 'high', reasons: [] }, input)).toBe(true);
+    expect(isHardBlockResponseTriage(null, input)).toBe(true);
+    expect(triageGoalResponse({ ...input, platform_judgment: 'judgeable_output' } as never).mode).toBe('learning_path');
   });
 
   it('契约 blockingNeed=emotional → emotional_support', () => {

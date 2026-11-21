@@ -270,6 +270,9 @@ model goal_conversations {
   description    String?
   messages       String
   collectedData  String?
+  // 显式挂载的资料 id 列表（JSON 数组文本）。null=存量会话（沿用资料库自动扫库语义）；
+  // []=用户显式不挂载（路径生成零注入）；非空=只注入这些资料（资料跟路径生成走）。
+  materialIds    String?
   completedAt    DateTime?
   learningPathId String?
   // 乐观锁：messages/collectedData 为整包 JSON 读改写，并发提交（双击/重试）时
@@ -1372,9 +1375,19 @@ model batch_experiment_runs {
   profileId       String?
   sessionId       String?
   learnerName     String
+  /// 实验配置里声明的学习目标（此前只写 learnersConfig JSON，建号时被丢弃）
+  learningGoal    String?
+  /// 样本类型 student|general（分层采样显式坐标；此前只靠 [student] 名称前缀推断）
+  sampleType      String?
+  /// 案例声明的预期终态：true = 预期平台不排课（no-path）
+  expectedNoPath  Boolean  @default(false)
   frictionBudget  String   @default("normal")
   phase           String   @default("setup") // setup|goal|path|learn|learn-done|decay|done|failed
   status          String   @default("active") // active|stalled|done|failed
+  /// 初始化进度：created|persona|story|session（持久化，重启后从断点继续，不重复生成）
+  setupStage      String?
+  /// 初始化尝试次数（每个 setup tick 未推进即 +1；达到预算直接 failed，避免无限空转）
+  setupAttempts   Int      @default(0)
   completedTasks  Int      @default(0)
   totalTasks      Int?
   currentTask     String?
@@ -1382,14 +1395,53 @@ model batch_experiment_runs {
   lastError       String?
   advanceCalled   Boolean  @default(false)
   learningStarted Boolean  @default(false)
+  /// 终态分类：completed|no-path|learner-ended|max-observed|failed
+  outcome         String?
+  /// 实际终态是否命中实验声明的预期（expectedNoPath）
+  outcomeMatched  Boolean?
   checkpoints     String? // JSON: [{at, task, milestone, totalMilestones, traceCount, mastered, evidence}]
-  decaySims       String? // JSON: [{days, at, traceCount, retained, snapshot}]
+  /// 最后一个任务结算后的最终快照（衰减基线之前的确定性产物）
+  finalSnapshot   String?
+  /// 衰减基线：learn-done 时冻结的时刻与记忆摘要；3/7/14 天均从这一份基线推导
+  decayBaselineAt DateTime?
+  decayBaseline   String? // JSON: frozen baseline summary
+  decaySims       String? // JSON: [{days, at, asOf, baselineAt, traceCount, avgRetention, retained}]
+  /// 跨进程推进入口锁（durable busy；stale 后允许接管）
+  advanceLockOwner String?
+  advanceLockAt    DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   experiment      batch_experiments @relation(fields: [experimentId], references: [id], onDelete: Cascade)
 
   @@index([experimentId])
   @@index([status])
+}
+
+/// 虚拟运行面的持久化幂等回执（批量推进 / assisted advance-day）。
+/// 与 virtual_experiment_commands（黑盒）同语义：同 key 同请求 → 回放；不同请求 → 409；
+/// processing 超过 stale TTL → 调用方先按阶段产物对账，再决定接管重跑。
+model virtual_operation_receipts {
+  id          String   @id @default(uuid())
+  /// 运行面：batch-run | assisted-session
+  scope       String
+  /// runId / sessionId
+  scopeId     String
+  /// 操作：advance | advance-day
+  kind        String
+  requestKey  String
+  requestHash String
+  status      String   @default("processing") // processing|completed|failed
+  resultJson  String?
+  errorJson   String?
+  /// 请求发生前的阶段产物摘要（对账用；不参与 requestHash）
+  contextJson String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@unique([scope, scopeId, kind, requestKey])
+  @@index([scope, scopeId, kind, status])
+  @@index([status, updatedAt])
 }
 
 // 批量新建虚拟学习者后台任务（服务端队列：创建人 + 后台逐个生成身份/故事；

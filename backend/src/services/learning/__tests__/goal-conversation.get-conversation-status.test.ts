@@ -335,7 +335,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
     expect(result.userVisible).not.toContain('已生成');
   });
 
-  it('已完成、无路径且非硬阻断：userVisible 为 null（不落占位串）', async () => {
+  it('已完成、无路径且非硬阻断：刷新后明确显示没有路径', async () => {
     mockGoalFindFirst.mockResolvedValue({
       id: 'gc-1',
       userId: 'user-1',
@@ -350,6 +350,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
 
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
 
-    expect(result.userVisible).toBeNull();
+    expect(result.userVisible).toContain('没有生成学习路径');
+    expect(result.terminalKind).toBe('no_path');
   });
 });

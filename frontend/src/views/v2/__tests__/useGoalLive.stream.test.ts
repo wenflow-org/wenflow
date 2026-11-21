@@ -454,12 +454,156 @@ describe('confirm 的 probeAnswers 携带（2026-11-07：每条确认推进路�
     await live.confirm();
 
     const expectedProbeAnswers = [{ probeId: 'probe-1', userAnswer: 'A', targetConcept: '社会领域' }];
+    // 2026-11-21 资料挂载语义：该用例是 resumeById 恢复的存量会话——恢复后未在本页重新
+    // 挂载前不声明显式口径（materialIds undefined → 后端沿用自动扫库），随确认不携带列表。
     expect(apiMock.streamReplyGoalConversation).toHaveBeenCalledWith(
-      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers }, expect.anything(),
+      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers, materialIds: undefined }, expect.anything(),
     );
     // 回退路径曾丢题（只带 { confirmProposal: true }）：非流式重发必须同样携带
     expect(apiMock.replyGoalConversation).toHaveBeenCalledWith(
-      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers },
+      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers, materialIds: undefined },
     );
+  });
+
+  /**
+   * 手动重试同属「推进路径」：确认失败后点「重试」若不带作答，用户答过的题会静默蒸发，
+   * 后端判分键随之缺失——而界面上题目仍显示「已作答」，用户无从察觉。
+   */
+  it('确认失败后手动 retry：仍按最初作答携带 probeAnswers（不要求重答）', async () => {
+    apiMock.streamReplyGoalConversation.mockReset();
+    apiMock.replyGoalConversation.mockReset();
+    apiMock.getGoalConversation.mockReset();
+
+    const live = useGoalLive();
+    live.reset();
+    apiMock.getGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: {
+          goalConversation: {
+            understanding: {},
+            confirmedProposal: {
+              real_problem: '问题',
+              first_deliverable: '产出',
+              key_stages: ['阶段一'],
+              prerequisiteDiagnostics: [{
+                probeId: 'probe-1',
+                targetConcept: '社会领域',
+                question: '哪个说法更接近大模型的运作方式？',
+                options: [{ id: 'A', text: '概率预测' }, { id: 'B', text: '规则检索' }],
+                correctOption: 'A',
+              }],
+            },
+          },
+        },
+      },
+    }));
+    await live.resumeById('gc_1');
+    const probe = live.proposal?.probes?.[0];
+    expect(probe?.probeId).toBe('probe-1');
+    live.answerProbe(probe!, 'A');
+
+    // 首次确认失败（服务端业务错误）：failed 停在 'confirm'，等待用户「重试」
+    apiMock.streamReplyGoalConversation.mockRejectedValueOnce({ serverError: true, message: '生成服务暂不可用' });
+    await expect(live.confirm()).rejects.toBeTruthy();
+    expect(live.failed).toBe('confirm');
+
+    apiMock.streamReplyGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: { goalConversation: { understanding: {}, quickReplies: [] } },
+      },
+    }));
+    await live.retry();
+
+    expect(apiMock.streamReplyGoalConversation).toHaveBeenLastCalledWith(
+      'gc_1', '确认并生成路径',
+      { confirmProposal: true, probeAnswers: [{ probeId: 'probe-1', userAnswer: 'A', targetConcept: '社会领域' }], materialIds: undefined },
+      expect.anything(),
+    );
+    expect(live.failed).toBe('');
+  });
+});
+
+/**
+ * 终局类型（2026-11-21）：不再用「completed + 无路径」猜三种终局。
+ * 服务端显式下发 terminalKind，前端据此区分「路径已创建 / 硬阻断 / 可继续补充」。
+ */
+describe('useGoalLive 终局类型 terminalKind', () => {
+  const completed = (core: Partial<GoalConversationEnvelope['internal']['core']>, userVisible: string) => makeEnvelope({
+    userVisible,
+    internal: {
+      core: {
+        conversationId: 'gc_1', stage: 'completed', confidence: 0.9, isCompleted: true,
+        ...core,
+      },
+      ext: { goalConversation: { understanding: {}, quickReplies: [] } },
+    },
+  });
+
+  it('answer_only：无路径但可继续补充，不是硬阻断，模型答案照常上屏', async () => {
+    apiMock.getGoalConversation.mockReset();
+    apiMock.getGoalConversation.mockResolvedValueOnce(
+      completed({ terminalKind: 'answer_only', learningPath: null }, '一句话答案：先学变量作用域。')
+    );
+    const live = useGoalLive();
+    live.reset();
+
+    await live.resumeById('gc_1');
+
+    expect(live.terminalKind).toBe('answer_only');
+    expect(live.reopenableTerminal, 'answer-only 终局必须允许继续补充目标').toBe(true);
+    expect(live.hardBlocked, '不是硬阻断').toBe(false);
+    expect(
+      live.messages.some((m) => m.role === 'ai' && m.content.includes('先学变量作用域')),
+      'answer-only 的正文不能按 completed 被丢掉',
+    ).toBe(true);
+  });
+
+  it('no_path：历史遗留无路径终局同样可继续补充', async () => {
+    apiMock.getGoalConversation.mockReset();
+    apiMock.getGoalConversation.mockResolvedValueOnce(
+      completed({ terminalKind: 'no_path', learningPath: null }, '这次先给方向，不生成路径。')
+    );
+    const live = useGoalLive();
+    live.reset();
+
+    await live.resumeById('gc_1');
+
+    expect(live.terminalKind).toBe('no_path');
+    expect(live.reopenableTerminal).toBe(true);
+    expect(live.hardBlocked).toBe(false);
+  });
+
+  it('path_bound：已绑定路径的终局不可再补充，也绝不当成无路径', async () => {
+    apiMock.getGoalConversation.mockReset();
+    apiMock.getGoalConversation.mockResolvedValueOnce(
+      completed(
+        { terminalKind: 'path_bound', learningPath: { id: 'lp_1', status: 'active' } },
+        '路径已生成'
+      )
+    );
+    const live = useGoalLive();
+    live.reset();
+
+    await live.resumeById('gc_1');
+
+    expect(live.terminalKind).toBe('path_bound');
+    expect(live.reopenableTerminal, '已绑定路径不是「继续补充目标」场景').toBe(false);
+    expect(live.learningPath?.id).toBe('lp_1');
+  });
+
+  it('旧信封没有 terminalKind：completed 且无路径时确定性回退为 no_path', async () => {
+    apiMock.getGoalConversation.mockReset();
+    apiMock.getGoalConversation.mockResolvedValueOnce(
+      completed({ learningPath: null }, '旧信封的直接回答')
+    );
+    const live = useGoalLive();
+    live.reset();
+
+    await live.resumeById('gc_1');
+
+    expect(live.terminalKind).toBe('no_path');
+    expect(live.reopenableTerminal).toBe(true);
   });
 });

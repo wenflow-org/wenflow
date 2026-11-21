@@ -11,6 +11,7 @@ const mockPrisma: any = {
   },
   milestones: {
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     count: jest.fn()
   },
   $transaction: jest.fn()
@@ -415,6 +416,95 @@ describe('LearningService stale core recovery', () => {
     await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
 
     expect(append).not.toHaveBeenCalled()
+  })
+
+  it('渐进式：生成在途时轮询不得追加——60s 轮询不能顶掉正在跑的 stageDesign run（2026-11-21 双跑实测）', async () => {
+    process.env.PROGRESSIVE_STAGE_DESIGN = '1'
+    try {
+      const recent = new Date().toISOString()
+      const candidate = {
+        ...stageDesignCandidate(),
+        // stageDesign processing + 刚更新 → 在途判定成立（run 活跃未过期、processing 未 stale）
+        aiPromptTemplate: JSON.stringify({ _generation: { stageDesign: 'processing', updatedAt: recent } }),
+        activeGenerationRunId: 'run-in-flight',
+        updatedAt: new Date(recent)
+      }
+      setRetrySweepCandidate(candidate)
+      mockPrisma.path_generation_runs.findFirst.mockResolvedValue({
+        id: 'run-in-flight',
+        phase: 'stageDesign',
+        status: 'processing',
+        leaseExpiresAt: new Date(Date.now() + 5 * 60 * 1000)
+      })
+      // 渐进目标：最早未完成阶段还没有子任务（设计在途、子任务收尾才落库）
+      mockPrisma.milestones.findFirst.mockResolvedValue({ id: 'ms-next', subtasks: [] })
+      const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
+      const replace = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+
+      await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
+
+      expect(append).not.toHaveBeenCalled()
+      expect(replace).not.toHaveBeenCalled()
+    } finally {
+      process.env.PROGRESSIVE_STAGE_DESIGN = '0'
+    }
+  })
+
+  it('渐进式：在途 run 已过期（租约超时）→ 追加自愈照常生效', async () => {
+    process.env.PROGRESSIVE_STAGE_DESIGN = '1'
+    try {
+      const oldIso = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+      const candidate = {
+        ...stageDesignCandidate(),
+        aiPromptTemplate: JSON.stringify({ _generation: { stageDesign: 'processing', updatedAt: oldIso } }),
+        activeGenerationRunId: 'run-stale',
+        updatedAt: new Date(oldIso)
+      }
+      setRetrySweepCandidate(candidate)
+      mockPrisma.path_generation_runs.findFirst.mockResolvedValue({
+        id: 'run-stale',
+        phase: 'stageDesign',
+        status: 'processing',
+        leaseExpiresAt: new Date(Date.now() - 60 * 1000)
+      })
+      mockPrisma.milestones.findFirst.mockResolvedValue({ id: 'ms-next', subtasks: [] })
+      jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
+      const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
+        .mockResolvedValue({ retryCount: 1, runId: 'run-append' })
+
+      await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(1)
+
+      expect(append).toHaveBeenCalledWith(expect.objectContaining({ id: 'path-1' }), expect.anything(), ['ms-next'])
+    } finally {
+      process.env.PROGRESSIVE_STAGE_DESIGN = '0'
+    }
+  })
+
+  it('渐进式：无在途生成且下一阶段空白 → 轮询追加自愈照常补齐', async () => {
+    process.env.PROGRESSIVE_STAGE_DESIGN = '1'
+    try {
+      const oldIso = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+      const candidate = {
+        ...stageDesignCandidate(),
+        aiPromptTemplate: JSON.stringify({ _generation: { stageDesign: 'failed', stageDesignRetryCount: 3, updatedAt: oldIso } }),
+        activeGenerationRunId: null,
+        updatedAt: new Date(oldIso)
+      }
+      setRetrySweepCandidate(candidate)
+      mockPrisma.path_generation_runs.findFirst.mockResolvedValue(null)
+      mockPrisma.milestones.findFirst.mockResolvedValue({ id: 'ms-next', subtasks: [] })
+      jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
+      const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
+        .mockResolvedValue({ retryCount: 1, runId: 'run-append' })
+      const replace = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+
+      await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(1)
+
+      expect(append).toHaveBeenCalledWith(expect.objectContaining({ id: 'path-1' }), expect.anything(), ['ms-next'])
+      expect(replace).not.toHaveBeenCalled()
+    } finally {
+      process.env.PROGRESSIVE_STAGE_DESIGN = '0'
+    }
   })
 })
 

@@ -279,6 +279,65 @@ export async function getPathStageTraces(pathId: string, sourceConversationId?: 
     .filter(Boolean) as PathStageTraceItem[];
 }
 
+export interface PathLearningProgress {
+  /** 已完成任务数（按 subtasks.status='completed'） */
+  completedTasks: number;
+  /** 已进入学习（completed + in_progress）的任务数 */
+  startedTasks: number;
+  inProgressTasks: number;
+  totalTasks: number;
+  /** 全部任务都已完成的阶段数（空阶段不计完成） */
+  completedStages: number;
+  /** 路径阶段总数（含尚未设计出的空阶段） */
+  totalStages: number;
+  /** 已完成任务 / 总任务，0-100 整数 */
+  percent: number;
+}
+
+/**
+ * 权威的学习进度（与生成/设计进度完全分离）。
+ *
+ * - 学习进度只数真实落库的 subtasks：空阶段（渐进式尚未设计的后续阶段）不计入分母；
+ * - 设计进度（run 的 completedItems/totalItems、designedStages）另由 lifecycle 的
+ *   `completedStages/totalStages` 与 `design` 块表达，前端不得再用设计进度冒充学习进度。
+ */
+export function buildPathLearningProgress(
+  milestones: Array<{ subtasks?: Array<{ status?: string | null }> | null }> | null | undefined
+): PathLearningProgress {
+  const list = Array.isArray(milestones) ? milestones : [];
+  let completedTasks = 0;
+  let inProgressTasks = 0;
+  let totalTasks = 0;
+  let completedStages = 0;
+  let stageProgress = 0;
+  for (const milestone of list) {
+    const tasks = Array.isArray(milestone?.subtasks) ? milestone.subtasks : [];
+    totalTasks += tasks.length;
+    let stageDoneCount = 0;
+    for (const task of tasks) {
+      if (task?.status === 'completed') {
+        completedTasks += 1;
+        stageDoneCount += 1;
+      } else if (task?.status === 'in_progress') {
+        inProgressTasks += 1;
+      }
+    }
+    if (tasks.length > 0) {
+      stageProgress += stageDoneCount / tasks.length;
+      if (stageDoneCount === tasks.length) completedStages += 1;
+    }
+  }
+  return {
+    completedTasks,
+    startedTasks: completedTasks + inProgressTasks,
+    inProgressTasks,
+    totalTasks,
+    completedStages,
+    totalStages: list.length,
+    percent: list.length > 0 ? Math.round((stageProgress / list.length) * 100) : 0,
+  };
+}
+
 /** 学习准入状态：融合 path 状态、legacy 生成状态与 run 状态，产出可否开课与阻塞原因 */
 export function getPathLearningAccessState(
   pathStatus: string | null | undefined,
@@ -317,9 +376,14 @@ export function getPathLearningAccessState(
     }
   })();
 
-  // #238：status 列可能陈旧（被抢占的 core 必撞 fence 不再复位）；活动 stageDesign run 已成功且有任务即视为完成。
+  // #238：status 列可能陈旧（被抢占的 core 必撞 fence 不再复位）；活动 run 已成功且有任务即视为完成。
+  // 渐进式路径的 core run 成功后不再有「全量 stageDesign run」，首次阶段设计完成后
+  // status 也可能仍停在 generating——只要有真实任务，就应按「已可学」处理。
   const effectivePathStatus = pathStatus === 'generating' && activeRun?.status === 'succeeded'
-    && activeRun.phase === 'stageDesign' && taskCount > 0 ? 'active' : pathStatus;
+    && taskCount > 0
+    && (activeRun.phase === 'stageDesign' || (progressive && activeRun.phase === 'core'))
+    ? 'active'
+    : pathStatus;
 
   if (effectivePathStatus !== 'active') {
     // 已下线是管理员的治理动作，必须在这里短路：此前 archived 会掉进下面的
@@ -350,11 +414,14 @@ export function getPathLearningAccessState(
   }
 
   if (!generationStatus || !enrichmentStatus) {
+    // 渐进式：已有真实任务即代表首批阶段已就绪，后续设计状态缺失不阻塞已就绪部分。
+    const progressiveHasTasks = progressive && taskCount > 0;
     const missingGeneratedState = effectivePathStatus === 'active' && aiGenerated && taskCount === 0;
+    const canStart = effectivePathStatus === 'active' && (!missingGeneratedState || progressiveHasTasks);
     return {
       generationStatus,
-      canStartLearning: effectivePathStatus === 'active' && !missingGeneratedState,
-      learningBlockedReason: effectivePathStatus === 'active' && !missingGeneratedState
+      canStartLearning: canStart,
+      learningBlockedReason: canStart
         ? null
         : missingGeneratedState
           ? '学习路径生成状态缺失，暂不能开始学习，请重试生成。'
@@ -370,8 +437,10 @@ export function getPathLearningAccessState(
     };
   }
 
-  // 渐进式：已有任一阶段设计完成 → 已就绪部分可学（后续 stage 的追加设计不阻塞全局）
-  if (progressive && hasDesignedStage && (enrichmentStatus === 'processing' || enrichmentStatus === 'pending')) {
+  // 渐进式：已有任一阶段设计完成 → 已就绪部分可学（后续 stage 的追加设计不阻塞全局）。
+  // 用真实 taskCount 作为权威信号（stageDesigns 可能因旧模板缺失而不准）。
+  if (progressive && (taskCount > 0 || hasDesignedStage)
+    && (enrichmentStatus === 'processing' || enrichmentStatus === 'pending')) {
     return {
       generationStatus,
       canStartLearning: true,
@@ -380,6 +449,15 @@ export function getPathLearningAccessState(
   }
 
   if (enrichmentStatus === 'failed') {
+    // 渐进式且已有可学阶段：后续阶段设计失败不应把整条路径判死——
+    // 学习进度与设计进度分离，失败只在生成条/通知里提示可重试。
+    if (progressive && (taskCount > 0 || hasDesignedStage)) {
+      return {
+        generationStatus,
+        canStartLearning: true,
+        learningBlockedReason: null
+      };
+    }
     return {
       generationStatus,
       canStartLearning: false,
@@ -603,6 +681,8 @@ export async function getLearningPath(pathId: string) {
       ...pathWithActualMinutes,
       estimatedHours: normalized.estimatedHours,
       estimatedHoursRaw: normalized.estimatedHoursRaw,
+      // 权威学习进度（与 generationStatus/设计进度分离）：详情页可直接用，也能兜底旧前端。
+      learningProgress: buildPathLearningProgress(path.milestones),
       summary: parsePathSummary(path.aiPromptTemplate),
       generationStatus: accessState.generationStatus,
       generationRun: buildGenerationRunStatus(activeRun),
@@ -655,7 +735,7 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
       milestones: {
         select: {
           stageNumber: true,
-          subtasks: { select: { id: true } }
+          subtasks: { select: { id: true, status: true } }
         },
         orderBy: { stageNumber: 'asc' }
       }
@@ -678,14 +758,17 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
   })();
   const designedStages = path.milestones.filter((milestone) => milestone.subtasks.length > 0).length;
   const totalPathStages = Math.max(path.totalMilestones || 0, path.milestones.length, 0);
+  // 学习进度（权威、只看真实任务）与设计进度（run / designedStages）分开计算：
+  // 后续 API 消费方（列表/详情/看板/通知/目标对话）必须用 learningProgress 报学习进度。
+  const learningProgress = buildPathLearningProgress(path.milestones);
   // 活动 stageDesign run 的工作量以 run.totalItems 为准（整路径生成 = 全部阶段；
   // 后续阶段重排 = 被重排的子集，仅展示该部分进度）；
-  // 无活动 run（core 完成等待/历史状态）时退回路径阶段数。
+  // 渐进式以「已设计阶段 / 路径总阶段」表达设计进度；无活动 run 时退回路径阶段数。
   const runTotal = (run?.phase === 'stageDesign' || !run) ? (run?.totalItems || 0) : 0;
-  const totalStages = runTotal > 0
-    ? runTotal
-    : Math.max(path.totalMilestones || 0, path.milestones.length, 0);
-  const taskCount = path.milestones.reduce((sum, milestone) => sum + milestone.subtasks.length, 0);
+  const designTotalStages = progressive
+    ? totalPathStages
+    : (runTotal > 0 ? runTotal : totalPathStages);
+  const taskCount = learningProgress.totalTasks;
   const accessState = getPathLearningAccessState(
     path.status,
     path.aiPromptTemplate,
@@ -704,27 +787,26 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
   let status: 'queued' | 'processing' | 'stale' | 'failed' | 'ready' = 'ready';
 
   if (run && run.status !== 'cancelled') {
-    // 渐进式（批次 D）：stage N+1 的追加设计 run 活跃时**不回到生成态**——
-    // 已就绪阶段的可学性不受影响（accessState 渐进判定已放行）；进度见 designedStages。
-    const progressiveAppendDesign = progressive
-      && run.phase === 'stageDesign'
-      && (run.status === 'queued' || run.status === 'processing');
-    if (run.status === 'succeeded' && run.phase === 'stageDesign') {
-      phase = 'ready';
-      status = 'ready';
-    } else if (progressiveAppendDesign && accessState.canStartLearning) {
+    const runSucceeded = run.status === 'succeeded';
+    // 只有真正没有后续设计任务时才收口为 ready：
+    // - stageDesign run 成功 → 这一批设计完成；
+    // - 渐进式 core run 成功且已有可学阶段 → 首阶段已就绪（下一阶段设计由学习触发的
+    //   新 run 代表；不要因为 activeRun 还指着成功的 core run 就永远报 stage_design_queued）。
+    // 仍在 queued/processing 的追加设计 run **保持 stage_design 状态**：设计进度继续轮询，
+    // 但是否可学由 canStartLearning 单独表达（学习进度与设计进度分离）。
+    if (runSucceeded && (run.phase === 'stageDesign' || (progressive && accessState.canStartLearning))) {
       phase = 'ready';
       status = 'ready';
     } else {
       phase = run.phase === 'stageDesign' ? 'stage_design' : 'core';
-    }
-    if (stale) status = 'stale';
-    else if (run.status === 'failed') status = 'failed';
-    else if (run.status === 'queued') status = 'queued';
-    else if (run.status === 'processing') status = 'processing';
-    else if (run.status === 'succeeded' && run.phase === 'core') {
-      phase = 'stage_design';
-      status = 'queued';
+      if (stale) status = 'stale';
+      else if (run.status === 'failed') status = 'failed';
+      else if (run.status === 'queued') status = 'queued';
+      else if (run.status === 'processing') status = 'processing';
+      else if (runSucceeded && run.phase === 'core') {
+        phase = 'stage_design';
+        status = 'queued';
+      }
     }
   } else if (path.status === 'generating' || path.status === 'failed' || legacy?.core === 'failed') {
     phase = 'core';
@@ -743,16 +825,25 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
   const lifecycle = phase === 'ready'
     ? 'ready'
     : `${phase}_${status}`;
-  const completedStages = phase === 'ready'
-    ? totalStages
-    : phase === 'stage_design'
-      ? Math.min(run?.completedItems || 0, totalStages)
-      : 0;
-  const currentStageNumber = phase === 'stage_design' && status !== 'ready' && completedStages < totalStages
-    ? path.milestones[completedStages]?.stageNumber || completedStages + 1
+  // completedStages/totalStages 是「设计进度」：渐进式按已设计阶段数，eager 按本 run 的
+  // item 数。学习进度不在这里（见 learningProgress），前端不得把两者混用。
+  const completedStages = progressive
+    ? designedStages
+    : phase === 'ready'
+      ? designTotalStages
+      : phase === 'stage_design'
+        ? Math.min(run?.completedItems || 0, designTotalStages)
+        : 0;
+  const firstEmptyStage = path.milestones.find((milestone) => milestone.subtasks.length === 0);
+  const currentStageNumber = phase === 'stage_design' && status !== 'ready'
+    ? (firstEmptyStage?.stageNumber
+      ?? (completedStages < designTotalStages
+        ? path.milestones[completedStages]?.stageNumber ?? completedStages + 1
+        : null))
     : null;
+  const designActive = !!run && (run.status === 'queued' || run.status === 'processing');
 
-  // 渐进式（批次 D）：进度口径=「已设计阶段 / 总阶段」——设计按学习节奏逐段发生，
+  // 渐进式（批次 D）：设计进度口径=「已设计阶段 / 总阶段」——设计按学习节奏逐段发生，
   // 与 eager 的「本 run 全量进度」不同；前端据此显示「第 N/M 阶段已就绪，后续随学习生成」。
   // （progressive/designedStages/totalPathStages 已在函数前部解析）
 
@@ -764,16 +855,30 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
     heartbeatAt: run?.heartbeatAt?.toISOString?.() || legacy?.updatedAt || null,
     retryAllowed: retry.allowed,
     retryType: retry.retryType === 'stageDesign' ? 'stage_design' : retry.retryType,
+    // 设计进度（保留既有字段名，避免破坏旧消费方）
     completedStages,
-    totalStages,
+    totalStages: designTotalStages,
     currentStageNumber,
+    // 权威学习进度（与设计进度分离）
+    learningProgress,
+    // 设计阶段信号：active 仅在 run 真正 queued/processing 时为 true（前端据此决定轮询）
+    design: {
+      active: designActive,
+      status: designActive ? run?.status ?? null : null,
+      phase,
+      progressive,
+      completedStages,
+      totalStages: designTotalStages,
+      designedStages,
+      totalPathStages,
+    },
     ...(progressive ? { progressive: true, designedStages, totalPathStages } : {}),
     errorMessage: getSafeGenerationErrorMessage(
       run?.phase || (phase === 'stage_design' ? 'stageDesign' : phase),
       status,
       run?.errorCode
     ),
-    canStartLearning: phase === 'ready' && accessState.canStartLearning
+    canStartLearning: accessState.canStartLearning
   };
 }
 
@@ -800,6 +905,7 @@ export async function getUserLearningPaths(userId: string) {
       const allTasks = path.milestones.flatMap((m: any) => m.subtasks || []);
       const totalTaskCount = allTasks.length;
       const completedTaskCount = allTasks.filter((t: any) => t.status === 'completed').length;
+      const learningProgress = buildPathLearningProgress(path.milestones);
       const accessState = getPathLearningAccessState(
         path.status,
         path.aiPromptTemplate,
@@ -832,10 +938,12 @@ export async function getUserLearningPaths(userId: string) {
           reason: path.replanReason || null,
         },
         totalStages: path.totalMilestones,
+        // 权威学习进度：列表卡片的百分比必须用它，不能用生成 run 的设计进度。
+        learningProgress,
         taskSummary: {
           total: totalTaskCount,
           completed: completedTaskCount,
-          progress: totalTaskCount > 0 ? Math.round((completedTaskCount / totalTaskCount) * 100) : 0
+          progress: learningProgress.percent
         }
       };
     });

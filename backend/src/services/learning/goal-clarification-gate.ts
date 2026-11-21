@@ -9,8 +9,10 @@
  * 开关：默认开启；`GOAL_CLARIFICATION_ENFORCE=0` 显式关闭，回滚到 Phase 1 / 旧行为。
  */
 import {
+  decideClarificationConfirmationGate,
   decideClarificationGate,
   isClarificationEnforceEnabled,
+  type ClarificationConfirmationGateDecision,
   type ClarificationGateDecision,
 } from './goal-clarification-contract';
 
@@ -84,6 +86,7 @@ export function applyClarificationGateToResponse<T extends GoalGateResponse>(
   options: {
     conversationId: string;
     enabled: boolean;
+    requireContract?: boolean;
     onBlocked?: (info: ClarificationGateBlockedInfo) => void;
   }
 ): T {
@@ -99,6 +102,7 @@ export function applyClarificationGateToResponse<T extends GoalGateResponse>(
     clarification: goalConversation.clarification,
     nextAction: goalConversation.nextAction,
     confirmedProposal: goalConversation.confirmedProposal,
+    requireContract: options.requireContract,
     stage,
   });
   if (!decision.blocked || !decision.prompt) return response;
@@ -187,12 +191,40 @@ export function enforceClarificationGate<T extends GoalGateResponse>(
   options: {
     conversationId: string;
     env?: NodeJS.ProcessEnv;
+    requireContract?: boolean;
     onBlocked?: (info: ClarificationGateBlockedInfo) => void;
   }
 ): T {
   return applyClarificationGateToResponse(response, {
     conversationId: options.conversationId,
     enabled: isClarificationEnforceEnabled(options.env),
+    requireContract: options.requireContract,
     onBlocked: options.onBlocked,
   });
+}
+
+/**
+ * 确认边界入口（2026-11-21）：用户点确认/打字确认、即将绑定路径之前调用。
+ *
+ * - 没有 `clarification`（历史会话/旧夹具）→ legacy=true、blocked=false，行为与今天一致；
+ * - 新会话契约不满足严格口径 → blocked=true，调用方应**不要**绑定路径，改用 `prompt`
+ *   写回一条澄清回合（与提案门控同一回滚开关 `GOAL_CLARIFICATION_ENFORCE=0`）。
+ *
+ * 说明：本函数只做判定，不改 DB、不改响应；服务层调用点见 goal-conversation.service
+ * 的 `advanceConfirmedProposal`（由主协调者接线）。
+ */
+export function enforceClarificationConfirmationGate(input: {
+  clarification?: unknown;
+  requireContract?: boolean;
+  env?: NodeJS.ProcessEnv;
+}): ClarificationConfirmationGateDecision {
+  if (!isClarificationEnforceEnabled(input.env)) {
+    return {
+      blocked: false,
+      blocking: [],
+      prompt: null,
+      legacy: input.clarification === undefined || input.clarification === null,
+    };
+  }
+  return decideClarificationConfirmationGate(input);
 }

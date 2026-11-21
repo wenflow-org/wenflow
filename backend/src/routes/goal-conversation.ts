@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { gatewayErrorHttpStatus } from '../utils/gateway-http-status';
 import requirementOrchestrator from '../coordinators/requirement.coordinator';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
+import { sanitizeMaterialIdsInput } from '../services/learning/goal-conversation.service';
 import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
@@ -165,7 +166,10 @@ function envelopeGoalConversation(result: any, fallbackConversationId?: string) 
         // 硬阻断终局标记透传（2026-11-05 UX 审计 P0）：core 是白名单重建，不透传该字段
         // 前端永远收不到 true，「路径已创建」假成功弹层照旧。仅 true 时携带（缺席=falsy，
         // 普通信封的公开 DTO 形状不变，routes.contract 契约测试的 toEqual 不受影响）。
-        ...(core.hardBlocked === true ? { hardBlocked: true as const } : {})
+        ...(core.hardBlocked === true ? { hardBlocked: true as const } : {}),
+        // 终局类型（path_bound / hard_blocked / answer_only / no_path）：显式、持久，
+        // 前端恢复页据此区分「路径已创建」「阻断」「无路径可继续补充」。
+        ...(typeof core.terminalKind === 'string' ? { terminalKind: core.terminalKind } : {})
       },
       ext: {
         goalConversation: {
@@ -205,7 +209,8 @@ function syntheticGoalEnvelope(result: any, fallbackConversationId?: string) {
       conversationId: core.conversationId,
       stage: core.stage,
       isCompleted: core.isCompleted,
-      learningPath: core.learningPath ? { id: core.learningPath.id, status: core.learningPath.status } : null
+      learningPath: core.learningPath ? { id: core.learningPath.id, status: core.learningPath.status } : null,
+      ...(typeof core.terminalKind === 'string' ? { terminalKind: core.terminalKind } : {})
     },
     renderHints: envelope.renderHints,
     schemaVersion: 'synthetic-user-v1'
@@ -228,6 +233,14 @@ function getContextMode(body: any): 'recent' | 'full' {
 
 function getConfirmProposal(body: any): boolean {
   return body?.confirmProposal === true;
+}
+
+/**
+ * 显式挂载资料（资料跟路径生成走）：body.materialIds 净化后透传。
+ * undefined=调用方未声明（存量/VL 语义）；数组（含 []）=显式口径，整包覆盖会话挂载列表。
+ */
+function getMaterialIds(body: any): string[] | undefined {
+  return sanitizeMaterialIdsInput(body?.materialIds);
 }
 
 /**
@@ -261,13 +274,17 @@ router.post('/start', authMiddleware, goalConversationUserLimiter, async (req: R
       return handleStreamingGoal(
         req,
         res,
-        () => requirementOrchestrator.start(userId, goal, { contextMode: getContextMode(req.body) }),
+        () => requirementOrchestrator.start(userId, goal, {
+          contextMode: getContextMode(req.body),
+          materialIds: getMaterialIds(req.body)
+        }),
         (result) => goalEnvelopeForRequest(req, result)
       );
     }
 
     const result = await requirementOrchestrator.start(userId, goal, {
-      contextMode: getContextMode(req.body)
+      contextMode: getContextMode(req.body),
+      materialIds: getMaterialIds(req.body)
     });
     return res.json({
       success: true,
@@ -316,6 +333,7 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
           contextMode: getContextMode(req.body),
           confirmProposal: getConfirmProposal(req.body),
           probeAnswers: getProbeAnswers(req.body),
+          materialIds: getMaterialIds(req.body),
           meta: sanitizeMeta(req.body?.meta)
         }),
         (result) => goalEnvelopeForRequest(req, result, conversationId)
@@ -326,6 +344,7 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
       contextMode: getContextMode(req.body),
       confirmProposal: getConfirmProposal(req.body),
       probeAnswers: getProbeAnswers(req.body),
+      materialIds: getMaterialIds(req.body),
       meta: sanitizeMeta(req.body?.meta)
     });
     return res.json({
@@ -477,7 +496,8 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
             isCompleted: conversation.status === 'completed',
             learningPath: conversation.learningPath
               ? { id: conversation.learningPath.id, status: conversation.learningPath.status }
-              : null
+              : null,
+            terminalKind: conversation.terminalKind || null
           },
           visibleMessages: conversation.messages || [],
           renderHints: {},
@@ -499,7 +519,9 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
             learningPath: conversation.learningPath || null,
             // 硬阻断终局标记透传（2026-11-05 UX 审计 P0）：重进已完成会话的恢复信封
             // 与确认回合的 final 信封同口径，缺省一律 false
-            hardBlocked: conversation.hardBlocked === true
+            hardBlocked: conversation.hardBlocked === true,
+            // 显式终局类型（持久化在 collectedData）：恢复页据此决定展示成功/阻断/可继续补充
+            terminalKind: conversation.terminalKind || null
           },
           ext: {
             goalConversation: {

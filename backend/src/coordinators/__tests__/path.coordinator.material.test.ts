@@ -320,3 +320,100 @@ describe('path.coordinator 附件注入（附件是主线）', () => {
     expect(selectionLog?.noPhraseHit).toEqual(['摄影构图笔记.pdf'])
   })
 })
+
+describe('path.coordinator 显式挂载分支（资料跟路径生成走，2026-11-21）', () => {
+  function seedMaterial(userId: string, id: string, name: string) {
+    if (!uploadRoot) {
+      uploadRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wenflow-upload-'))
+      process.env.MATERIAL_UPLOAD_DIR = uploadRoot
+    }
+    writeMaterial({
+      id,
+      userId,
+      name,
+      ext: '.md',
+      format: 'md',
+      size: 10,
+      charCount: 30,
+      structure: {
+        pageCount: null, slideCount: 0, sheetCount: 0, headingCount: 1,
+        tableCount: 0, listCount: 0, paragraphCount: 1, chunkCount: 1,
+      },
+      anchors: [{ heading: '第一章', location: '1', preview: '片段' }],
+      warnings: [],
+      createdAt: '2026-11-21T00:00:00.000Z',
+      origin: 'upload',
+    } as any, '正文')
+  }
+
+  it('materialIds 提供时只按给定 id 直取记录建 pack（顺序保留），不做资料库排序', async () => {
+    seedMaterial('u-explicit', '11111111-2222-3333-4444-555555555001', '第一份资料.md')
+    seedMaterial('u-explicit', '11111111-2222-3333-4444-555555555002', '第二份资料.md')
+
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u-explicit',
+      rawGoal: '学点东西',
+      visibleSummary: VISIBLE_BASE,
+      materialIds: ['11111111-2222-3333-4444-555555555002', '11111111-2222-3333-4444-555555555001'],
+    } as any)
+
+    const materials = result.userProfile.normalizedInput.resources.materials
+    expect(materials).toHaveLength(2)
+    expect(materials.map((entry: any) => entry.pack.materialId)).toEqual(['11111111-2222-3333-4444-555555555002', '11111111-2222-3333-4444-555555555001'])
+    expect(infoMock.mock.calls.some((call) => String(call[0]) === '[path-coordinator] 资料挂载')).toBe(true)
+  })
+
+  it('挂载 id 缺失 → 忽略并留痕，不阻塞其余', async () => {
+    seedMaterial('u-explicit', '11111111-2222-3333-4444-555555555001', '第一份资料.md')
+
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u-explicit',
+      rawGoal: '学点东西',
+      visibleSummary: VISIBLE_BASE,
+      materialIds: ['missing-id', '11111111-2222-3333-4444-555555555001'],
+    } as any)
+
+    const materials = result.userProfile.normalizedInput.resources.materials
+    expect(materials).toHaveLength(1)
+    expect(materials[0].pack.materialId).toBe('11111111-2222-3333-4444-555555555001')
+    const attachLog = infoMock.mock.calls.find((call) => String(call[0]) === '[path-coordinator] 资料挂载')
+    expect((attachLog?.[1] as any)?.missing).toEqual(['missing-id'])
+  })
+
+  it('显式空数组 → 零注入零扫描（新对话干净起步）', async () => {
+    seedMaterial('u-explicit', '11111111-2222-3333-4444-555555555001', '第一份资料.md')
+
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u-explicit',
+      rawGoal: '学点东西',
+      visibleSummary: VISIBLE_BASE,
+      materialIds: [],
+    } as any)
+
+    expect(result.userProfile.normalizedInput.resources.materials).toBeUndefined()
+    const attachLog = infoMock.mock.calls.find((call) => String(call[0]) === '[path-coordinator] 资料挂载')
+    expect((attachLog?.[1] as any)?.mode).toBe('explicit-empty')
+  })
+
+  it('materialIds undefined（存量/VL/直连）→ 沿用资料库自动扫库，行为不变', async () => {
+    seedMaterial('u-explicit', '11111111-2222-3333-4444-555555555001', '第一份资料.md')
+    seedMaterial('u-explicit', '11111111-2222-3333-4444-555555555002', '第二份资料.md')
+    // jest 会加载 .env 的真实 RERANK_API_URL：≥2 份资料会触发真实 rerank 闸（假资料全被
+    // 判低分过滤）。本用例只验证「自动扫库链路仍在」，置空闸保持封闭。
+    process.env.MATERIAL_RERANK_GATE_DISABLED = '1'
+
+    try {
+      const result = await pathOrchestrator.previewNormalizedGoalInput({
+        userId: 'u-explicit',
+        rawGoal: '学点东西',
+        visibleSummary: VISIBLE_BASE,
+      } as any)
+
+      const materials = result.userProfile.normalizedInput.resources.materials
+      expect(materials).toHaveLength(2)
+      expect(infoMock.mock.calls.some((call) => String(call[0]) === '[path-coordinator] 资料库选择')).toBe(true)
+    } finally {
+      delete process.env.MATERIAL_RERANK_GATE_DISABLED
+    }
+  })
+})

@@ -50,6 +50,12 @@ export interface GoalMaterialSummaryOptions {
   conversationId?: string;
   /** 当前目标（understanding.surface_goal）：缓存键的一部分，目标变了就重排。 */
   surfaceGoal?: string;
+  /**
+   * 显式挂载资料 id 列表（资料跟路径生成走）：提供时（含 []）跳过排名选择，
+   * 按给定 id 顺序取记录（所有权随 listMaterials 过滤、缺失 id 忽略），
+   * 全部标 selectedForPath=true；不提供（undefined）=存量自动排序语义。
+   */
+  materialIds?: string[];
 }
 
 interface GoalMaterialRankCacheEntry {
@@ -195,6 +201,52 @@ export async function collectGoalUploadedMaterialSummaries(
 
     const conversationId = typeof options?.conversationId === 'string' ? options.conversationId.trim() : '';
     const surfaceGoal = typeof options?.surfaceGoal === 'string' ? options.surfaceGoal.trim() : '';
+
+    // 显式挂载分支（资料跟路径生成走）：列表提供时（含 []）不进排序/缓存链路，
+    // 按挂载顺序直取记录——用户显式选择的顺序就是主线顺序，全部 selectedForPath=true。
+    if (Array.isArray(options?.materialIds)) {
+      const wantedIds = options.materialIds.map((mid) => String(mid || '').trim()).filter(Boolean);
+      const picked = wantedIds
+        .map((mid) => pool.find((record) => record.id === mid))
+        .filter((record): record is MaterialRecord => !!record);
+      if (picked.length > 0) {
+        const briefs = await collectBriefsWithDeadline(picked, GOAL_BRIEF_DEADLINE_MS);
+        logger.info('[goal-conversation] 资料挂载清单（显式）', {
+          attached: picked.map((record) => record.name),
+          missing: wantedIds.filter((mid) => !picked.some((record) => record.id === mid)),
+          conversationId: conversationId || undefined,
+        });
+        return picked.map((record, index) => {
+          const brief = briefs[index];
+          return {
+            name: record.name,
+            ext: record.ext,
+            format: record.format,
+            charCount: record.charCount,
+            headingCount: record.structure?.headingCount ?? 0,
+            headings: (record.anchors || [])
+              .map((anchor) => String(anchor?.heading || '').trim())
+              .filter((heading) => heading && heading !== '（无标题）')
+              .slice(0, 6),
+            selectedForPath: true,
+            libraryTotal: pool.length,
+            libraryOmitted: 0,
+            brief: brief
+              ? {
+                  docType: brief.docType,
+                  subject: brief.subject,
+                  audience: brief.audience,
+                  overview: brief.overview,
+                  naturalDivisions: brief.naturalDivisions,
+                  toc: brief.toc,
+                }
+              : null,
+          };
+        });
+      }
+      return [];
+    }
+
     const fingerprint = materialPoolFingerprint(pool);
     const cacheKey = conversationId ? buildRankCacheKey(id, conversationId, surfaceGoal) : '';
     const cachedEntry = cacheKey ? readRankCache(cacheKey, fingerprint) : null;

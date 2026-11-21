@@ -24,6 +24,11 @@ export interface PathCompletionProjection {
   status: string;
   /** 活动 run 推导的 lifecycle；null = 拿不到（调用方退回 status 判定） */
   lifecycle: string | null;
+  /**
+   * 学习进度与设计进度分离后的权威可学信号：渐进式路径 `stage_design_processing`
+   * 时已有阶段仍可学，不能按「整条路径还在生成」处理。
+   */
+  canStartLearning: boolean;
 }
 
 /**
@@ -36,8 +41,11 @@ export async function getPathCompletionProjection(pathId: string): Promise<PathC
   if (!path) return null;
 
   let lifecycle: string | null = null;
+  let canStartLearning = false;
   try {
-    lifecycle = (await getPathGenerationLifecycle(pathId, path.userId)).lifecycle;
+    const projection = await getPathGenerationLifecycle(pathId, path.userId);
+    lifecycle = projection.lifecycle;
+    canStartLearning = projection.canStartLearning === true;
   } catch (error) {
     logger.warn('[goal-conversation] 路径 lifecycle 投影失败，文案退回 status 判定', {
       pathId,
@@ -50,5 +58,6 @@ export async function getPathCompletionProjection(pathId: string): Promise<PathC
     name: path.name || path.title || null,
     status: path.status,
     lifecycle,
+    canStartLearning,
   };
 }

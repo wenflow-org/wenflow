@@ -12,6 +12,87 @@ import {
 } from './response-triage';
 import { buildGoalConversationExt } from './goal-conversation.ext';
 
+/**
+ * 会话终局类型（2026-11-21 状态机修复）。
+ *
+ * `goal_conversations.status='completed'` 此前把四种完全不同的结局压成同一个值：
+ * 已绑路径、分诊硬阻断、answer-only 直答收口、以及历史遗留的「completed 但无路径」。
+ * 前端只能靠 `learningPath`/拒绝文案猜测，于是「无路径完成」被当成「路径已创建」，
+ * `/reply` 也把后续输入全部短路成同一句成功的假话。
+ *
+ * 这里把终局原因显式、持久地写进 `collectedData.terminalKind`（不改表结构），
+ * 读侧（信封 / GET / 前端）一律以它为准：
+ * - `path_bound`：确认已绑定路径，终局不可再聊；
+ * - `hard_blocked`：分诊硬阻断，后续补充说明走重判；
+ * - `answer_only`：模型判定一句话直答即收口，没有提案、也不生成路径（可继续补充目标）；
+ * - `no_path`：历史遗留/异常无路径终局（同样按可重开处理，绝不谎称已生成）。
+ */
+export type GoalTerminalKind = 'path_bound' | 'hard_blocked' | 'answer_only' | 'no_path';
+
+export const GOAL_TERMINAL_KIND_KEY = 'terminalKind';
+export const GOAL_TERMINAL_AT_KEY = 'terminalAt';
+
+const GOAL_TERMINAL_KINDS: ReadonlySet<GoalTerminalKind> = new Set([
+  'path_bound',
+  'hard_blocked',
+  'answer_only',
+  'no_path',
+]);
+
+export function isGoalTerminalKind(value: unknown): value is GoalTerminalKind {
+  return typeof value === 'string' && GOAL_TERMINAL_KINDS.has(value as GoalTerminalKind);
+}
+
+/** 读取已落库终局类型（兼容 snake_case 旧数据），非法值按缺失处理。 */
+export function readGoalTerminalKind(data: Record<string, unknown> | null | undefined): GoalTerminalKind | null {
+  if (!data) return null;
+  const value = data[GOAL_TERMINAL_KIND_KEY] ?? data.terminal_kind;
+  return isGoalTerminalKind(value) ? value : null;
+}
+
+/** 落库终局标记（collectedData 是整包读改写，额外顶层键会被原样保留）。 */
+export function markGoalTerminal(
+  data: Record<string, unknown>,
+  kind: GoalTerminalKind,
+  at: Date = new Date()
+): void {
+  data[GOAL_TERMINAL_KIND_KEY] = kind;
+  data[GOAL_TERMINAL_AT_KEY] = at.toISOString();
+}
+
+/** 重开（answer-only / no_path 续聊、硬阻断重判回到 proposing）时清掉终局标记。 */
+export function clearGoalTerminal(data: Record<string, unknown>): void {
+  delete data[GOAL_TERMINAL_KIND_KEY];
+  delete data.terminal_kind;
+  delete data[GOAL_TERMINAL_AT_KEY];
+}
+
+/**
+ * 解析会话终局类型：显式落库值优先；旧数据按「已绑路径 / 硬阻断 / 无路径」确定性回退。
+ * 返回 null = 会话尚未终局。
+ */
+export function resolveGoalTerminalKind(
+  data: Record<string, unknown> | null | undefined,
+  options: { learningPathId?: string | null; status?: string | null }
+): GoalTerminalKind | null {
+  const stored = readGoalTerminalKind(data);
+  if (stored) {
+    // 路径终局必须真有绑定；脏数据（路径被删除但 terminalKind 残留）按无路径处理。
+    if (stored === 'path_bound' && !options.learningPathId) return 'no_path';
+    return stored;
+  }
+  if (options.learningPathId) return 'path_bound';
+  if (options.status !== 'completed') return null;
+  const triage = resolveResponseTriageFromCollectedData(data || {});
+  if (isHardBlockResponseTriage(triage, data?.understanding)) return 'hard_blocked';
+  return 'no_path';
+}
+
+/** 是否是可继续补充/重开的无路径终局（硬阻断另有重判链路）。 */
+export function isReopenableGoalTerminal(kind: GoalTerminalKind | null | undefined): boolean {
+  return kind === 'answer_only' || kind === 'no_path';
+}
+
 export interface GoalExitContext {
   conversationId: string;
   understanding: Record<string, unknown>;
@@ -28,7 +109,7 @@ export interface HardBlockMessageOptions {
 
 /**
  * 硬阻断的原因说明（2026-10-29 诚实文案改写，H-1/H-2）：与实际拦截条件对齐——
- * 硬阻断只拦「平台无法客观判定学习效果」（not_judgeable × 感官/肢体内化）与情绪支持类，
+ * 硬阻断针对平台无法客观判定的目标与情绪支持类，
  * 不再复用 referral 的通用建议行（旧行会说「现实条件/资源/流程阻塞」，与对话内已采集画像
  * （器具豆子全齐）直接矛盾）。emotional_support 单独给原因，其余一律按不可判定说明。
  */
@@ -36,7 +117,7 @@ function describeHardBlockReason(triage: ResponseTriage | null | undefined): str
   if (triage?.mode === 'emotional_support') {
     return '你此刻更需要的可能是情绪与信心上的支持，硬排一条练习路径帮不上忙';
   }
-  return '平台无法客观判定这类目标的学习效果（结果要靠真实的感官体验才能确认，例如风味、手感、笔锋、音色），线上练习替代不了真人指导';
+  return '平台无法客观判定这类目标的学习效果，建议用能直接观察结果的方式验证，或请真人指导';
 }
 
 /**
@@ -69,6 +150,7 @@ export function buildHardBlockResult(ctx: GoalExitContext, triage: ResponseTriag
         // 与普通完成同样处理，弹出「路径已创建 · 生成中」假成功弹层。
         // outputSchema 未开 additionalProperties，该字段原样透传到前端。
         hardBlocked: true,
+        terminalKind: 'hard_blocked' as const,
       },
       ext: {
         goalConversation: buildGoalConversationExt({
@@ -91,11 +173,21 @@ export async function buildCompletedConversationResult(input: {
   collectedData: string | null;
   learningPathId: string | null;
   /** lifecycle 是权威信号（活动 run 推导，见 resolvePathCompletionUserVisible），由调用方投影后注入 */
-  findPath: (id: string) => Promise<{ id: string; status: string; lifecycle?: string | null } | null>;
+  findPath: (id: string) => Promise<{
+    id: string;
+    status: string;
+    lifecycle?: string | null;
+    canStartLearning?: boolean | null;
+  } | null>;
 }) {
   const data = JSON.parse(input.collectedData || '{}');
   const triage = resolveResponseTriageFromCollectedData(data);
-  if (!input.learningPathId && isHardBlockResponseTriage(triage, data.understanding)) {
+  const terminalKind = resolveGoalTerminalKind(data, {
+    learningPathId: input.learningPathId,
+    status: 'completed',
+  });
+
+  if (!input.learningPathId && terminalKind === 'hard_blocked') {
     return buildHardBlockResult(
       {
         conversationId: input.conversationId,
@@ -110,21 +202,30 @@ export async function buildCompletedConversationResult(input: {
   let learningPath = null;
   let pathLifecycle: string | null = null;
   let pathStatus: string | null = null;
+  let pathCanStartLearning: boolean | null = null;
   if (input.learningPathId) {
     const path = await input.findPath(input.learningPathId);
     if (path) {
       learningPath = { id: path.id, status: path.status };
       pathStatus = path.status;
       pathLifecycle = path.lifecycle ?? null;
+      pathCanStartLearning = path.canStartLearning ?? null;
     }
   }
 
+  // 无路径终局（answer_only / no_path）绝不复述「学习路径已经生成」。
+  // 模型直答（answer-only）的收口就是历史里最后一条 AI 文本；旧数据没有文本时给中性说明。
+  const noPathText = learningPath
+    ? null
+    : (lastAssistantTextFromData(data) || PATH_NO_PATH_TERMINAL_USER_VISIBLE);
+
   return {
     // #228 残余：这条早退分支原先写死「已生成」，与同一响应体里的 learningPath.status 自相矛盾。
-    // 现在与 GET 快照共用同一个分支函数：只有 lifecycle=ready 才说已生成。
-    userVisible: resolvePathCompletionUserVisible({
+    // 现在与 GET 快照共用同一个分支函数：只有 lifecycle=ready（或已可开始学习的渐进式路径）才说已生成。
+    userVisible: noPathText ?? resolvePathCompletionUserVisible({
       lifecycle: pathLifecycle,
       status: pathStatus,
+      canStartLearning: pathCanStartLearning,
       readyText: PATH_COMPLETED_USER_VISIBLE,
     }),
     internal: {
@@ -134,6 +235,7 @@ export async function buildCompletedConversationResult(input: {
         confidence: data.confidence || 0,
         isCompleted: true,
         learningPath,
+        terminalKind: terminalKind || (learningPath ? 'path_bound' : 'no_path'),
       },
       ext: {
         goalConversation: buildGoalConversationExt({
@@ -161,6 +263,18 @@ const PATH_GENERATION_FAILED_USER_VISIBLE = '学习路径生成失败，可前�
 /** 路径确已就绪时的用户可见文案（/reply 早退与确认同步返回共用同一句）。 */
 export const PATH_COMPLETED_USER_VISIBLE = '学习路径已经生成，可以去查看啦！';
 
+/** 渐进式路径：已有阶段可学、后续阶段仍在准备时的用户可见文案。 */
+export const PATH_PARTIAL_READY_USER_VISIBLE =
+  '学习路径已经生成，可以先开始学习；后续阶段会随你的学习进度继续准备。';
+
+/** 渐进式路径：已有阶段可学、后续阶段准备失败时的用户可见文案。 */
+export const PATH_PARTIAL_DESIGN_FAILED_USER_VISIBLE =
+  '学习路径已经生成，可以先开始学习；后续阶段准备遇到问题，可前往“学习路径”重试。';
+
+/** completed 且无路径、又没有可回放的 AI 文本时的中性终局说明（绝不谎称已生成）。 */
+export const PATH_NO_PATH_TERMINAL_USER_VISIBLE =
+  '本次对话已经结束，没有生成学习路径。如有需要，可以继续补充目标。';
+
 /**
  * 路径完成态文案的**唯一分档**（#223 残余 / #228）——GET 快照与 /reply 都走这里，避免两处各写一套。
  *
@@ -177,14 +291,25 @@ export const PATH_COMPLETED_USER_VISIBLE = '学习路径已经生成，可以去
 export function resolvePathCompletionUserVisible(input: {
   lifecycle?: string | null;
   status?: string | null;
+  /**
+   * 渐进式路径的关键区分：`stage_design_processing/failed` 时已有阶段可能已经可学。
+   * true 时不再把「后续阶段还在准备」说成整条路径未生成（学习进度与设计进度分离）。
+   */
+  canStartLearning?: boolean | null;
   readyText: string;
 }): string {
   const lifecycle = typeof input.lifecycle === 'string' && input.lifecycle.length > 0 ? input.lifecycle : null;
   if (lifecycle) {
     if (lifecycle === 'ready') return input.readyText;
+    if (input.canStartLearning === true) {
+      return lifecycle.endsWith('_failed')
+        ? PATH_PARTIAL_DESIGN_FAILED_USER_VISIBLE
+        : PATH_PARTIAL_READY_USER_VISIBLE;
+    }
     if (lifecycle.endsWith('_failed')) return PATH_GENERATION_FAILED_USER_VISIBLE;
     return PATH_GENERATING_USER_VISIBLE;
   }
+  if (input.canStartLearning === true) return PATH_PARTIAL_READY_USER_VISIBLE;
   if (input.status === 'generating') return PATH_GENERATING_USER_VISIBLE;
   if (input.status === 'failed') return PATH_GENERATION_FAILED_USER_VISIBLE;
   return input.readyText;
@@ -209,7 +334,13 @@ export function resolveConversationUserVisible(input: {
   status: string;
   collectedData: string | null;
   learningPathId: string | null;
-  learningPath: { id: string; name?: string | null; status?: string | null; lifecycle?: string | null } | null;
+  learningPath: {
+    id: string;
+    name?: string | null;
+    status?: string | null;
+    lifecycle?: string | null;
+    canStartLearning?: boolean | null;
+  } | null;
   messages: Array<{ role?: unknown; content?: unknown }> | null | undefined;
 }): string | null {
   if (input.status === 'completed') {
@@ -219,6 +350,7 @@ export function resolveConversationUserVisible(input: {
       return resolvePathCompletionUserVisible({
         lifecycle: input.learningPath.lifecycle,
         status: input.learningPath.status,
+        canStartLearning: input.learningPath.canStartLearning,
         readyText: `学习路径已生成：${input.learningPath.name || '未命名路径'}`,
       });
     }
@@ -226,7 +358,11 @@ export function resolveConversationUserVisible(input: {
     if (input.learningPathId) return null;
     const data = JSON.parse(input.collectedData || '{}');
     const triage = resolveResponseTriageFromCollectedData(data);
-    if (!isHardBlockResponseTriage(triage, data.understanding)) return null;
+    // 无路径非阻断终局（answer_only / no_path）：能回放模型收口文本就回放，
+    // 没有文本时返回中性说明——绝不落成「学习路径已生成」。
+    if (!isHardBlockResponseTriage(triage, data.understanding)) {
+      return lastAssistantText(input.messages) || PATH_NO_PATH_TERMINAL_USER_VISIBLE;
+    }
     // #213：重判仍被拦截时 /reply 返回的是 B（「已结合你的补充说明重新判断，结论不变…」），
     // 若这里一律按初判重建 A，重载后 B 就消失了。两版文案都含同一句标记，故以「历史里已落库的
     // 那一版」为准；只有历史里根本没有拒绝文案（旧数据）时才重建。
@@ -248,6 +384,12 @@ export function resolveConversationUserVisible(input: {
 
 /** 硬阻断拒绝文案的稳定片段：初判版与重判版都含这一句（#213 用它区分「拒绝文案」与普通 AI 回合）。 */
 const HARD_BLOCK_REFUSAL_MARKER = '不会生成学习路径';
+
+/** collectedData.messages 里最后一条非空 assistant/ai 文本；取不到返回 null。 */
+function lastAssistantTextFromData(data: Record<string, unknown> | null | undefined): string | null {
+  const messages = data && Array.isArray(data.messages) ? data.messages : [];
+  return lastAssistantText(messages as Array<{ role?: unknown; content?: unknown }>);
+}
 
 /** 历史里最后一条非空 assistant/ai 文本；取不到返回 null。 */
 function lastAssistantText(

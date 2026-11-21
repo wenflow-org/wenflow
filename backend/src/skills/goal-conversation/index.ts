@@ -232,12 +232,12 @@ export interface GoalUploadedMaterialSummary {
 
 /** 资料清单纪律注记：随清单一起注入 user payload（system prompt 纯静态，不进 prompt 治理管线）。 */
 const UPLOADED_MATERIALS_NOTE =
-  'uploadedMaterials 字段是用户已上传的资料清单及其理解摘要（brief）：已收到，路径生成会按目标相关性从资料库选 3 份作为主线。'
-  + 'selectedForPath=true 的条目是本次路径主线；false 为资料库补充资料，路径不保证打包，但仍可按需引用。'
-  + '若 libraryOmitted>0，说明资料库还有未列出的资料，不要声称已看完全部；需要时请用户指定范围。'
+  'uploadedMaterials 字段是用户显式挂载的资料清单及其理解摘要（brief）：已收到，路径生成只会使用这里挂载的资料（挂载的每一份都进路径主线）。'
+  + 'selectedForPath=true 表示该份已进入路径主线。'
+  + '若 libraryOmitted>0，说明资料库还有未挂载的资料，路径不会使用它们；用户想让某份资料进路径时，请提示在对话输入框回形针处挂载。'
   + '你可基于 brief 的 subject/overview/toc 与用户澄清学习范围（「全面学习整份资料」还是「重点学某些章节」），'
   + '并可参考 naturalDivisions 建议切分维度；除摘要所载信息外，正文细节你尚未读取——'
-  + '禁止假装读过或凭记忆引用正文细节；这些资料无需在 needsMaterial 中重复声明（下游会自动使用已上传文件）。';
+  + '禁止假装读过或凭记忆引用正文细节；这些资料无需在 needsMaterial 中重复声明（下游会直接使用挂载文件）。';
 
 export function buildGoalConversationUserPayload(input: {
   userInput: string;
@@ -1113,20 +1113,27 @@ function buildStructuredOutputErrorMessage(attemptCount: number): string {
  * 不是教学回合。用户说「你给我讲」时，导师切讲课模式成段授课（**小标题**+多段机制讲解），
  * 阶段停在 understanding、确认面板永不出現——用户被漂移进了一场没有出口的即时答疑。
  *
- * 判据（高精度，宁漏勿杀）：reply 带多段粗体小标题（≥2 个 6 字以上的 **…** 段）且总长 ≥400，
- * 或总长 ≥800。proposing 阶段的方案轮廓叙述（无小标题、≤3 段）不命中。
+ * 判据（2026-11-21 按回合阶段 + 结构，覆盖合法长提案）：
+ * - understanding / 未知阶段：成段预演就是越界——≥2 个 6 字以上粗体小标题且总长 ≥400，
+ *   或总长 ≥800（即使无小标题）→ 命中；
+ * - proposing / ready / completed：**合法的长提案**可以远超 800 字（阶段、边界、假设写全），
+ *   此时只按「结构形态」判：出现 ≥2 个粗体小标题的成段授课才命中，纯长文不拦。
+ * 这样既不放过真讲课，也不会把写详细的方案当成漂移而强制重试。
  */
-export function assessGoalTeachingDrift(reply: string, previousStage: string): { valid: boolean; failureReason?: string; violations?: string[] } {
+export function assessGoalTeachingDrift(reply: string, stage: string): { valid: boolean; failureReason?: string; violations?: string[] } {
   const text = String(reply || '');
   if (!text) return { valid: true };
+  const stageKey = String(stage || '').trim().toLowerCase();
+  const proposalStage = stageKey === 'proposing' || stageKey === 'ready' || stageKey === 'completed';
   const boldHeadings = text.match(/\*\*[^*\n]{6,}\*\*/g) || [];
-  const lectureLike = (boldHeadings.length >= 2 && text.length >= 400) || text.length >= 800;
+  const structuralLecture = boldHeadings.length >= 2 && text.length >= 400;
+  const lectureLike = structuralLecture || (!proposalStage && text.length >= 800);
   if (!lectureLike) return { valid: true };
   return {
     valid: false,
     failureReason: 'GOAL_TEACHING_DRIFT',
     violations: [
-      `reply 呈讲课形态（${boldHeadings.length} 个粗体小标题、${text.length} 字）——goal 对话不是教学回合`,
+      `reply 呈讲课形态（${boldHeadings.length} 个粗体小标题、${text.length} 字、阶段=${stageKey || 'unknown'}）——goal 对话不是教学回合`,
     ],
   };
 }
@@ -1252,9 +1259,12 @@ function buildGoalPromptSpec(
     // goal 对话漂移成教学回合。带反馈重试一次，仍漂移按原输出走（不硬拦）。
     // 收敛窗口软校验（2026-11-13 u10）：≥5 个用户回合仍无提案 → 强制重试并进 proposing。
     softValidateParsedOutput: (parsed: any, input: any) => {
+      // 回合阶段以「本轮输出」优先（模型可能在本轮从 understanding 进入 proposing）：
+      // 只拿 previousStage 会把本轮合法长提案错判成讲课漂移（2026-11-21）。
+      const stage = String(parsed?.state?.stage ?? parsed?.stage ?? input?.previousStage ?? '');
       const drift = assessGoalTeachingDrift(
         typeof parsed?.reply === 'string' ? parsed.reply : '',
-        String(input?.previousStage ?? ''),
+        stage,
       );
       if (!drift.valid) return drift;
       return assessGoalConvergenceOverdue(parsed, input);

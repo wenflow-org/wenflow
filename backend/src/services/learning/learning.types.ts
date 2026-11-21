@@ -74,6 +74,17 @@ export interface GeneratePathData {
         milestones?: Array<{ title?: string | null; goal?: string | null }>;
       };
     };
+    /**
+     * 显式虚拟实验分组（2026-11-21）：仅 `requestedBy: 'virtual-lab'` 且 `enabled: true`
+     * 时，后台评审才会额外执行「评审→一次返工→再评审」比较，并把原方案/返工方案存进
+     * `_generation.pathReviewExperiment`（`effectOnDurablePath: 'none'`）。
+     * 普通真实/虚拟路径不设置此字段，因此永远不会自动返工。
+     */
+    pathReviewExperiment?: {
+      enabled?: boolean;
+      requestedBy?: 'virtual-lab' | string;
+      compareReplan?: boolean;
+    };
   };
   systemPromptOverrides?: {
     pathAgent?: string;

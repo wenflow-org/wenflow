@@ -20,7 +20,8 @@ import {
   streamRegenerateGoalConversation,
   type GoalConversationEnvelope,
   type GoalProbeAnswer,
-  type GoalUnderstanding
+  type GoalUnderstanding,
+  type GoalTerminalKind
 } from '@/api/goalConversation';
 import { useInteractionMeta, type InteractionMeta } from '@/composables/useInteractionMeta';
 // 气泡时间标签单一实现（nowTime / formatMsgTime 同源），见 learningChat.ts 注释
@@ -111,6 +112,13 @@ const stage = ref<'understanding' | 'proposing' | 'ready' | 'completed' | ''>(''
 const isCompleted = ref(false);
 /** 分诊硬阻断终局（completed 且不会生成路径）：视图据此展示阻断说明而非「路径已创建」假成功 */
 const hardBlocked = ref(false);
+/**
+ * 显式终局类型（持久化在服务端 collectedData）：视图用它区分
+ * 路径已创建 / 硬阻断 / answer-only 无路径可继续补充，不再用「completed + 无路径」猜。
+ */
+const terminalKind = ref<GoalTerminalKind | ''>('');
+/** 无路径终局（answer-only / no_path）可继续补充目标，不锁死对话 */
+const reopenableTerminal = computed(() => terminalKind.value === 'answer_only' || terminalKind.value === 'no_path');
 const understanding = ref<GoalUnderstanding>({});
 const collected = ref<Record<string, unknown>>({});
 const quickReplies = ref<Array<{ text: string; icon?: string }>>([]);
@@ -136,6 +144,14 @@ const stopped = ref<'start' | 'reply' | 'confirm' | 'supplement' | ''>('');
 const lastPayload = ref('');
 const freshKeys = ref<string[]>([]);
 const started = ref(false);
+/**
+ * 显式挂载资料 id 列表（资料跟路径生成走）：随 start/reply/confirm 请求携带。
+ * undefined=本页未声明显式口径（恢复的存量/legacy 会话 → 后端沿用自动扫库语义）；
+ * 数组（含 []）=显式口径——路径生成只使用这些资料，[] 表示零注入。
+ * 新对话默认 []（干净起步）；恢复旧会话时置 undefined（见 markAttachedLegacy）；
+ * 用户在挂载器里增删后由页面 setAttachedMaterials 整包同步；reset 回到 []。
+ */
+const attachedMaterialIds = ref<string[] | undefined>([]);
 
 const FIELD_DEFS: Array<{ key: string; label: string; read: (u: GoalUnderstanding, c: Record<string, unknown>) => string }> = [
   // 「想解决的问题」给用户看的必须是用户自己的诉求，不是内部 real_problem 诊断：
@@ -319,15 +335,25 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
   // 正向识别硬阻断文案（初判/重判两版都含此句），其余 completed 无路径的旧异常态
   // （如「学习路径已经生成」占位）不误判为拒绝原因——保持既有行为不变。
   const isHardBlockRefusal = !!env.userVisible && env.userVisible.includes(HARD_BLOCK_REFUSAL_MARKER);
-  completionNote.value = stage.value === 'completed' && !learningPath.value && isHardBlockRefusal ? env.userVisible : '';
+  // 显式终局类型优先；老信封没有该字段时确定性回退（硬阻断标记 → 已绑路径 → 无路径）。
+  const resolvedTerminalKind: GoalTerminalKind | '' = core?.terminalKind
+    || (core?.hardBlocked === true
+      ? 'hard_blocked'
+      : stage.value === 'completed'
+        ? (learningPath.value ? 'path_bound' : 'no_path')
+        : '');
+  terminalKind.value = resolvedTerminalKind;
+  const hardBlockedTerminal = resolvedTerminalKind === 'hard_blocked' || core?.hardBlocked === true;
+  completionNote.value = stage.value === 'completed' && !learningPath.value && hardBlockedTerminal
+    ? env.userVisible
+    : (stage.value === 'completed' && !learningPath.value && isHardBlockRefusal ? env.userVisible : '');
   // 合并取舍：develop 新增的服务端结构化标记（比文案匹配更可靠，2026-11-05 UX 审计 P0）。
   // 两条并存——模板优先用 hardBlocked，并用 completionNote 兜住「老信封没有该字段、
   // 但 userVisible 里确实带着拒绝原文」的回落场景，两边行为都不丢。
-  hardBlocked.value = core?.hardBlocked === true;
-  // 已完成的会话不再作为「继续上次的规划」入口：路径已生成，恢复终态会话只会造成
-  // 「已经产生了新路径，goal 还让继续上次规划」的困惑。清本地缓存（带 :conversationId
-  // 的 URL 回看不依赖该缓存，resumeById 按 id 直取）。
-  if (stage.value === 'completed') removeGoalConversationStorage();
+  hardBlocked.value = hardBlockedTerminal;
+  // 只有真正绑定了路径的终局才清本地恢复入口：answer-only / 硬阻断终局仍允许
+  // 用户回来补充目标或补充说明，清掉会让「继续上次的规划」入口消失。
+  if (stage.value === 'completed' && resolvedTerminalKind === 'path_bound') removeGoalConversationStorage();
 
   const prevValues = new Map(fields.value.map((f) => [f.key, f.value]));
   if (ext?.understanding) understanding.value = ext.understanding;
@@ -364,7 +390,13 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     }
     // 普通成功终局的收尾语（「已收到确认，正在生成…」）不落库，渲染后刷新即消失，仍由
     // done 面板承载；但硬阻断终局（completed 且无 learningPath）的拒绝文案已落库，必须上屏。
-    if (env.userVisible && (stage.value !== 'completed' || (!learningPath.value && isHardBlockRefusal))) pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+    // answer-only / no_path 终局的 userVisible 就是模型正文（尤其 /reply 响应不带 meta.messages），
+    // 也不能按「completed 不上屏」丢掉，否则用户只看到「本次已结束」看不到答案。
+    const terminalNeedsText = !learningPath.value
+      && (isHardBlockRefusal || resolvedTerminalKind === 'answer_only' || resolvedTerminalKind === 'no_path');
+    if (env.userVisible && (stage.value !== 'completed' || terminalNeedsText)) {
+      pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+    }
   }
   // 硬阻断终局例外（2026-11-05 UX 审计 P0）：阻断说明（不会生成路径 + 补充说明可重判）
   // 必须在对话流里可见。上面的「completed 不落 userVisible」只针对确认收尾语；对硬阻断
@@ -444,13 +476,13 @@ async function run(
     let env: GoalConversationEnvelope | null = null;
     try {
       if (action === 'start') {
-        env = await streamStartGoalConversation(text, { meta }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
+        env = await streamStartGoalConversation(text, { meta, materialIds: attachedMaterialIds.value }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'confirm') {
-        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
+        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers, materialIds: attachedMaterialIds.value }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'supplement') {
         env = await streamRegenerateGoalConversation(conversationId.value, text, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else {
-        env = await streamReplyGoalConversation(conversationId.value, text, { meta }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
+        env = await streamReplyGoalConversation(conversationId.value, text, { meta, materialIds: attachedMaterialIds.value }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       }
     } catch (streamError) {
       const e = streamError as { cancelled?: boolean; transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
@@ -498,15 +530,15 @@ async function run(
       } else {
         // 传输层失败且未收到任何内容：回退非流式重发
         if (action === 'start') {
-          env = await startGoalConversation(text, { meta });
+          env = await startGoalConversation(text, { meta, materialIds: attachedMaterialIds.value });
         } else if (action === 'confirm') {
           // 传输层失败回退到非流式：probeAnswers 必须与流式路径（上方）同权携带——
           // 回退路径丢题会让「确认前自测」作答静默蒸发，后端确定性判分键缺失
-          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers });
+          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers, materialIds: attachedMaterialIds.value });
         } else if (action === 'supplement') {
           env = await regenerateGoalConversation(conversationId.value, text);
         } else {
-          env = await replyGoalConversation(conversationId.value, text, { meta });
+          env = await replyGoalConversation(conversationId.value, text, { meta, materialIds: attachedMaterialIds.value });
         }
       }
     }
@@ -665,7 +697,14 @@ async function retry() {
   }
   // 去掉失败提示消息再重试
   messages.value = messages.value.filter((m) => !m.failed);
-  await run(action === 'start' ? 'start' : action === 'confirm' ? 'confirm' : action === 'supplement' ? 'supplement' : 'reply', lastPayload.value);
+  // 显式重试确认时，前置自测作答必须与首次确认同权携带——否则用户答过的题在重试里静默蒸发。
+  const turnOptions = action === 'confirm' ? { probeAnswers: pendingProbeAnswers() } : undefined;
+  await run(
+    action === 'start' ? 'start' : action === 'confirm' ? 'confirm' : action === 'supplement' ? 'supplement' : 'reply',
+    lastPayload.value,
+    undefined,
+    turnOptions,
+  );
 }
 
 async function resume(): Promise<boolean> {
@@ -687,6 +726,9 @@ async function resumeById(cid: string): Promise<boolean> {
       // 也必须沿用 cid。否则恢复后下一条消息会走 start 分支，新建一个 gc_xxx 会话。
       conversationId.value = cid;
       setGoalConversationCid(cid);
+      // 恢复的是已存在的会话：未在本页重新挂载前不声明显式口径（发 materialIds 会把
+      // 存量会话整包改写成显式空，丢掉它的自动语义）。用户此后挂载时页面会重新同步。
+      attachedMaterialIds.value = undefined;
     }
     applyEnvelope(env, { replaceMessages: true }, gen);
     if (gen === generation && messages.value.length === 0) {
@@ -724,6 +766,7 @@ function reset(clearStorage = true) {
   stage.value = '';
   isCompleted.value = false;
   hardBlocked.value = false;
+  terminalKind.value = '';
   understanding.value = {};
   collected.value = {};
   quickReplies.value = [];
@@ -734,9 +777,16 @@ function reset(clearStorage = true) {
   failed.value = '';
   stopped.value = '';
   started.value = false;
+  // 挂载口径回到「新对话默认」：显式空列表（干净起步，旧资料不会静默跟到下一次生成）
+  attachedMaterialIds.value = [];
   if (clearStorage) {
     removeGoalConversationStorage();
   }
+}
+
+/** 页面把挂载器里的当前列表同步进来（增删都整包覆盖，进入显式口径）。 */
+function setAttachedMaterials(ids: string[]) {
+  attachedMaterialIds.value = [...ids];
 }
 
 /**
@@ -756,6 +806,8 @@ export function useGoalLive() {
     stageIndex,
     isCompleted,
     hardBlocked,
+    terminalKind,
+    reopenableTerminal,
     entryState,
     fields,
     filledCount,
@@ -778,6 +830,8 @@ export function useGoalLive() {
     stopped,
     started,
     meta: metaTracker,
+    attachedMaterialIds,
+    setAttachedMaterials,
     send,
     confirm,
     answerProbe,

@@ -410,6 +410,19 @@ describe('确认通道（2026-11-08 减重：flag 直推 + 打字裁决）', () 
 });
 
 describe('gated 模式：非学习路径不自动推进', () => {
+  it('不可判定的认知目标即使存档是 learning_path 也不建路', async () => {
+    seedConversation({ stage: 'proposing', collectedData: JSON.stringify({
+      messages: [],
+      understanding: { platform_judgment: 'not_judgeable', skill_nature: 'cognitive_internalized' },
+      confirmedProposal: { learning_direction: '理解例子', first_deliverable: '分析一例', key_stages: ['理解判断标准', '练习分析'] },
+      responseTriage: { mode: 'learning_path', confidence: 'medium', reasons: [] },
+    }) });
+    const result = await goalConversationService.continueConversation('conv-1', '确认', 'user-1', { confirmProposal: true });
+    expect(result.internal.core).toMatchObject({ terminalKind: 'hard_blocked', learningPath: null });
+    expect(JSON.parse(conversationRecord.collectedData).responseTriage.mode).toBe('referral');
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+  });
+
   it('referral 直接硬阻断（即使 gated 也不写待确认项、不调 runGoalAsync）', async () => {
     mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });
     seedConversation({

@@ -574,6 +574,13 @@ class LearningService {
     // 生成在途时一律不追加（resolveAppendMilestoneIds 内已判，避免与在途生成重复）。
     let appendMilestoneIds: string[] = [];
     if (!useReplace) {
+      // 生成在途一律不追加，渐进目标也不例外。progressiveTarget 只回答「该设计哪个阶段」，
+      // 不回答「现在能不能设计」：此前渐进分支绕开了 resolveAppendMilestoneIds 的在途判定，
+      // 60s 轮询会把正在跑的 stageDesign run 顶成 SUPERSEDED（2026-11-21 实测：首阶段设计
+      // 心跳正常、completedItems 已到 1/1，收尾前被轮询新建的 run 顶掉，已完成阶段项作废、
+      // 整个阶段从头重设计，路径创建期平白多花一轮）。在途口径与 retryPathEnrichment 的
+      // generationInFlight / 通用追加通道同源（run 活跃未过期 / stageDesign processing 未 stale）。
+      if (isAppendBlockedByInFlightGeneration(generationStatus, activeRun, path.updatedAt)) return false;
       appendMilestoneIds = progressiveTargetId
         ? [progressiveTargetId]
         : await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);

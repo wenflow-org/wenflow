@@ -357,8 +357,9 @@ export function decideClarificationGate(input: {
   nextAction?: string | null;
   confirmedProposal?: unknown;
   stage?: string | null;
+  requireContract?: boolean;
 }): ClarificationGateDecision {
-  if (!input.clarification) {
+  if (!input.clarification && !input.requireContract) {
     return { blocked: false, blocking: [], prompt: null };
   }
   const proposalPresent = Boolean(input.confirmedProposal)
@@ -436,15 +437,68 @@ export class ClarificationRequiredError extends Error {
   }
 }
 
+/**
+ * Path/确认边界用的严格缺口：与提案门控不同，这里同时要求 `core.question` 与
+ * `baseline.evidence`——路径需要可追溯的问题与基线，不能只靠「第一站级未知已清空」。
+ * `baseline.unknown` 仍豁免：提案前已用它拦过一轮，到了确认/Path 入口允许带假设生成，
+ * 不再二次判死（那会逼模型为了过门删掉真实基线记录）。
+ */
+function derivePathReadyBlockingGaps(input: unknown): ClarificationGap[] {
+  return deriveClarificationGaps(input).filter(
+    (gap) => gap.severity === 'blocking' && gap.field !== 'baseline.unknown'
+  );
+}
+
 export function assertClarificationReadyForPath(input: unknown): void {
-  // 与提案门控同口径：只拦会改变第一站/停机条件的结构性缺口。
-  // `baseline.unknown` 只在提案前阻断（防止模型把未知藏在 baseline 里绕过澄清）；
-  // 到了 Path 入口仍残留的基线未知，允许带假设生成，不在这里二次判死。
-  const gate = canProposeClarification(input);
-  const blocking = gate.blocking.filter((gap) => gap.field !== 'baseline.unknown');
+  // 严格口径（2026-11-21 修正）：此前误用提案门控（core.question / baseline.evidence 已降为
+  // advisory），与注释和设计稿 §3.5 的「路径需要可追溯的问题与基线」不一致。
+  // 确认边界与 Path 入口共用本函数，避免两处判据漂移。
+  const blocking = derivePathReadyBlockingGaps(input);
   if (blocking.length > 0) {
     throw new ClarificationRequiredError(blocking);
   }
+}
+
+export interface ClarificationConfirmationGateDecision {
+  /** true = 不应进入路径绑定；服务层应把确认改写成澄清回合 */
+  blocked: boolean;
+  /** 满足严格口径（core.question + baseline.evidence + stopping + 结构性未知） */
+  blocking: ClarificationGapField[];
+  /** 被拦截时给用户的澄清提问；未拦截为 null */
+  prompt: string | null;
+  /** true = 历史会话（没有 clarification 契约），一律放行，保持旧行为 */
+  legacy: boolean;
+}
+
+/**
+ * 确认边界门控（2026-11-21）：用户点确认/打字确认时，新会话必须先满足严格澄清契约。
+ *
+ * 历史会话兼容：没有 `clarification` 字段（旧会话、旧测试夹具、旧调用方）→ legacy=true，
+ * 完全按旧行为放行；只有模型产出了契约的新会话才受过门约束。
+ */
+export function decideClarificationConfirmationGate(input: {
+  clarification?: unknown;
+  requireContract?: boolean;
+}): ClarificationConfirmationGateDecision {
+  const contractInput = input?.clarification;
+  if (!input.requireContract && (contractInput === undefined || contractInput === null)) {
+    return { blocked: false, blocking: [], prompt: null, legacy: true };
+  }
+  const blocking = derivePathReadyBlockingGaps(contractInput);
+  if (blocking.length === 0) {
+    return { blocked: false, blocking: [], prompt: null, legacy: false };
+  }
+  const contract = normalizeClarificationContract(contractInput);
+  const nextQuestion = selectNextClarificationQuestion(contract)?.question;
+  const fields = blocking.map((gap) => gap.field);
+  return {
+    blocked: true,
+    blocking: fields,
+    prompt: nextQuestion
+      ? `在开始排方案前，我还需要确认一件事：${nextQuestion}`
+      : buildClarificationRepairPrompt(fields, contract),
+    legacy: false,
+  };
 }
 
 export interface MilestoneRationaleAudit {

@@ -109,14 +109,15 @@ describe('#228 路径完成态文案：GET 快照与 /reply 早退同口径', ()
     await expect(replyEarlyExitText(null, 'failed')).resolves.toBe(FAILED_TEXT);
   });
 
-  it('/reply 早退在未绑路径时保持旧句（不在本次缺陷范围内，行为不变）', async () => {
+  it('无路径终态不声称路径已生成', async () => {
     const result = await buildCompletedConversationResult({
       conversationId: 'gc-1',
       collectedData: COLLECTED,
       learningPathId: null,
       findPath: async () => null,
     });
-    expect(result.userVisible).toBe(PATH_COMPLETED_USER_VISIBLE);
+    expect(result.userVisible).toContain('没有生成学习路径');
+    expect(result.internal.core).toMatchObject({ terminalKind: 'no_path', learningPath: null });
   });
 });
 
