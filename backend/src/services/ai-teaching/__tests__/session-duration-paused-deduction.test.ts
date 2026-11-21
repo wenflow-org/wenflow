@@ -105,6 +105,18 @@ describe('#172-4 收束路径的暂停段扣除（按 artifacts.pausedAt，不�
     expect(minutes(session)).toBe(60);
   });
 
+  it('已收束会话无未结算暂停时也按 endTime 收口（课后重算不随时间膨胀）', () => {
+    // 纯函数同时服务收束与课后概要重生成/台账补算：endTime 一旦落库就是终点，
+    // 旧实现恒用 now，10 天后再算会把 90 分钟算成 ~14490 分钟。
+    const session = buildSession({
+      status: 'completed',
+      startTime: at(90),
+      endTime: NOW,
+    });
+    expect(minutes(session)).toBe(90);
+    expect(minutes(session, new Date(NOW.getTime() + 10 * 24 * 60 * MINUTE))).toBe(90);
+  });
+
   it('已收束会话（endTime 非空）重生成总结时不按「现在」越扣越多', () => {
     // 暂停在 T-30，收束在 T（endTime），而「现在」已过 10 天——终点取 endTime，仍是 60。
     const session = buildSession({

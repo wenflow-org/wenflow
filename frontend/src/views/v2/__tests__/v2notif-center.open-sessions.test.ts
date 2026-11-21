@@ -133,7 +133,7 @@ describe('V2NotifCenter 课堂两档（进行中 / 空闲中）', () => {
     /* 2026-11-06 走查 图5：段标题「运行中」与卡片「正在生成学习路径 / 路径生成中」是同一句的
        第三、四遍。卡片标题改说「哪条路径」，副文只说「正在做什么」。 */
     learning.getPaths.mockResolvedValue([
-      { id: 'lp_1', title: '新路径', generationLifecycle: { phase: 'stage_design', status: 'running', completedStages: 1, totalStages: 4 } },
+      { id: 'lp_1', title: '新路径', generationLifecycle: { phase: 'stage_design', status: 'processing', completedStages: 1, totalStages: 4 } },
     ]);
     const w = await mountCenter();
     await w.find('.nc__bell').trigger('click');

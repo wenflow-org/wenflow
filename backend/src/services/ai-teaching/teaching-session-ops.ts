@@ -625,7 +625,10 @@ export async function getLatestTaskEvaluation(taskId: string, userId: string): P
     topic: target.topic,
     startTime: target.startTime,
     endTime: target.endTime,
-    duration: target.duration || 0,
+    // 反馈页/任务评估的有效时长：优先读收束写入的 duration 列；历史会话缺列时用同一
+    // 纯函数按 endTime 补算（computeEffectiveDurationMinutes 已对已收束会话封口，
+    // 不会因阅读时间变晚而膨胀）。这样报告、课后概要、结算台账是同一个数。
+    duration: target.duration || computeEffectiveDurationMinutes(target),
     messageCount: target.messages.filter((message) => message.role === 'user').length,
     knowledgePoints: target.knowledgeState,
     wrapup,

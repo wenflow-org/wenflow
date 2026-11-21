@@ -126,11 +126,18 @@
              不能再让「完成任务」按钮静默报错——直接给「回课堂回答」与「先结束」两条明路。 -->
         <section v-if="settleBlocked" class="settle-block" role="alert">
           <div>
-            <strong>还不能完成任务</strong>
-            <p>{{ settleBlocked }}</p>
+            <strong>{{ settleBlocked.title }}</strong>
+            <p>{{ settleBlocked.message }}</p>
           </div>
           <div class="settle-block__actions">
-            <button type="button" class="btn-primary" :disabled="completeTaskBusy" @click="goAnswerLastQuestion">回到课堂回答最后 1 个问题</button>
+            <!-- 与课堂页同一套「下一步」口径：先给学员自己能推进的动作（回答/作答/继续学习），
+                 再给同一颗持久出口「结束学习（不计入完成）」。服务端 end_only 豁免全部收束判据。 -->
+            <button type="button" class="btn-primary" :disabled="completeTaskBusy" @click="goAnswerLastQuestion">
+              {{ settleBlockedCopy?.actionLabel || '回到课堂继续' }}
+            </button>
+            <button type="button" class="btn-ghost" :disabled="completeTaskBusy" @click="handleAction('end-only')">
+              {{ END_WITHOUT_FINISH_LABEL }}
+            </button>
             <button type="button" class="btn-ghost" :disabled="completeTaskBusy" @click="handleAction('end')">暂不完成，返回学习路径</button>
           </div>
         </section>
@@ -299,6 +306,7 @@ import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/ai
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
 import { unwrap } from '@/views/v2/unwrap';
+import { END_WITHOUT_FINISH_LABEL, isClosureGateCode, resolveClosureGateCopy, resolveClosureGateMessage } from '@/views/v2/closureGate';
 import { isProjectionMode } from '@/utils/projection';
 import { replanModeForRecommendation } from '@/utils/replanSignal';
 
@@ -331,8 +339,10 @@ const pollTimer = ref<number | null>(null);
 const reportRef = ref<HTMLElement | null>(null);
 const exportingImage = ref(false);
 const completeTaskBusy = ref(false);
-/** 结算门禁（末问未答/小测未闭合）时的可执行提示；空串表示无阻断 */
-const settleBlocked = ref('');
+/** 结算门禁（末问未答/小测未闭合/契约未达）时的可执行提示；null 表示无阻断。
+ *  与课堂页共用同一份 code → 文案映射（见 views/v2/closureGate.ts）。 */
+const settleBlocked = ref<{ code: string; title: string; message: string } | null>(null);
+const settleBlockedCopy = computed(() => (settleBlocked.value ? resolveClosureGateCopy(settleBlocked.value.code) : null));
 const subjectiveDifficulty = ref<number | undefined>(undefined);
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 60000;
@@ -860,7 +870,33 @@ async function probeTaskCompleted() {
   } catch { /* 探测失败：按未结算处理，不改变既有入口 */ }
 }
 
-const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') => {
+const handleAction = async (action: 'end' | 'continue-task' | 'complete-task' | 'end-only') => {
+  if (action === 'end-only') {
+    /* 与课堂页同一颗持久出口：结束学习不计入完成（服务端 end_only）。
+       服务端对 end_only 豁免全部收束判据，因此它就是「所有门禁都可用」的那条路。 */
+    if (completeTaskBusy.value) return;
+    completeTaskBusy.value = true;
+    settleBlocked.value = null;
+    try {
+      const result = await aiTeachingAPI.finalizeSessionReliably(sessionId.value, {
+        action: 'end_only',
+        revision: sessionDetail.value?.revision || 0,
+        reason: 'manual-end'
+      });
+      if (sessionDetail.value) sessionDetail.value.revision = result.revision;
+      toast.success('本次学习已结束，本次不计入任务完成进度');
+      goBackToPath(true);
+    } catch (err: any) {
+      const recoveredRevision = err?.finalization?.revision;
+      if (sessionDetail.value && Number.isInteger(recoveredRevision)) {
+        sessionDetail.value.revision = recoveredRevision;
+      }
+      toast.error(err?.response?.data?.error?.message || err?.message || '结束学习失败');
+    } finally {
+      completeTaskBusy.value = false;
+    }
+    return;
+  }
   if (action === 'continue-task') {
     /* P27（2026-11-01 走查实锤）：任务已结算时直进课堂，boot() 会拿到 mode:'completed'
        并原路 replace 回本页（后端拒绝为已完成任务开新课的守卫），一来一回表现为
@@ -884,11 +920,13 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
   if (action === 'complete-task') {
     if (completeTaskBusy.value) return;
     completeTaskBusy.value = true;
-    settleBlocked.value = '';
+    settleBlocked.value = null;
     try {
       const result = await aiTeachingAPI.finalizeSessionReliably(sessionId.value, {
         action: 'complete_task',
         revision: sessionDetail.value?.revision || 0,
+        // 仅作历史兼容/幂等请求身份：服务端以 computeEffectiveDurationMinutes 的有效时长
+        // 作为台账/指标/报告的唯一口径（见 SessionFinalizationService.resolveEffectiveDurationMinutes）。
         actualMinutes: Math.ceil(durationSeconds.value / 60),
         subjectiveDifficulty: subjectiveDifficulty.value
       });
@@ -903,8 +941,13 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
       const errorBody = err?.response?.data?.error;
       const code = String(err?.code || errorBody?.code || err?.finalization?.lastErrorCode || '');
       const message = String(errorBody?.message || err?.message || '');
-      if (/FINALIZATION_OPEN_QUESTION|FINALIZATION_PENDING_CHECKPOINT|先回答老师的问题|先完成这道小测/.test(code + ' ' + message)) {
-        settleBlocked.value = '本次课堂还有最后 1 个问题或小测没有完成。回到课堂完成它之后，就可以把任务计入路径进度。';
+      // 与课堂页同一组门禁、同一份文案与下一步入口（末问 / 小测 / 末次检查 / 课堂契约）。
+      if (isClosureGateCode(code)) {
+        settleBlocked.value = {
+          code,
+          title: resolveClosureGateCopy(code).title,
+          message: resolveClosureGateMessage(code, message)
+        };
       } else {
         toast.error(message || '标记任务完成失败');
       }
@@ -914,7 +957,7 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
     return;
   }
 
-  settleBlocked.value = '';
+  settleBlocked.value = null;
   goBackToPath();
 };
 

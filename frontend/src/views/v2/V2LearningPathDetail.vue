@@ -38,7 +38,8 @@
                    （preserveCompletedTasks/preserveCoreTasks），标题与描述会被重新生成——
                    旧句「目标和已确认信息已保留」与事实不符（走查实证标题被改写）；
                    也不承诺「一般能成功」，只说状态与动作（仓库文案口径） -->
-              <p>{{ lifecycle.errorMessage || '已完成的学习进度会保留，可以重试。' }}</p>
+              <p v-if="canLearn">已就绪的阶段可以继续学习；{{ lifecycle.errorMessage || '后续阶段准备失败，可以重试。' }}</p>
+              <p v-else>{{ lifecycle.errorMessage || '已完成的学习进度会保留，可以重试。' }}</p>
             </div>
             <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
               <span v-if="retrying" class="spinner spinner--sm"></span>
@@ -88,6 +89,7 @@
                 <span class="metric" :title="`已生成 ${lessonCount} 节课，合计约 ${preparedHours} 小时；整条路径计划约 ${path.estimatedHours} 小时`"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${preparedHours} 小时` : '—' }}</b>已备好</span>
               </template>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
+              <span v-if="designActive && canLearn" class="metric"><b>后续</b>课程正在准备</span>
             </div>
             <!-- 终局交付物（2026-11-18 方向五）：把「上课打卡」讲成「攒成果」。
                  取用户确认方案时定下的 firstDeliverable；旧路径没有该字段时不显示。 -->
@@ -759,7 +761,7 @@ import { dedupeMaterialRefs, normalizeMaterialMarkdown } from '@/utils/materialT
 import { plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { pickCurrentTask } from '@/composables/useCurrentTask';
-import { buildGenerationProgress } from './learningPathProgress';
+import { buildGenerationProgress, isDesignPollingActive } from './learningPathProgress';
 import {
   adjustEntryAllowedByPolicy,
   adjustPolicyBlockReason,
@@ -1021,12 +1023,25 @@ watch(
 );
 
 const lifecycleFailed = computed(() => lifecycle.value && (lifecycle.value.status === 'failed' || lifecycle.value.status === 'stale'));
-/** 生成中（phase 未到 ready）：阶段/课程尚未备好，hero 指标与横幅口径需对齐（EG24） */
-const lifecyclePreparing = computed(() => !!lifecycle.value && lifecycle.value.phase !== 'ready');
+/** 后续设计 run 真正在 queued/processing（只在这时轮询；已有阶段可学也不影响） */
+const designActive = computed(() => isDesignPollingActive(lifecycle.value));
+/**
+ * 生成中且「不可学」：阶段/课程尚未备好，hero 指标与横幅口径需对齐（EG24）。
+ * 渐进式后续阶段设计进行中/失败时 canStartLearning 仍为 true——已就绪阶段必须照常展示
+ * 学习进度、允许开课，不能把整条路径按「准备中」藏起来。
+ */
+const lifecyclePreparing = computed(() => (
+  !!lifecycle.value
+  && lifecycle.value.phase !== 'ready'
+  && lifecycle.value.canStartLearning !== true
+));
 /* 已下线：管理员在内容治理里下架了这条路径。学习端列表已不再返回，
    但旧链接/书签仍可能直达详情，这里明确表态并禁掉开课（后端也会拒绝）。 */
 const pathOffline = computed(() => path.value?.status === 'archived');
-const canLearn = computed(() => !pathOffline.value && (!lifecycle.value || lifecycle.value.phase === 'ready'));
+const canLearn = computed(() => (
+  !pathOffline.value
+  && (!lifecycle.value || lifecycle.value.canStartLearning === true || lifecycle.value.phase === 'ready')
+));
 
 // ---- 重排回退（R8 选项 B：调整前安排自动留存，一键回退） ----
 const rollbackAvailable = ref(false);
@@ -1768,7 +1783,12 @@ const TOPOLOGY_LABELS: Record<string, string> = {
 const topologyLabel = computed(() => TOPOLOGY_LABELS[String(path.value?.pathTopology || '')] || '');
 const totalTasks = computed(() => allTasks.value.length);
 const doneTasks = computed(() => allTasks.value.filter((t) => t.status === 'completed').length);
-const percent = computed(() => (totalTasks.value ? Math.round((doneTasks.value / totalTasks.value) * 100) : 0));
+const percent = computed(() => {
+  if (path.value?.status === 'completed') return 100;
+  const progress = path.value?.learningProgress;
+  if (typeof progress?.percent === 'number') return Math.min(99, progress.percent);
+  return totalTasks.value ? Math.min(99, Math.round((doneTasks.value / totalTasks.value) * 100)) : 0;
+});
 
 /* 进度环数字滚动（批18 招牌动效）：入场与变化时 ease-out 计数。
    rAF 不受全局 prefers-reduced-motion CSS 兜底管，这里手动豁免直出终值。 */
@@ -1802,7 +1822,7 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => cancelAnimationFrame(percentRaf));
-const allDone = computed(() => totalTasks.value > 0 && doneTasks.value === totalTasks.value);
+const allDone = computed(() => path.value?.status === 'completed');
 
 /* 锁定态以**阶段状态**为权威（2026-11-03 真人走查根因修复）。
    此前锁定由「位置相对当前任务」推断，而当前任务又只按课次状态挑——循环自证：锁着阶段里
@@ -1883,13 +1903,18 @@ const intentPreview = computed(() => {
 /* ---------- 展示辅助 ---------- */
 const badgeText = computed(() => {
   if (pathOffline.value) return '已下线';
-  if (lifecycle.value && lifecycle.value.phase !== 'ready') return lifecycleFailed.value ? '需要处理' : '生成中';
+  // 已有阶段可学 = 这是一条进行中的路径；后续阶段准备/失败不应把整条路径标成「生成中/需要处理」。
+  if (lifecycle.value && lifecycle.value.canStartLearning !== true && lifecycle.value.phase !== 'ready') {
+    return lifecycleFailed.value ? '需要处理' : '生成中';
+  }
   if (allDone.value) return '已完成';
   return '进行中';
 });
 const badgeCls = computed(() => {
   if (pathOffline.value) return 'badge--muted';
-  if (lifecycle.value && lifecycle.value.phase !== 'ready') return lifecycleFailed.value ? 'badge--red' : 'badge--cyan';
+  if (lifecycle.value && lifecycle.value.canStartLearning !== true && lifecycle.value.phase !== 'ready') {
+    return lifecycleFailed.value ? 'badge--red' : 'badge--cyan';
+  }
   if (allDone.value) return 'badge--green';
   return 'badge--blue';
 });

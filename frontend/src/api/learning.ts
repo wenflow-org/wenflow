@@ -41,6 +41,32 @@ export type GenerationPhase = 'core' | 'stage_design' | 'ready';
 export type GenerationRunStatus = 'queued' | 'processing' | 'stale' | 'failed' | 'ready';
 export type GenerationRetryType = 'core' | 'stage_design' | null;
 
+/** 权威学习进度（只数真实任务，与生成/设计进度分离） */
+export interface LearningProgressDTO {
+  completedTasks: number;
+  /** 已完成 + 进行中（真实进入过学习的任务数） */
+  startedTasks: number;
+  inProgressTasks: number;
+  totalTasks: number;
+  completedStages: number;
+  totalStages: number;
+  /** 已完成任务 / 总任务，0-100 整数 */
+  percent: number;
+}
+
+/** 设计阶段进度（渐进式：已设计阶段 / 路径总阶段） */
+export interface DesignProgressDTO {
+  /** 仅当确实有 queued/processing 的生成 run 时为 true：前端据此决定是否轮询 */
+  active: boolean;
+  status: 'queued' | 'processing' | null;
+  phase: GenerationPhase;
+  progressive: boolean;
+  completedStages: number;
+  totalStages: number;
+  designedStages: number;
+  totalPathStages: number;
+}
+
 export interface GenerationLifecycleDTO {
   lifecycle: GenerationLifecycle;
   phase: GenerationPhase;
@@ -49,11 +75,17 @@ export interface GenerationLifecycleDTO {
   heartbeatAt: string | null;
   retryAllowed: boolean;
   retryType: GenerationRetryType;
+  /** 设计进度（保留既有字段名） */
   completedStages: number;
   totalStages: number;
   currentStageNumber: number | null;
   errorMessage: string | null;
+  /** 已就绪部分是否可立即开始学习（渐进式设计进行中仍可为 true） */
   canStartLearning: boolean;
+  /** 权威学习进度：列表/详情/看板的百分比以它为准 */
+  learningProgress: LearningProgressDTO;
+  /** 设计阶段信号：active 仅在真实 queued/processing 时为 true */
+  design: DesignProgressDTO;
 }
 
 export interface LearningGoal {
@@ -130,6 +162,8 @@ export interface LearningPath {
     scene?: ({ firstDeliverable?: string } & Record<string, unknown>) | null;
   } | null;
   generationLifecycle?: GenerationLifecycleDTO | null;
+  /** 后端权威学习进度（与 generationLifecycle.learningProgress 同源） */
+  learningProgress?: LearningProgressDTO | null;
   sceneSummary?: {
     title?: string;
     /** 问题原文（realProblem）：标题用短目标后，卡内折叠展示的背景 */
@@ -416,6 +450,41 @@ const asNonNegativeInteger = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
 };
 
+interface DerivedLearningStats {
+  completedTasks: number;
+  inProgressTasks: number;
+  totalTasks: number;
+  completedStages: number;
+  designedStages: number;
+}
+
+/** 从路径阶段/任务推导权威学习进度（后端未给 learningProgress 时的兜底） */
+const deriveLearningStats = (stages: unknown[]): DerivedLearningStats => {
+  let completedTasks = 0;
+  let inProgressTasks = 0;
+  let totalTasks = 0;
+  let completedStages = 0;
+  let designedStages = 0;
+  for (const stage of stages) {
+    const record = asRecord(stage);
+    const tasks = Array.isArray(record.subtasks) ? record.subtasks : (Array.isArray(record.tasks) ? record.tasks : []);
+    if (tasks.length > 0) designedStages += 1;
+    totalTasks += tasks.length;
+    let stageCompleted = 0;
+    for (const task of tasks) {
+      const status = asRecord(task).status;
+      if (status === 'completed') {
+        completedTasks += 1;
+        stageCompleted += 1;
+      } else if (status === 'in_progress') {
+        inProgressTasks += 1;
+      }
+    }
+    if (tasks.length > 0 && stageCompleted === tasks.length) completedStages += 1;
+  }
+  return { completedTasks, inProgressTasks, totalTasks, completedStages, designedStages };
+};
+
 const normalizePhase = (value: unknown): GenerationPhase | null => {
   if (value === 'core') return 'core';
   if (value === 'stage_design' || value === 'stageDesign' || value === 'enrichment') {
@@ -531,13 +600,10 @@ export const normalizeGenerationLifecycle = (value: unknown): GenerationLifecycl
     raw.totalStages ?? raw.totalItems ?? source.totalStages ?? source.totalMilestones ?? source.totalWeeks,
     stages.length
   );
+  const learningStats = deriveLearningStats(stages);
   const completedStagesFallback = lifecycle === 'ready'
     ? totalStages
-    : stages.filter((stage) => {
-        const record = asRecord(stage);
-        const tasks = Array.isArray(record.subtasks) ? record.subtasks : record.tasks;
-        return Array.isArray(tasks) && tasks.length > 0;
-      }).length;
+    : (learningStats.designedStages || stages.length);
   const completedStages = Math.min(
     totalStages || Number.MAX_SAFE_INTEGER,
     asNonNegativeInteger(raw.completedStages ?? raw.completedItems, completedStagesFallback)
@@ -545,6 +611,72 @@ export const normalizeGenerationLifecycle = (value: unknown): GenerationLifecycl
   const explicitCanStart = typeof raw.canStartLearning === 'boolean'
     ? raw.canStartLearning
     : (typeof source.canStartLearning === 'boolean' ? source.canStartLearning : null);
+  const canStartLearning = explicitCanStart ?? lifecycle === 'ready';
+
+  // 权威学习进度：后端已给 learningProgress 就用它；旧数据从任务状态确定性推导。
+  const learningSource = asRecord(
+    source.learningProgress ?? nestedLifecycle.learningProgress ?? raw.learningProgress
+  );
+  const learningTotalTasks = asNonNegativeInteger(learningSource.totalTasks, learningStats.totalTasks);
+  const learningCompletedTasks = Math.min(
+    learningTotalTasks || Number.MAX_SAFE_INTEGER,
+    asNonNegativeInteger(learningSource.completedTasks, learningStats.completedTasks)
+  );
+  const learningInProgressTasks = Math.min(
+    Math.max(0, learningTotalTasks - learningCompletedTasks),
+    asNonNegativeInteger(learningSource.inProgressTasks, learningStats.inProgressTasks)
+  );
+  const learningPercentRaw = Number(learningSource.percent);
+  const learningPercent = Number.isFinite(learningPercentRaw)
+    ? Math.max(0, Math.min(100, Math.round(learningPercentRaw)))
+    : (learningTotalTasks > 0 ? Math.round((learningCompletedTasks / learningTotalTasks) * 100) : 0);
+  const learningProgress: LearningProgressDTO = {
+    completedTasks: learningCompletedTasks,
+    startedTasks: Math.min(
+      learningTotalTasks || Number.MAX_SAFE_INTEGER,
+      asNonNegativeInteger(
+        learningSource.startedTasks,
+        learningStats.completedTasks + learningStats.inProgressTasks
+      )
+    ),
+    inProgressTasks: learningInProgressTasks,
+    totalTasks: learningTotalTasks,
+    completedStages: asNonNegativeInteger(learningSource.completedStages, learningStats.completedStages),
+    totalStages: asNonNegativeInteger(learningSource.totalStages, stages.length),
+    percent: learningPercent,
+  };
+
+  // 设计进度：active 只在真实 queued/processing 时为 true（stale/failed/ready 都停轮询）。
+  const designSource = asRecord(source.design ?? raw.design);
+  const designStatus = normalizeRunStatus(designSource.status) ?? status;
+  const designActive = typeof designSource.active === 'boolean'
+    ? designSource.active
+    : ((phase === 'core' || phase === 'stage_design')
+      && (designStatus === 'queued' || designStatus === 'processing'));
+  const designProgressive = designSource.progressive === true
+    || raw.progressive === true
+    || source.progressive === true;
+  const designTotalStages = asNonNegativeInteger(designSource.totalStages, totalStages);
+  const designCompletedStages = Math.min(
+    designTotalStages || Number.MAX_SAFE_INTEGER,
+    asNonNegativeInteger(designSource.completedStages, completedStages)
+  );
+  const design: DesignProgressDTO = {
+    active: designActive,
+    status: designActive && (designStatus === 'queued' || designStatus === 'processing')
+      ? designStatus
+      : null,
+    phase,
+    progressive: designProgressive,
+    completedStages: designCompletedStages,
+    totalStages: designTotalStages,
+    designedStages: asNonNegativeInteger(designSource.designedStages, learningStats.designedStages),
+    totalPathStages: asNonNegativeInteger(
+      designSource.totalPathStages,
+      asNonNegativeInteger(source.totalStages ?? source.totalMilestones, stages.length)
+    ),
+  };
+
   const retryTypeValue = normalizePhase(raw.retryType);
   const defaultRetryType = status === 'failed' || status === 'stale'
     ? (phase === 'stage_design' ? 'stage_design' : 'core')
@@ -568,7 +700,9 @@ export const normalizeGenerationLifecycle = (value: unknown): GenerationLifecycl
       || ((status === 'failed' || status === 'stale')
         ? asOptionalString(source.learningBlockedReason)
         : null),
-    canStartLearning: explicitCanStart ?? lifecycle === 'ready'
+    canStartLearning,
+    learningProgress,
+    design,
   };
 };
 
@@ -581,16 +715,22 @@ export const mergeGenerationLifecycle = (
   // 时 path.status 仍为 active，Dashboard 等消费方把失败路径当「进行中」）
   const nextStatus = generationLifecycle.phase === 'core'
     ? (generationLifecycle.status === 'failed' ? 'failed' : 'generating')
-    : (generationLifecycle.status === 'failed' || generationLifecycle.status === 'stale'
-      ? 'failed'
-      : (path.status === 'completed' ? 'completed' : 'active'));
+    : (generationLifecycle.canStartLearning
+      // 渐进式：后续阶段设计失败/进行中，只要已有可学阶段，路径仍是可学的 active，
+      // 不能把整条路径标成 failed —— 那会把已就绪的学习进度一起藏掉。
+      ? (path.status === 'completed' ? 'completed' : 'active')
+      : (generationLifecycle.status === 'failed' || generationLifecycle.status === 'stale'
+        ? 'failed'
+        : (path.status === 'completed' ? 'completed' : 'active')));
 
   return {
     ...path,
     status: nextStatus,
     canStartLearning: generationLifecycle.canStartLearning,
-    learningBlockedReason: generationLifecycle.errorMessage
-      || (generationLifecycle.lifecycle === 'ready' ? null : path.learningBlockedReason),
+    learningBlockedReason: generationLifecycle.canStartLearning
+      ? null
+      : (generationLifecycle.errorMessage
+        || (generationLifecycle.lifecycle === 'ready' ? null : path.learningBlockedReason)),
     generationLifecycle
   };
 };

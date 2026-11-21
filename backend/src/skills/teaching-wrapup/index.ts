@@ -88,6 +88,19 @@ export interface SessionWrapupInput {
     finalClassroomContext?: Record<string, any> | null;
     classroomEventHistory?: Array<Record<string, any>>;
     stageHistory?: Array<Record<string, any>>;
+    /** 课堂契约报告（met/coveredKcs/missingKcs/independentCount/parkingLot/exitTicket）。
+     *  规则「课堂契约报告」消费；缺省表示本节未生成契约报告。 */
+    lessonReport?: {
+      met?: boolean;
+      coveredKcs?: string[];
+      missingKcs?: string[];
+      independentKcs?: string[];
+      independentCount?: number;
+      requiredIndependent?: number;
+      reasons?: string[];
+      parkingLot?: Array<Record<string, any>>;
+      exitTicket?: Record<string, any> | null;
+    } | null;
     endReason?: string | null;
   };
 }
@@ -844,7 +857,7 @@ function buildFallbackSummary(input: SessionWrapupInput): SessionWrapupSummary {
   };
 }
 
-function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'evaluation-fallback'): string {
+export function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'evaluation-fallback'): string {
   const transcript = input.messages
     .slice(-18)
     .map((message, index) => `${index + 1}. ${message.role === 'user' ? '学生' : message.role === 'assistant' ? '教师' : message.role}: ${message.content.slice(0, 220)}`)
@@ -866,6 +879,7 @@ function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'eva
 【课堂最终状态】${JSON.stringify(input.sessionStructure?.finalClassroomContext || null)}
 【课堂事件历史】${JSON.stringify(input.sessionStructure?.classroomEventHistory || [])}
 【阶段轨迹】${JSON.stringify(input.sessionStructure?.stageHistory || [])}
+【课堂契约报告】${JSON.stringify(input.sessionStructure?.lessonReport || null)}
 【结束原因】${input.sessionStructure?.endReason || '无'}
 【知识点状态】${JSON.stringify(input.knowledgePoints)}
 【知识点变化】${JSON.stringify(input.knowledgeContext?.delta || null)}
@@ -900,6 +914,7 @@ tier 只能取 low | mid | high（档位定义见 system prompt 的评分参考�
 【课堂最终状态】${JSON.stringify(input.sessionStructure?.finalClassroomContext || null)}
 【课堂事件历史】${JSON.stringify(input.sessionStructure?.classroomEventHistory || [])}
 【阶段轨迹】${JSON.stringify(input.sessionStructure?.stageHistory || [])}
+【课堂契约报告】${JSON.stringify(input.sessionStructure?.lessonReport || null)}
 【结束原因】${input.sessionStructure?.endReason || '无'}
 【知识点状态】${JSON.stringify(input.knowledgePoints)}
 【知识点变化】${JSON.stringify(input.knowledgeContext?.delta || null)}

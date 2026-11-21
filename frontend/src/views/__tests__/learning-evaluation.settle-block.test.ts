@@ -75,13 +75,48 @@ describe('LearningEvaluationPage 结算门禁恢复', () => {
 
     const block = w.find('.settle-block');
     expect(block.exists()).toBe(true);
-    expect(block.text()).toContain('还不能完成任务');
-    expect(block.text()).toContain('回到课堂回答最后 1 个问题');
+    // 与课堂页共用同一份门禁文案（closureGate.ts），不再各写一套
+    expect(block.text()).toContain('先回答老师的问题');
+    expect(block.text()).toContain('去回答');
+    expect(block.text()).toContain('结束学习（不计入完成）');
     expect(block.text()).toContain('暂不完成，返回学习路径');
     // 恢复卡是唯一出口：常规动作栏隐藏，也不再叠一条 Toast
     expect(w.find('.completion-actions').exists()).toBe(false);
     expect(toastMock.info).not.toHaveBeenCalled();
     expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
+  it('契约门 409 也走同一恢复卡，且所有门禁都给同一持久出口「结束学习（不计入完成）」', async () => {
+    finalizeSessionReliablyMock
+      .mockRejectedValueOnce({
+        response: { data: { error: { code: 'LESSON_CONTRACT_NOT_MET', message: '本课还有契约目标未达成：独立证据不足' } } },
+      })
+      .mockResolvedValueOnce({
+        status: 'completed',
+        revision: 8,
+        session: { status: 'completed', mode: 'tutor' },
+        finalization: { sessionClosure: 'completed', taskCompletion: 'skipped' },
+      });
+
+    const w = mount(LearningEvaluationPage);
+    await flushPromises();
+    await w.find('.evaluation-head__complete').trigger('click');
+    await flushPromises();
+
+    const block = w.find('.settle-block');
+    expect(block.exists(), '契约门此前会落到通用失败 toast，现在必须常驻恢复卡').toBe(true);
+    expect(block.text()).toContain('还差几步才能完成本节课');
+    expect(block.text()).toContain('独立证据不足');
+
+    const endOnly = block.findAll('button').find((b) => b.text().includes('结束学习（不计入完成）'));
+    expect(endOnly, '每条门禁都应给同一颗持久出口').toBeTruthy();
+    await endOnly!.trigger('click');
+    await flushPromises();
+
+    expect(finalizeSessionReliablyMock.mock.calls.at(-1)?.[1]).toMatchObject({
+      action: 'end_only',
+      reason: 'manual-end',
+    });
   });
 
   it('点击恢复卡跳到本任务课堂并带路径 id', async () => {

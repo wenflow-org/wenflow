@@ -268,7 +268,7 @@ export interface TeachingTurnInput {
       }>;
       absent?: boolean;
     } | null;
-    /** 学习表现预测（任务前 profile-learning-predict 产出）：参考信号，非命令；低样本时不得据此改变默认策略 */
+    /** 学习表现预测（任务前 profile-learning-predict 产出）：参考信号，非命令；可靠性双轨口径见 teaching-turn.yaml */
     learnerPrediction?: {
       stallRisk: number;
       predictedTone: 'smooth' | 'struggle' | 'fatigue';
@@ -276,6 +276,8 @@ export interface TeachingTurnInput {
       focusConcepts: string[];
       rationale: string;
       reliability?: { total: number; stallHitRate: number | null } | null;
+      /** 2026-11-21 硬证据来源清单（contract_gaps/checkpoint_evidence/retention_hints/pace_mode）：非空时预测建立在确定性证据上，reliability 不足也不得忽略其方向性判断 */
+      evidence?: string[];
     } | null;
     /** 任务模式：normal | productiveFailure（有效失败：先让学生挣扎，后整合） */
     taskMode?: 'normal' | 'productiveFailure';
@@ -2536,6 +2538,39 @@ function normalizeWarmupOutcomes(
   return items.length > 0 ? { warmupOutcomes: items } : null;
 }
 
+/**
+ * 读答案键时兼容历史/别名字段。
+ *
+ * 2026-11-21：新检查点必须在展示前带可用答案键，但旧模型输出/历史补偿链路里出现过
+ * `correctOption`（单数）、`correctOptions`、`answerOptionIds` 等写法；只认
+ * `correctOptionIds` 会把它们误判成「无键」而丢弃一道本来可判的题。这里统一收口，
+ * 新写侧仍只输出 `correctOptionIds` / `expectedKeywords`。
+ */
+function readAnswerKeyValue(value: Record<string, any>, keys: readonly string[]): unknown {
+  for (const key of keys) {
+    const raw = value?.[key];
+    if (raw === undefined || raw === null) continue;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim()) return [raw];
+  }
+  return undefined;
+}
+
+const LEGACY_CHOICE_KEY_FIELDS = [
+  'correctOptionIds',
+  'correctOptionId',
+  'correctOption',
+  'correctOptions',
+  'answerOptionIds',
+  'answerOptionId',
+] as const;
+const LEGACY_SHORT_ANSWER_KEY_FIELDS = [
+  'expectedKeywords',
+  'keywords',
+  'answerKeywords',
+  'expectedAnswers',
+] as const;
+
 /** 归一化可选检查点输出：question 必填、type/options 兜底校验 */
 function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTurnOutput['control']['checkpoint']> {
   const options = Array.isArray(value.options)
@@ -2552,15 +2587,17 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
   // 选择题的 id 必须真实存在于 options（否则是模型编的，宁可没有键，也不要做错误的代码裁决）；
   // 简答要点限 1-3 条（与 core yaml「只给 1-3 个核心词」同口径）、每条 ≤40 字。键**不下发给学生**（coordinator 侧负责剥离）。
   const optionIds = new Set(options.map((option) => option.id));
-  const correctOptionIds = type !== 'short_answer' && Array.isArray(value.correctOptionIds)
-    ? Array.from(new Set(value.correctOptionIds
+  const rawChoiceKey = readAnswerKeyValue(value, LEGACY_CHOICE_KEY_FIELDS);
+  const correctOptionIds = type !== 'short_answer' && Array.isArray(rawChoiceKey)
+    ? Array.from(new Set(rawChoiceKey
         .filter((id: any) => typeof id === 'string' && optionIds.has(id))
         .map((id: string) => id.trim())
         .filter(Boolean)))
     : [];
   if (type === 'single_choice' && correctOptionIds.length > 1) correctOptionIds.length = 1;
-  const expectedKeywords = type === 'short_answer' && Array.isArray(value.expectedKeywords)
-    ? value.expectedKeywords
+  const rawShortAnswerKey = readAnswerKeyValue(value, LEGACY_SHORT_ANSWER_KEY_FIELDS);
+  const expectedKeywords = type === 'short_answer' && Array.isArray(rawShortAnswerKey)
+    ? rawShortAnswerKey
         .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
         .map((keyword: string) => keyword.trim().slice(0, 40))
         .slice(0, 3)
@@ -2674,6 +2711,26 @@ export function screenCheckpointOutput(
       impactedDimensions: ['checkpoint.question', 'checkpoint.options'],
       mitigationApplied: 'drop-checkpoint-skip-question-this-turn',
       rootCauseMessage: arithmetic.map((m) => m.expr).join('; '),
+    });
+    return null;
+  }
+  // 新检查点必须在展示前带可用答案键（2026-11-21）：选择题没有 correctOptionIds、或键里的 id
+  // 不在 options 里时，判分只能退回 model-reference——题目仍会占掉一次「独立证据」槽位却
+  // 判不了对错。这里直接丢弃本题（课堂照常继续，不阻塞），下一轮按正常出题时机再出。
+  // 简答不在此列：确实不适合给要点时，model-reference 是显式允许的弱证据通道
+  // （见 lesson-contract 的证据来源口径），不能一律判死。
+  if (checkpoint.type !== 'short_answer' && (checkpoint.correctOptionIds?.length ?? 0) === 0) {
+    logger.warn('[TeachingTurnAgent] 选择题检查点缺少可用答案键，丢弃检查点（本轮回退为不出题）', {
+      type: checkpoint.type,
+      optionCount: checkpoint.options?.length ?? 0,
+    });
+    recordDegradation({
+      source: 'ai-teaching/teaching-turn-checkpoint',
+      faultCategory: 'MODEL_ANSWER_KEY_MISSING',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: ['checkpoint.correctOptionIds'],
+      mitigationApplied: 'drop-checkpoint-missing-answer-key',
+      rootCauseMessage: `choice checkpoint without valid answer key (type=${checkpoint.type}, options=${checkpoint.options?.length ?? 0})`,
     });
     return null;
   }

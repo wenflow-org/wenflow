@@ -86,14 +86,49 @@ export interface BranchState {
   directive: string | null;
 }
 
+/**
+ * 证据来源（2026-11-21）：课堂报告必须能区分「代码按答案键裁决」「有答案键的简答语义复核」
+ * 与「无答案键时的模型参考判定」。前两者可计入独立证据，后者只能算覆盖。
+ */
+export type LessonEvidenceSource =
+  | 'code'
+  | 'model-rubric'
+  | 'model-reference'
+  | 'knowledge-board';
+
 export interface LessonEvidence {
+  /** 稳定证据 ID（审计/回放引用；同一检查点/终检题跨重算不变，不随数组下标漂移） */
+  evidenceId: string;
   kcId: string | null;
   kcName: string;
   kind: 'checkpoint' | 'knowledge' | 'test_out' | 'exit-ticket';
+  /** 判分来源；`knowledge-board` 表示看板投影（非课堂作答证据） */
+  source: LessonEvidenceSource;
+  /** 是否为**首答**（attempts<=1）；多轮重答通过不是独立证据 */
+  firstAttempt: boolean;
+  /** 作答次数（看板投影为 0；缺省历史行按 1 处理） */
+  attempts: number;
   independent: boolean;
   correct: boolean;
   at: string;
+  /** 回合引用：检查点行自带 turn 时用它，否则回落到最近教学回合数 */
   turn: number;
+}
+
+function normalizeEvidenceSource(raw: unknown): LessonEvidenceSource {
+  return raw === 'code' || raw === 'model-rubric' || raw === 'model-reference'
+    ? raw
+    : 'model-reference';
+}
+
+function normalizeAttempts(raw: unknown): number {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.max(1, Math.floor(value)) : 1;
+}
+
+function resolveTurnRef(raw: unknown, fallback: number): number {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
 /**
@@ -455,35 +490,51 @@ export function collectLessonEvidence(input: {
     if (!ticket || ticket.status !== 'passed' || ticket.passed !== true) continue;
     const kc = matchKc(input.contract, ticket.conceptName);
     if (!kc) continue;
+    const attempts = normalizeAttempts(ticket.attempts);
+    const source = normalizeEvidenceSource(ticket.judgedBy);
     evidence.push({
+      evidenceId: `exit-ticket:${ticket.id || kc.kcId || kc.name}`,
       kcId: kc.kcId,
       kcName: kc.name,
       kind: 'exit-ticket',
-      independent: ticket.judgedBy !== 'model-reference' && Math.max(1, Number(ticket.attempts) || 1) <= 1,
+      source,
+      firstAttempt: attempts <= 1,
+      attempts,
+      independent: source !== 'model-reference' && attempts <= 1,
       correct: true,
       at: String(ticket.answeredAt || ticket.askedAt || now),
-      turn,
+      turn: resolveTurnRef((ticket as any).turn, turn),
     });
   }
   const history = Array.isArray(input.checkpointHistory) ? input.checkpointHistory : [];
-  for (const row of history) {
-    if (!row || typeof row !== 'object') continue;
+  history.forEach((row, index) => {
+    if (!row || typeof row !== 'object') return;
     const record = row as Record<string, any>;
-    if (record.passed !== true) continue;
+    if (record.passed !== true) return;
     const kc = matchKc(input.contract, record.conceptName ?? record.knowledgePoint ?? record.conceptKey, record.kcId);
-    if (!kc) continue;
+    if (!kc) return;
+    const attempts = normalizeAttempts(record.attempts);
+    // 缺 judgedBy 的历史行按 model-reference 处理：没有可复核的答案键来源，不能冒充独立证据。
+    const source = normalizeEvidenceSource(record.judgedBy);
+    const answeredAt = String(record.answeredAt || record.at || record.submittedAt || now);
+    const stableKey = String(record.checkpointId || '').trim()
+      || `${kc.kcId || kc.name}:${answeredAt}:${index}`;
     evidence.push({
+      evidenceId: `checkpoint:${stableKey}`,
       kcId: kc.kcId,
       kcName: kc.name,
       kind: 'checkpoint',
+      source,
+      firstAttempt: attempts <= 1,
+      attempts,
       // 独立证据：首答通过且不是「无答案键时的模型参考判分」。代码裁决优先，但简答题的
       // rubric 首答通过也算独立（否则全简答课永远达不成契约，完成率会被人为锁死）。
-      independent: record.judgedBy !== 'model-reference' && Math.max(1, Number(record.attempts) || 1) <= 1,
+      independent: source !== 'model-reference' && attempts <= 1,
       correct: true,
-      at: String(record.answeredAt || record.at || now),
-      turn,
+      at: answeredAt,
+      turn: resolveTurnRef(record.turn ?? record.turnIndex, turn),
     });
-  }
+  });
   const points = Array.isArray(input.knowledgeState) ? input.knowledgeState : [];
   for (const point of points) {
     if (!point || typeof point !== 'object') continue;
@@ -493,9 +544,13 @@ export function collectLessonEvidence(input: {
     const kc = matchKc(input.contract, record.name, record.kcId);
     if (!kc) continue;
     evidence.push({
+      evidenceId: `knowledge:${kc.kcId || kc.name}`,
       kcId: kc.kcId,
       kcName: kc.name,
       kind: 'knowledge',
+      source: 'knowledge-board',
+      firstAttempt: false,
+      attempts: 0,
       independent: false,
       correct: true,
       at: now,

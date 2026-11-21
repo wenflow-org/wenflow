@@ -66,7 +66,6 @@ import { AI_TEACHING_AGENT_ID, requireTeachingRevision } from './teaching-turn-s
 import { conceptConsolidatorService } from '../learner/ConceptConsolidatorService';
 import { lessonPrepService } from './lesson-prep.service';
 import { conceptLoadService } from '../memory/concept-load.service';
-import { fsrsRetrievability, type FsrsMemoryState } from '../memory/fsrs';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
 import { insightCalibrationService } from '../learner/insight-calibration.service';
 import { markMisconceptionsAddressed } from '../learner/misconception-ledger.service';
@@ -1427,43 +1426,8 @@ export async function endSession(
   }
 }
 
-export async function loadRetrievabilityHints(userId: string): Promise<Array<{ concept: string; retrievability: number }>> {
-  try {
-    const traces = await prisma.memory_traces.findMany({
-      where: { userId, fsrsStability: { not: null }, lastSeenAt: { not: null } },
-      orderBy: { dueAt: 'asc' },
-      take: 20,
-      select: {
-        label: true,
-        conceptKey: true,
-        fsrsStability: true,
-        fsrsDifficulty: true,
-        fsrsLapses: true,
-        fsrsReps: true,
-        extractionCount: true,
-        lastSeenAt: true,
-      },
-    });
-    // 模拟钟单点（#68 P-43）：开课时的保持率提示必须与复习计划/到期判定同一时间基准
-    const now = simulatedNowOr();
-    return traces
-      .map((t) => {
-        const state: FsrsMemoryState = {
-          stability: t.fsrsStability as number,
-          difficulty: t.fsrsDifficulty ?? 5,
-          reps: t.fsrsReps ?? t.extractionCount,
-          lapses: t.fsrsLapses ?? 0,
-          lastReviewAt: t.lastSeenAt as Date,
-        };
-        return {
-          concept: t.label || t.conceptKey,
-          retrievability: Math.round(fsrsRetrievability(state, now) * 100) / 100,
-        };
-      })
-      .filter((h) => h.retrievability < 0.8)
-      .slice(0, 5);
-  } catch {
-    return [];
-  }
-}
+// 2026-11-21 抽出到独立模块 retention-hints.ts（TeachingContextBuilder 的预测硬证据注入也要用，
+// 直接放本文件会与 context builder 形成 import 环）；此处 re-export 保持既有导入路径兼容。
+import { loadRetrievabilityHints } from './retention-hints';
+export { loadRetrievabilityHints };
 

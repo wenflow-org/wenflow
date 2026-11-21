@@ -72,7 +72,8 @@ export const teachingTurnRuntimeDefinition: RuntimeDefinitionRecord = {
     'teaching-strategy-selection',
   ],
   defaultMaxTokens: 64000,
-  defaultTemperature: 0.7,
+  // 与 prompts/core/teaching-turn.yaml params.temperature 对齐（参数一致性：core 为真源）
+  defaultTemperature: 0.45,
   source: 'code',
   managedByCode: true,
 };

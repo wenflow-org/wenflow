@@ -55,17 +55,17 @@ describe('MessageActions 位置口径', () => {
     w.unmount();
   });
 
-  it('四枚操作齐备：有用/不佳/重新生成/复制', () => {
+  it('四枚操作齐备：有用/不佳/再回答一次/复制', () => {
     const w = mount(MessageActions, { props: { show: true } });
     const labels = w.findAll('button').map((b) => b.attributes('aria-label') || b.attributes('title') || '');
     expect(labels.some((l) => l.includes('有用'))).toBe(true);
     expect(labels.some((l) => l.includes('不佳'))).toBe(true);
-    expect(labels.some((l) => l.includes('重新生成'))).toBe(true);
+    expect(labels.some((l) => l.includes('再回答一次'))).toBe(true);
     expect(labels.some((l) => l.includes('复制'))).toBe(true);
     w.unmount();
   });
 
-  it('四枚按钮都是纯图标：不再有可见文字（「重新生成」「复制」的字样已去掉）', () => {
+  it('四枚按钮都是纯图标：不再有可见文字（「再回答一次」「复制」的字样已去掉）', () => {
     const w = mount(MessageActions, { props: { show: true } });
     expect(w.findAll('button span'), '按钮里又出现了可见文字').toHaveLength(0);
     // 去掉可见文字后，语义必须仍由 title（悬停提示）+ aria-label（读屏）承载
@@ -73,6 +73,7 @@ describe('MessageActions 位置口径', () => {
       expect(b.attributes('title'), '按钮缺 title').toBeTruthy();
       expect(b.attributes('aria-label'), '按钮缺 aria-label').toBeTruthy();
     }
+    expect(w.findAll('button').some((b) => (b.attributes('title') || '').includes('再回答一次'))).toBe(true);
     w.unmount();
   });
 

@@ -132,6 +132,7 @@
                 <!-- 时间锚点（2026-11-11 走查）：四张卡都写「已完成 / 100%」时分不出新旧。
                      可见文案用相对时间，title 给绝对时间与创建时间，需要精确核对时可直接看。 -->
                 <p v-if="card.anchorText" class="pcard__anchor" :title="card.anchorTitle">{{ card.anchorText }}</p>
+                <p v-if="card.designActive" class="pcard__anchor">后续课程正在准备，已就绪部分可继续学习</p>
               </div>
               <div class="pcard__head-right">
                 <!-- 状态徽章常驻（原型每张卡都有，1797/1808/1817）：进行中/已完成同样渲染 -->
@@ -262,7 +263,7 @@ import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import MkSelect from '@/components/mk/MkSelect.vue';
-import { buildPathActivityAnchor } from './learningPathProgress';
+import { buildPathActivityAnchor, isDesignPollingActive } from './learningPathProgress';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 
@@ -291,6 +292,8 @@ interface PathCard {
   /** 时间锚点（最近学习 / 更新于 / 创建于）：可见相对时间 + 绝对时间 title */
   anchorText?: string;
   anchorTitle?: string;
+  /** 渐进式：已有阶段可学，后续阶段设计 run 真正在 queued/processing（继续轮询） */
+  designActive?: boolean;
 }
 
 const route = useRoute();
@@ -356,21 +359,29 @@ function normalize(p: Record<string, any>): PathCard {
   const ownStages: number = p.milestones?.length ?? p.weeks?.length ?? 0;
   const stages: number = ownStages || p.totalStages || lc?.totalStages || 0;
   const hours = p.estimatedHours;
+  // 设计阶段真正在跑（queued/processing）才需要轮询；失败/暂停/就绪都停。
+  const designActive = isDesignPollingActive(lc);
 
   if (lc && lc.phase !== 'ready') {
-    if (lc.status === 'failed' || lc.status === 'stale') {
+    // 只有「不可学」的失败/生成态才占满整张卡。
+    // 渐进式后续阶段设计进行中/失败但已有阶段可学 → 继续走下面的学习进度卡，
+    // 不能让设计阶段把学习进度（百分比/阶段数）整块盖成 0。
+    const canStillLearn = lc.canStartLearning === true && stages > 0;
+    if ((lc.status === 'failed' || lc.status === 'stale') && !canStillLearn) {
       return {
         id: p.id, title, desc, sub: buildSub(stages), kind: 'failed', stages, stageDone: lc.completedStages ?? 0,
         percent: 0, hours, retryType: lc.retryType,
         retryLabel: lc.retryType === 'stage_design' ? '重新准备课程' : '重新生成路径',
-        phaseText: '', errorText: lc.errorMessage || ''
+        phaseText: '', errorText: lc.errorMessage || '', designActive: false
       };
     }
-    const phaseText = phaseTextOf(lc);
-    return {
-      id: p.id, title, desc, sub: buildSub(stages), kind: 'generating', stages, stageDone: lc.completedStages ?? 0,
-      percent: 0, hours, retryType: null, retryLabel: '', phaseText, errorText: ''
-    };
+    if (!canStillLearn) {
+      const phaseText = phaseTextOf(lc);
+      return {
+        id: p.id, title, desc, sub: buildSub(stages), kind: 'generating', stages, stageDone: lc.completedStages ?? 0,
+        percent: 0, hours, retryType: null, retryLabel: '', phaseText, errorText: '', designActive
+      };
+    }
   }
 
   // ready
@@ -388,9 +399,15 @@ function normalize(p: Record<string, any>): PathCard {
     }
     if (stageAllDone) stageDone += 1;
   }
-  const percent = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
-  const kind: CardKind = p.status === 'completed' || percent >= 100 ? 'completed' : 'ready';
-  const totalStages = stages || weeks.length;
+  // 权威学习进度：优先用后端/规范化后的 learningProgress（只数真实任务），
+  // 旧数据才回退到前端按任务状态现算。设计进度永远不冒充这里的百分比。
+  const learningProgress = lc?.learningProgress ?? p.learningProgress ?? null;
+  const percent = learningProgress
+    ? Math.max(0, Math.min(100, Math.round(learningProgress.percent)))
+    : (totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0);
+  const kind: CardKind = p.status === 'completed' ? 'completed' : 'ready';
+  const totalStages = learningProgress?.totalStages || stages || weeks.length;
+  const stageDoneCount = learningProgress?.completedStages ?? stageDone;
   /* 时间锚点：完成时间 > 路径更新时间 > 创建时间（口径见 learningPathProgress） */
   const anchor = buildPathActivityAnchor({
     createdAt: p.createdAt,
@@ -398,9 +415,12 @@ function normalize(p: Record<string, any>): PathCard {
     tasks: weeks.flatMap((w: Record<string, any>) => w.subtasks || w.tasks || [])
   });
   return {
-    id: p.id, title, desc, sub: buildSub(totalStages, totalTasks, hours), kind, stages: totalStages, stageDone,
+    id: p.id, title, desc,
+    sub: [buildSub(totalStages, learningProgress?.totalTasks ?? totalTasks, hours), designActive ? '后续课程准备中' : '']
+      .filter(Boolean).join(' · '),
+    kind, stages: totalStages, stageDone: stageDoneCount,
     percent, hours, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status,
-    anchorText: anchor?.text, anchorTitle: anchor?.title
+    anchorText: anchor?.text, anchorTitle: anchor?.title, designActive
   };
 }
 
@@ -422,12 +442,13 @@ async function load() {
 let pollTimer = 0;
 function schedulePolling() {
   window.clearTimeout(pollTimer);
-  if (!cards.value.some((c) => c.kind === 'generating')) return;
+  // 生成中的整卡 + 可学但后续设计在跑的卡都要轮询：前者等挂载完成，后者等新阶段设计完成。
+  if (!cards.value.some((c) => c.kind === 'generating' || c.designActive)) return;
   pollTimer = window.setTimeout(pollOnce, 5000);
 }
 
 async function pollOnce() {
-  const generating = cards.value.filter((c) => c.kind === 'generating');
+  const generating = cards.value.filter((c) => c.kind === 'generating' || c.designActive);
   if (!generating.length) return;
   type PollStatus = {
     card: (typeof generating)[number];
@@ -440,11 +461,17 @@ async function pollOnce() {
   const settled = results.filter(
     (r): r is Extract<(typeof results)[number], { status: 'fulfilled' }> => r.status === 'fulfilled'
   );
-  const finished = settled.filter(
-    (r) => r.value.lc.phase === 'ready' || r.value.lc.status === 'failed' || r.value.lc.status === 'stale'
-  );
+  // 生成卡：phase ready / failed / stale 即收口；可学卡：设计 run 离开 queued/processing 即收口。
+  const finished = settled.filter(({ value: { card, lc } }) => (
+    card.kind === 'generating'
+      ? (lc.phase === 'ready' || lc.status === 'failed' || lc.status === 'stale')
+      : !isDesignPollingActive(lc)
+  ));
   if (finished.length) {
     for (const r of finished) {
+      // 可学卡的后台设计收口不弹「整条路径生成完成」的 toast——它本来就能学，
+      // 新阶段会随 load() 静默出现；只有整卡生成/失败才提示。
+      if (r.value.card.kind !== 'generating') continue;
       if (r.value.lc.phase === 'ready') toast.success(`「${r.value.card.title}」${GEN_DONE_TAIL}`);
       else toast.error(`「${r.value.card.title}」${GEN_FAIL_TAIL}`);
     }
@@ -454,7 +481,8 @@ async function pollOnce() {
   for (const r of settled) {
     const { card, lc } = r.value;
     // 与首屏 normalize 共用同一处文案（走查 #15：两处各写一份时轮询会吞掉时长承诺）
-    card.phaseText = phaseTextOf(lc);
+    card.designActive = isDesignPollingActive(lc);
+    if (card.kind === 'generating') card.phaseText = phaseTextOf(lc);
   }
   const failCount = results.length - settled.length;
   // 单条失败静默累计;连续失败过多说明状态接口异常,停止空转轮询

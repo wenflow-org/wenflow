@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-retention-probe
-coreHash: 3a6023b2a043180e52837381fe59adebcee5b40b8a6567994e3d964fd7a8a24e
+coreHash: 203ebda46a5b07ebbcaabd6f851d308c98a213b1e81b6c10718ee0c895e4762c
 coreVersion: 1
 temperature: 0.5
 maxTokens: 64000
@@ -24,7 +24,7 @@ failurePolicy: propagate
 - 「topic（string）」`user:teachingRetentionProbe.topic`（用户/平台） — 原课主题
 - 「taskTitle（string）」`user:teachingRetentionProbe.taskTitle`（用户/平台） — 原任务标题（保持题目落在这节课训练的可迁移能力上）
 - 「coreKcs（object[]）」`user:teachingRetentionProbe.coreKcs`（用户/平台） — 本次探针目标 KC（只含一个 name；概念名逐字使用）
-- 「recentDialogue（object[]）」`user:teachingRetentionProbe.recentDialogue`（用户/平台） — 可选：原课最近对话（role/content），只用于避免出课上已答过的同构题；可为空
+- 「recentDialogue（object[]）」`user:teachingRetentionProbe.recentDialogue`（用户/平台） — 原课堂最近已出题的题面（role/content），不含答案键。用来排除重复题面和同一情境；原课堂未出题时可为空。
 
 ## 执行规则
 

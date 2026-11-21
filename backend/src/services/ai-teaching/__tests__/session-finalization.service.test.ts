@@ -741,4 +741,92 @@ describe('SessionFinalizationService', () => {
 
     expect(mockCompleteTask).not.toHaveBeenCalled()
   })
+
+  // ── 有效时长单一口径（2026-11-21）────────────────────────────────────────────
+  // 结算台账 / 任务完成指标 / 学习报告此前吃前端 actualMinutes，而课后概要/反馈页读
+  // 服务端 duration——同一次收束会出现两个时长。现在统一以服务端有效时长写入。
+  it('complete_task 用服务端有效时长写结算台账，忽略客户端 actualMinutes', async () => {
+    const timed = completedSession({
+      duration: 42,
+      startTime: new Date('2026-07-19T00:00:00.000Z'),
+      endTime: new Date('2026-07-19T01:30:00.000Z'),
+      messages: [],
+    })
+    mockRepository.assertOwnership.mockResolvedValue(timed)
+    mockRepository.claimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'task-op-duration',
+      leaseOwner: 'lease-duration',
+      session: timed,
+    })
+    mockCompleteTask.mockResolvedValue({ alreadyCompleted: false, task: { id: 'task-1', status: 'completed' } })
+    mockRepository.completeFinalizationStep.mockResolvedValue(timed)
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op-duration',
+      revision: 4,
+      actualMinutes: 5,
+    })
+
+    expect(mockCompleteTask).toHaveBeenCalledWith(expect.objectContaining({ actualMinutes: 42 }))
+  })
+
+  it('duration 缺失的历史会话：由服务端有效时长补齐（按 endTime 计算，不越读越高）', async () => {
+    const legacy = completedSession({
+      duration: null,
+      startTime: new Date('2026-07-19T00:00:00.000Z'),
+      endTime: new Date('2026-07-19T00:50:00.000Z'),
+      messages: [
+        { role: 'user', content: '开始', timestamp: '2026-07-19T00:05:00.000Z' },
+        { role: 'assistant', content: '继续', timestamp: '2026-07-19T00:45:00.000Z' },
+      ],
+    })
+    mockRepository.assertOwnership.mockResolvedValue(legacy)
+    mockRepository.claimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'task-op-legacy-duration',
+      leaseOwner: 'lease-duration',
+      session: legacy,
+    })
+    mockCompleteTask.mockResolvedValue({ alreadyCompleted: false, task: { id: 'task-1', status: 'completed' } })
+    mockRepository.completeFinalizationStep.mockResolvedValue(legacy)
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op-legacy-duration',
+      revision: 4,
+      actualMinutes: 5,
+    })
+
+    expect(mockCompleteTask).toHaveBeenCalledWith(expect.objectContaining({ actualMinutes: 50 }))
+  })
+
+  it('两条服务端路径都不可用时才回落客户端 actualMinutes（历史兼容）', async () => {
+    const bare = completedSession() // 无 startTime、无 duration
+    mockRepository.assertOwnership.mockResolvedValue(bare)
+    mockRepository.claimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'task-op-bare',
+      leaseOwner: 'lease-bare',
+      session: bare,
+    })
+    mockCompleteTask.mockResolvedValue({ alreadyCompleted: false, task: { id: 'task-1', status: 'completed' } })
+    mockRepository.completeFinalizationStep.mockResolvedValue(bare)
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op-bare',
+      revision: 4,
+      actualMinutes: 7,
+    })
+
+    expect(mockCompleteTask).toHaveBeenCalledWith(expect.objectContaining({ actualMinutes: 7 }))
+  })
 })

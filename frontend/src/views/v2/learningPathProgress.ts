@@ -17,6 +17,26 @@ export interface GenerationLifecycleLike {
   totalStages?: number | null;
   currentStageNumber?: number | null;
   heartbeatAt?: string | null;
+  /** 渐进式：已有阶段可学（后续阶段设计进行中/失败都不阻塞学习） */
+  canStartLearning?: boolean | null;
+  design?: {
+    active?: boolean | null;
+    status?: string | null;
+    progressive?: boolean | null;
+    designedStages?: number | null;
+    totalPathStages?: number | null;
+  } | null;
+}
+
+/**
+ * 设计阶段是否真的在跑（只认 queued/processing）。
+ * 暂停/失败/就绪都不该继续轮询——这是「学习进度」与「设计进度」分离后的轮询判据。
+ */
+export function isDesignPollingActive(lifecycle: GenerationLifecycleLike | null | undefined): boolean {
+  if (!lifecycle) return false;
+  if (lifecycle.design && typeof lifecycle.design.active === 'boolean') return lifecycle.design.active;
+  return (lifecycle.phase === 'core' || lifecycle.phase === 'stage_design')
+    && (lifecycle.status === 'queued' || lifecycle.status === 'processing');
 }
 
 export interface GenerationProgressCopy {
@@ -71,6 +91,15 @@ export function buildGenerationProgress(
   let primary: string;
   if (lifecycle.phase === 'core') {
     primary = '正在生成路径…';
+  } else if (lifecycle.canStartLearning === true) {
+    // 渐进式：已有阶段可学，后续阶段在后台准备。绝不能再说「整条路径还在生成」，
+    // 那会与页面上可点「开始学习」的事实矛盾。
+    const current = isPositiveInt(lifecycle.currentStageNumber)
+      ? Math.min(lifecycle.currentStageNumber, total || lifecycle.currentStageNumber)
+      : null;
+    primary = current && total > 0
+      ? `后续第 ${current} 阶段正在准备（已就绪 ${clampedDone}/${total}）…`
+      : '后续阶段正在准备…';
   } else if (total > 0 && clampedDone >= total) {
     primary = '课时正在写入…';
   } else if (total > 0) {
@@ -88,9 +117,13 @@ export function buildGenerationProgress(
   const waited = age === null ? null : formatWaited(age);
   // 只有心跳年龄可算（DTO 没有 startedAt）——措辞必须只声称「最近一次进展在 X 前」，
   // 不能写成「已等待 X」（那是整场生成的时长，会被读者当成同一件事）。
-  const secondary = age !== null && age > HEARTBEAT_NOTICE_MS && waited
-    ? `最近一次进展在 ${waited} 前，仍在生成。`
-    : '你也可以先去别的页面看看。';
+  const secondary = lifecycle.canStartLearning === true
+    ? (age !== null && age > HEARTBEAT_NOTICE_MS && waited
+      ? `已就绪的课程可以继续学习；后续设计最近一次进展在 ${waited} 前。`
+      : '已就绪的课程可以继续学习，后续阶段会在后台补齐。')
+    : (age !== null && age > HEARTBEAT_NOTICE_MS && waited
+      ? `最近一次进展在 ${waited} 前，仍在生成。`
+      : '你也可以先去别的页面看看。');
 
   return { primary, secondary };
 }
@@ -104,6 +137,9 @@ export function buildGenerationProgress(
 /** 终态判据：与列表页（V2LearningPaths pollOnce）同一套口径，不另造第三种写法 */
 export function isGenerationSettled(lifecycle: GenerationLifecycleLike | null | undefined): boolean {
   if (!lifecycle) return false;
+  // 设计阶段真的在跑（queued/processing）时永远不算 settled，即使已有阶段可学——
+  // 否则新设计出的阶段不会自动刷新出来。失败/暂停/就绪则停表。
+  if (isDesignPollingActive(lifecycle)) return false;
   return lifecycle.phase === 'ready' || lifecycle.status === 'failed' || lifecycle.status === 'stale';
 }
 
@@ -113,6 +149,9 @@ export function genStageLabel(lifecycle: GenerationLifecycleLike): string {
   const total = isPositiveInt(lifecycle.totalStages) ? lifecycle.totalStages : 0;
   const clampedDone = total > 0 ? Math.min(done, total) : done;
   if (lifecycle.phase === 'core') return '规划阶段与课时';
+  if (lifecycle.canStartLearning === true) {
+    return total > 0 ? `后续阶段准备中（已就绪 ${clampedDone}/${total}）` : '后续阶段准备中';
+  }
   if (total > 0 && clampedDone >= total) return '课时正在写入';
   if (total > 0) return `课程准备中（${clampedDone}/${total}）`;
   return '课程准备中';

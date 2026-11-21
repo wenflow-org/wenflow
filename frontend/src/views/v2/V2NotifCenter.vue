@@ -258,6 +258,7 @@ import { useRouter } from 'vue-router';
 import api from '@/utils/api';
 import { timeAgo } from '@/views/admin-redesign/live';
 import { learningAPI } from '@/api/learning';
+import { isDesignPollingActive } from './learningPathProgress';
 import { aiTeachingAPI, type ActiveSessionInfo } from '@/api/aiTeaching';
 import { getAgentLogs } from '@/api/userCustom';
 import { agentLabelOf } from './agent-labels';
@@ -462,16 +463,18 @@ function toFeed(logs: AgentLog[]): FeedEvent[] {
 async function collectBusy(): Promise<void> {
   try {
     const paths = await learningAPI.getPaths();
-    const busyPath = paths.find(
-      (p) => p.generationLifecycle && p.generationLifecycle.phase !== 'ready'
-        && p.generationLifecycle.status !== 'failed'
-        && p.generationLifecycle.status !== 'stale'
-    );
+    // 只把真正 queued/processing 的设计 run 当「AI 任务」；失败/暂停/就绪不占进行中位。
+    const busyPath = paths.find((p) => !!p.generationLifecycle && isDesignPollingActive(p.generationLifecycle));
     if (busyPath) {
       const lc = busyPath.generationLifecycle as Record<string, any>;
-      const stage = lc.phase === 'stage_design' && lc.totalStages
-        ? `正在规划阶段与课时…（${lc.completedStages ?? 0}/${lc.totalStages}）`
-        : '正在规划阶段与课时…';
+      const designDone = lc.design?.completedStages ?? lc.completedStages ?? 0;
+      const designTotal = lc.design?.totalStages ?? lc.totalStages ?? 0;
+      const progress = designTotal ? `（已就绪 ${designDone}/${designTotal} 阶段）` : '';
+      const stage = lc.canStartLearning === true
+        ? `后续阶段正在准备${progress}，已就绪部分可继续学习`
+        : (lc.phase === 'stage_design'
+          ? `正在规划阶段与课时…${designTotal ? `（${designDone}/${designTotal}）` : ''}`
+          : '正在规划阶段与课时…');
       busyItems.value.push({
         key: `path-${busyPath.id}`,
         // 标题写「哪条路径」而不是「正在生成学习路径」：后者在 tab/段标题/进度条上已重复到第四遍

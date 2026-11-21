@@ -54,20 +54,26 @@ function milestonesWithProgress() {
 // 2026-11-12 CI 实测：组件错误路径的 1500ms 重试 setTimeout 在 worker 关闭瞬间才触发
 // load()，留下 pending 的 onUserConsoleLog（EnvironmentTeardownError，全量用例 2803/2803
 // 通过但进程 exit 1）。本文件不验证定时器行为——长延时（重试/轮询）一律不排程，杜绝竞态。
+// 2026-11-21 全量跑批复现同一路径：未 stub 的 <router-link> 每次挂载都刷 Vue warn，
+// 控制台 RPC 在 worker 关闭时仍 pending。补 router-link stub + 显式卸载，双管齐下。
 const realSetTimeout = window.setTimeout.bind(window);
+const mountedWrappers: Array<{ unmount: () => void }> = [];
 beforeEach(() => {
   vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number) => {
     if ((timeout ?? 0) > 200) return 0 as unknown as number;
     return realSetTimeout(handler, timeout);
   }) as typeof window.setTimeout);
 });
-afterEach(() => {
+afterEach(async () => {
+  mountedWrappers.splice(0).forEach((w) => w.unmount());
+  await flushPromises();
   vi.mocked(window.setTimeout).mockRestore();
 });
 
 async function mountDetail(extra: Record<string, unknown> = {}) {
   getPathDetail.mockResolvedValue(pathPayload(extra));
-  const w = mount(V2LearningPathDetail);
+  const w = mount(V2LearningPathDetail, { global: { stubs: { 'router-link': true } } });
+  mountedWrappers.push(w);
   await flushPromises();
   return w;
 }

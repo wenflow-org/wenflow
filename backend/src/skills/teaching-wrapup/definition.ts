@@ -61,7 +61,8 @@ export const sessionWrapupRuntimeDefinition: RuntimeDefinitionRecord = {
     'session-evaluation',
   ],
   defaultMaxTokens: 64000,
-  defaultTemperature: 0.7,
+  // 与 prompts/core/teaching-wrapup.yaml params.temperature 对齐（参数一致性：core 为真源）
+  defaultTemperature: 0.25,
   source: 'code',
   managedByCode: true,
 };

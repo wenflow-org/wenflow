@@ -311,6 +311,7 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     expect(openGuide, '不得再承诺「老师回应完这一轮就能结算」这个可能不来的状态').not.toContain('再来结算课堂');
     expect(openGuide, '应如实说明可能被再拦一次').toContain('这里会再拦一次');
     expect(openGuide, '应指出随时可用的出口（结束学习不计入完成）').toContain('结束学习');
+    expect(gate.find('.gate__end').text(), '所有门禁都应有同一颗持久出口').toContain('结束学习（不计入完成）');
     // 再次结算、换一种原因：引导随原因切换
     api.finalizeSessionReliably.mockRejectedValueOnce({
       message: '还有一道题没有作答，先完成这道题再结束课堂',
@@ -325,6 +326,7 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     expect(gate.exists(), 'PENDING_CHECKPOINT 409 应亮常驻门禁').toBe(true);
     expect(gate.find('.gate__guide').text(), 'PENDING_CHECKPOINT 应引导答完小测、等老师讲完这轮').toContain('先答完这道小测');
     expect(gate.find('.gate__guide').text()).toContain('再来结算课堂');
+    expect(gate.find('.gate__end').text(), 'PENDING_CHECKPOINT 门禁也要给同一颗持久出口').toContain('结束学习（不计入完成）');
 
     w.unmount();
   });
@@ -425,6 +427,45 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     await feedback!.trigger('click');
     expect(router.replace).toHaveBeenCalledWith(expect.stringContaining('/learn/task_1/evaluation/s_settle'));
 
+    w.unmount();
+  });
+
+  /**
+   * 2026-11-21：所有收束门禁给同一颗持久出口。服务端 end_only 以 allowOpenQuestion
+   * 豁免全部收束判据，所以「结束学习（不计入完成）」在任何 409 下都是真能走通的动作，
+   * 不再只写在某一类门禁的 guide 文字里。
+   */
+  it('门禁上的「结束学习（不计入完成）」直接走 end_only（不再点一次完成结算）', async () => {
+    api.finalizeSessionReliably.mockRejectedValueOnce({
+      message: '还有一道题没有作答，先完成这道题再结束课堂',
+      status: 409,
+      response: {
+        status: 409,
+        data: { error: { code: 'FINALIZATION_PENDING_CHECKPOINT', message: '还有一道题没有作答，先完成这道题再结束课堂' } },
+      },
+    });
+    const w = await mountPage();
+    await clickCompleteAndSettle(w);
+    expect(w.find('.gate').exists()).toBe(true);
+
+    api.finalizeSessionReliably.mockResolvedValueOnce({
+      status: 'completed',
+      revision: 3,
+      session: { status: 'completed' },
+      finalization: { taskCompletion: 'skipped' },
+      wrapup: { summary: { topicSummary: '本次学习已记录。' } },
+    });
+    await w.find('.gate__end').trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    const lastPayload = api.finalizeSessionReliably.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(lastPayload, '持久出口应直接以 end_only 收束').toMatchObject({
+      action: 'end_only',
+      reason: 'manual-end',
+    });
+    expect(w.find('.gate').exists(), 'end_only 成功后门禁应收起').toBe(false);
+    expect(askConfirm, '结束学习沿用既有确认').toHaveBeenCalled();
     w.unmount();
   });
 });

@@ -493,7 +493,7 @@ import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { describeRequestError } from '@/utils/httpError';
 import { computeStreakDays } from './streak';
-import { formatLocalDateTime, formatRelativeTime } from './learningPathProgress';
+import { formatLocalDateTime, formatRelativeTime, isDesignPollingActive } from './learningPathProgress';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
 import { unwrapArray } from './unwrap';
@@ -720,19 +720,26 @@ async function fetchSessions(startDate: string, endDate: string) {
 interface StageView { title: string; status: 'done' | 'current' | 'todo' | 'blocked'; note: string; taskCount: number }
 interface PathView {
   id: string; title: string; sub: string; percent: number; hours?: number;
-  stages: StageView[]; failed: boolean; generating: boolean; retryType: string | null; errorText: string;
+  stages: StageView[]; completed: boolean; failed: boolean; generating: boolean; retryType: string | null; errorText: string;
 }
 
 const primaryPath = computed<PathView | null>(() => {
   if (!paths.value.length) return null;
-  const p = paths.value.find((x) => x.generationLifecycle?.phase === 'ready' && x.status !== 'completed') ?? paths.value[0];
+  // 渐进式路径在「后续阶段设计」时 phase 可能仍是 stage_design，但 canStartLearning=true：
+  // 这类路径必须继续作为主路径展示（不能被当成还在生成而让看板停在 generating/attention）。
+  const p = paths.value.find((x) => {
+    const lc = x.generationLifecycle;
+    return x.status !== 'completed' && (lc?.canStartLearning === true || lc?.phase === 'ready');
+  }) ?? paths.value[0];
   return toPathView(p);
 });
 
 function toPathView(p: Record<string, any>): PathView {
   const lc = p.generationLifecycle;
-  const failed = !!lc && lc.phase !== 'ready' && (lc.status === 'failed' || lc.status === 'stale');
-  const generating = !!lc && lc.phase !== 'ready' && !failed;
+  // 只有「不可学」的失败/生成态才占据看板主状态；后续设计进行中但已有阶段可学仍按 active。
+  const failed = !!lc && lc.phase !== 'ready' && lc.canStartLearning !== true
+    && (lc.status === 'failed' || lc.status === 'stale');
+  const generating = !!lc && lc.phase !== 'ready' && !failed && lc.canStartLearning !== true;
   const weeks = p.milestones || p.weeks || [];
   let total = 0;
   let done = 0;
@@ -752,7 +759,12 @@ function toPathView(p: Record<string, any>): PathView {
   stages.forEach((s, i) => {
     if (s.status !== 'done') s.status = i === firstOpen ? (failed ? 'blocked' : 'current') : 'todo';
   });
-  const percent = total ? Math.round((done / total) * 100) : 0;
+  const completed = p.status === 'completed';
+  const progress = p.learningProgress ?? lc?.learningProgress;
+  const progressPercent = typeof progress?.percent === 'number'
+    ? Math.round(progress.percent)
+    : (total ? Math.round((done / total) * 100) : 0);
+  const percent = completed ? 100 : Math.max(0, Math.min(99, progressPercent));
   return {
     id: p.id,
     title: p.title || p.name || '未命名路径',
@@ -760,6 +772,7 @@ function toPathView(p: Record<string, any>): PathView {
     percent,
     hours: p.estimatedHours,
     stages,
+    completed,
     failed,
     generating,
     retryType: lc?.retryType ?? null,
@@ -780,10 +793,21 @@ const pageState = computed<'active' | 'attention' | 'generating' | 'empty'>(() =
    刷新全量（失败态走手动重试卡，不再轮询）；skipWhenHidden 页面隐藏时跳过，
    连续失败有退避+断路器兜底。失败态点「重新生成」成功后 loadAll 把状态推回
    generating，这里同样接管后续轮询。 */
+/**
+ * 轮询判据是「确实有 queued/processing 的生成/设计 run」，不是 pageState：
+ * 渐进式路径后续阶段设计时 pageState 仍是 active（可学），但新阶段完成后页面需要刷新。
+ * 失败/暂停/就绪都不再轮询，避免空转。
+ */
+const pathsNeedPolling = computed(() => paths.value.some((p) => {
+  const lc = p.generationLifecycle;
+  if (!lc) return false;
+  if (isDesignPollingActive(lc)) return true;
+  return lc.phase === 'core' && (lc.status === 'queued' || lc.status === 'processing');
+}));
 const generationPolling = useSafePolling(
   async () => {
     paths.value = (await learningAPI.getPaths()) as unknown as Array<Record<string, any>>;
-    if (pageState.value !== 'generating') {
+    if (!pathsNeedPolling.value) {
       // 到达终态：fn 内 stop 避免再调度（composable 约定的业务终止方式），再刷全量
       generationPolling.stop();
       await loadAll();
@@ -791,8 +815,8 @@ const generationPolling = useSafePolling(
   },
   { interval: 25000, skipWhenHidden: true }
 );
-watch(pageState, (state) => {
-  if (state === 'generating') generationPolling.start();
+watch(pathsNeedPolling, (needs) => {
+  if (needs) generationPolling.start();
   else generationPolling.stop();
 }, { immediate: true });
 
@@ -829,7 +853,7 @@ const stageInfo = computed(() => {
 const totalTaskCount = computed(() =>
   (primaryPath.value?.stages ?? []).reduce((sum, stage) => sum + stage.taskCount, 0)
 );
-const allPathDone = computed(() => totalTaskCount.value > 0 && (primaryPath.value?.percent ?? 0) >= 100);
+const allPathDone = computed(() => primaryPath.value?.completed === true);
 const currentStageTaskCount = computed(() => {
   const stages = primaryPath.value?.stages ?? [];
   const current = stages.find((s) => s.status === 'current' || s.status === 'blocked') ?? stages[stages.length - 1];
@@ -1058,7 +1082,7 @@ const pathBadge = computed(() => {
   if (!primaryPath.value) return { text: '', cls: '' };
   if (primaryPath.value.failed) return { text: '需要处理', cls: 'badge--red' };
   if (primaryPath.value.generating) return { text: '生成中', cls: 'badge--cyan' };
-  if (primaryPath.value.percent >= 100) return { text: '已完成', cls: 'badge--green' };
+  if (primaryPath.value.completed) return { text: '已完成', cls: 'badge--green' };
   return { text: '进行中', cls: 'badge--blue' };
 });
 

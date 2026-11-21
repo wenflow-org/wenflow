@@ -13,6 +13,8 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(resolve(here, '../V2LearningPage.vue'), 'utf8');
+/* 门禁文案与持久出口文案已收进共享模块（课堂页 + 反馈页同一份） */
+const gateCopySource = readFileSync(resolve(here, '../closureGate.ts'), 'utf8');
 
 describe('V2LearningPage 课堂契约卡与自由支线', () => {
   it('契约卡渲染核心 KC、独立证据门槛与覆盖度', () => {
@@ -52,7 +54,7 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
 
   it('结算被契约缺口拒绝时走页内门禁并展示逐条原因，不落「稍后重试」故障弹窗', () => {
     expect(source).toContain("LESSON_CONTRACT_NOT_MET");
-    expect(source).toContain('还差几步才能完成本节课');
+    expect(gateCopySource).toContain('还差几步才能完成本节课');
     expect(source).toMatch(/LESSON_CONTRACT_NOT_MET[\s\S]{0,4000}showSettleGate/);
   });
 
@@ -66,8 +68,9 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
     expect(source).toContain('const canCompleteLesson = computed');
     expect(source).toContain('v-if="canCompleteLesson"');
     expect(source).toMatch(/allKpMastered[\s\S]{0,800}canCompleteLesson/);
-    // 提前离开只走 ⋯ 菜单的「结束学习（不计入完成）」
-    expect(source).toContain('结束学习（不计入完成）');
+    // 提前离开只走 ⋯ 菜单的「结束学习（不计入完成）」；文案与反馈页共用同一常量
+    expect(source).toContain('END_WITHOUT_FINISH_LABEL');
+    expect(gateCopySource).toContain('结束学习（不计入完成）');
   });
 
   it('完课条件满足后在输入区上方给出结束提示，而不是只藏一颗页头按钮', () => {

@@ -78,6 +78,13 @@ export interface ClassroomQualityJudgeOutput {
   }>;
   evidence: Array<{
     id: string;
+    /**
+     * 稳定证据 ID（2026-11-21）：由 `path + index` 确定性派生（wrapup 为 `W:wrapup`），
+     * 跨重跑/换模型不变，供审计跨样本引用；`id` 仍保留模型原值以兼容既有报告。
+     */
+    stableId: string;
+    /** 证据来源：逐轮记录 / 收束产出（board/figure/checkpoint 都属于逐轮记录） */
+    source: 'transcript' | 'wrapup';
     index: number | null;
     path: 'content' | 'board' | 'figure' | 'checkpoint' | 'wrapup';
     excerpt: string;
@@ -103,7 +110,7 @@ function text(value: unknown, limit = 1000): string {
 function normalizeEvidence(value: unknown, input: ClassroomQualityJudgeInput): ClassroomQualityJudgeOutput['evidence'] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
-  return value.flatMap((item: any, position: number) => {
+  return value.flatMap<ClassroomQualityJudgeOutput['evidence'][number]>((item: any) => {
     const path = EVIDENCE_PATHS.includes(item?.path) ? item.path as ClassroomQualityJudgeOutput['evidence'][number]['path'] : null;
     if (!path) return [];
     const rawIndex = item?.index === null || item?.index === undefined ? null : Number(item.index);
@@ -112,11 +119,14 @@ function normalizeEvidence(value: unknown, input: ClassroomQualityJudgeInput): C
       ? null
       : (Number.isInteger(rawIndex) && rawIndex! >= 0 && rawIndex! < input.transcript.length ? rawIndex : null);
     if (path !== 'wrapup' && index === null) return [];
-    const id = text(item?.id, 40) || `E${position + 1}`;
+    const stableId = path === 'wrapup' ? 'W:wrapup' : `T${index}:${path}`;
+    const id = text(item?.id, 40) || stableId;
     if (seen.has(id)) return [];
     seen.add(id);
     return [{
       id,
+      stableId,
+      source: path === 'wrapup' ? 'wrapup' : 'transcript',
       index,
       path,
       excerpt: text(item?.excerpt, 500),
@@ -165,7 +175,15 @@ export function normalizeClassroomJudgeOutput(parsed: any, input: ClassroomQuali
     boardConsistency: hasBoardPayload ? clampScore(rawScores.boardConsistency) : null,
     closureQuality: clampScore(rawScores.closureQuality),
   };
-  const verdict = VERDICTS.includes(parsed?.verdict) ? parsed.verdict : 'inconclusive';
+  // 证据不足（2026-11-21）：没有任何可定位证据，或模型给了 findings 但所有引用都失效时，
+  // 不得给出结论性 verdict——统一标 inconclusive，让上游按「证据不足」处理而不是误采信。
+  const findingsDropped = Array.isArray(parsed?.findings)
+    && parsed.findings.length > 0
+    && findings.length === 0;
+  const evidenceInsufficient = evidence.length === 0 || findingsDropped;
+  const verdict: ClassroomQualityJudgeOutput['verdict'] = evidenceInsufficient
+    ? 'inconclusive'
+    : (VERDICTS.includes(parsed?.verdict) ? parsed.verdict : 'inconclusive');
   return { verdict, scores, findings, recommendations, evidence };
 }
 
@@ -178,13 +196,38 @@ export async function executeClassroomQualityJudge(
     defaultSystemPrompt: CLASSROOM_QUALITY_JUDGE_PROMPT,
     requireActivePrompt: true,
     caller: { skillId: 'teaching-classroom-judge' },
-    retryStrategy: { maxAttempts: 2 },
     buildUserPayload: (payload) => payload,
     normalizeOutput: (parsed) => normalizeClassroomJudgeOutput(parsed, input),
-    validateParsedOutput: (parsed) =>
-      parsed && typeof parsed === 'object'
-        ? { valid: true }
-        : { valid: false, failureReason: 'CLASSROOM_JUDGE_OUTPUT_NOT_OBJECT' },
+    // 裁判引用或分数缺失 → 触发一次带反馈的重试；两败后 normalize 仍会把无证据结果标 inconclusive。
+    validateParsedOutput: (parsed) => {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { valid: false, failureReason: 'CLASSROOM_JUDGE_OUTPUT_NOT_OBJECT' };
+      }
+      const scores = (parsed as any).scores;
+      if (!scores || typeof scores !== 'object' || Array.isArray(scores)
+        || !Number.isFinite(Number(scores.overall))) {
+        return { valid: false, failureReason: 'CLASSROOM_JUDGE_SCORES_MISSING' };
+      }
+      const findings = (parsed as any).findings;
+      const evidence = (parsed as any).evidence;
+      if (!Array.isArray(findings) || !Array.isArray(evidence)) {
+        return { valid: false, failureReason: 'CLASSROOM_JUDGE_EVIDENCE_MISSING' };
+      }
+      if (findings.length > 0 && evidence.length === 0) {
+        return { valid: false, failureReason: 'CLASSROOM_JUDGE_FINDINGS_WITHOUT_EVIDENCE' };
+      }
+      return { valid: true };
+    },
+    retryStrategy: {
+      maxAttempts: 2,
+      onValidationFail: ({ failureReason }) => [
+        '上一轮课堂评审输出不完整，请重新输出完整 JSON。',
+        `失败类型: ${failureReason}`,
+        '必须包含：scores.overall（0-100 数字）、findings 数组、evidence 数组；每条 finding 至少引用一个 evidenceIds，',
+        'evidence 必须能定位到 transcript.index 或 wrapup（path=content|board|figure|checkpoint|wrapup）。',
+        '证据不足时降低对应分数并输出 verdict=inconclusive，不要编造证据。',
+      ].join('\n'),
+    },
   }, input);
 
   if (!result.success || !result.output) {

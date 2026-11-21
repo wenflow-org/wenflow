@@ -90,6 +90,12 @@ describe('gradePendingExitTicket 格式未识别', () => {
     expect(result.attempts).toBe(0);
   });
 
+  it('废弃已发出的多答案单选题，且不扣作答次数', () => {
+    const invalid = { ...ticket, correctOptionIds: ['A', 'B'] };
+    expect(gradePendingExitTicket({ exitTicketState: invalid, exitTicketHistory: [invalid], message: 'A' }))
+      .toMatchObject({ state: null, history: [], attempts: 0, graded: false, verdict: null });
+  });
+
   it('真正选了错误选项仍计一次失败', () => {
     const result = gradePendingExitTicket({
       exitTicketState: ticket,

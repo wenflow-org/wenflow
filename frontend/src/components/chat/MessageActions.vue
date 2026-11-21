@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
  * MessageActions — hover action menu for AI message bubbles.
- * Shows: 有用 / 不佳 (message feedback), 重新生成 (hidden during streaming), 复制
+ * Shows: 有用 / 不佳 (message feedback), 再回答一次 (hidden during streaming), 复制
  * Positioned as an inline row BELOW the bubble（2026-09-27 用户反馈）：
  * 原绝对定位在气泡右上角，浮层压住正文末行；改为文档流内的独立小行，
  * hover 时在气泡下方展开，永不遮挡消息内容。
  *
- * 2026-10-08：四枚按钮统一为纯图标（「重新生成」「复制」的文字去掉）。
+ * 2026-10-08：四枚按钮统一为纯图标（「再回答一次」「复制」的文字去掉）。
  * 页脚是「meta 左 / 操作条右」同行布局，窄屏消息列只有 ~266px，带文字时四枚
  * 合计 224px + nowrap 的「问流导师 · 时间」，把时间压成 51px 宽并与按钮叠在一起。
  * 去文字后合计 ~166px，一行放得下；语义改由 title（悬停提示）+ aria-label（读屏）承载。
@@ -114,8 +114,8 @@ function handleFeedback(thumbsUp: boolean) {
         v-if="!streaming"
         type="button"
         class="msg-actions__btn"
-        title="重新生成"
-        aria-label="重新生成"
+        title="再回答一次"
+        aria-label="再回答一次"
         @click.stop="emit('regenerate')"
       >
         <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>

@@ -82,7 +82,12 @@ export function computeEffectiveDurationMinutes(session: TeachingSessionRecord) 
   // 在受理时就把状态置 finalizing，原 `status === 'paused'` 分支在收束路径恒不成立，导致
   // pausedAt → 收束这段时间整段没被扣，最多污染约 60 分钟（wrapup.duration / durationMinutes）。
   pausedDurationMs += resolveOpenPauseDurationMs(session, sessionArtifacts);
-  const rawDuration = Math.max(1, Math.round((simulatedNowOr().getTime() - session.startTime.getTime() - pausedDurationMs) / 60000));
+  // 收束终点：已落 endTime 的会话按 endTime 计，未收束的才按「现在」计。
+  // 这样同一个纯函数既能算收束当刻的有效时长，也能在课后概要重生成 / 结算台账补算时
+  // 重算出同一个值（旧实现恒用 now，已完结会话越晚读越虚高）。
+  const endedAtMs = session.endTime instanceof Date ? session.endTime.getTime() : NaN;
+  const clockMs = Number.isFinite(endedAtMs) ? endedAtMs : simulatedNowOr().getTime();
+  const rawDuration = Math.max(1, Math.round((clockMs - session.startTime.getTime() - pausedDurationMs) / 60000));
 
   // idle 封顶：按消息时间戳间隔估算活跃时长（间隔 > 30 分钟视为暂停，与 timeout-fallback 规则一致），
   // 防止合盖睡眠/进程被杀等无 pagehide 场景把 idle 时间算入学习时长

@@ -325,7 +325,8 @@
                   @keydown.esc="cancelEdit"
                 ></textarea>
                 <div class="msg__edit-actions">
-                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(m)" @keydown.enter="saveEdit(m)" @keydown.space.prevent="saveEdit(m)">保存</span>
+                  <span class="msg__edit-hint">原消息会保留，修正内容作为新一轮发送</span>
+                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(m)" @keydown.enter="saveEdit(m)" @keydown.space.prevent="saveEdit(m)">修正后重发</span>
                   <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit" @keydown.space.prevent="cancelEdit">取消</span>
                 </div>
               </div>
@@ -355,8 +356,8 @@
                 <button
                   type="button"
                   class="msg__edit-btn"
-                  title="编辑这条消息"
-                  aria-label="编辑这条消息"
+                  title="修正后重发"
+                  aria-label="修正后重发这条消息"
                   @click="startEdit(m)"
                 ><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
               </div>
@@ -405,8 +406,8 @@
                   <span class="msg__supplement-title">{{ m.supplement.title }}</span>
                   <span class="msg__supplement-topic">关于「{{ m.supplement.topic }}」</span>
                 </button>
-                <!-- streaming 复用为「不可重生成」口径：MessageActions 以 streaming 隐藏「重新生成」，
-                     非最后一条 AI 消息一律不可重生成（避免历史中段重生成导致顺序错乱） -->
+                <!-- streaming 复用为「不可重答」口径：MessageActions 以 streaming 隐藏「再回答一次」，
+                     非最后一条 AI 消息一律不可重答（追加语义下只在最新一轮回复上开放） -->
                 <MessageActions
                   :show="hoveredMsgId === m.id"
                   :streaming="((typing || checkpointStreaming) && streamingBubbleIndex === mi) || mi !== lastAiIndex"
@@ -630,6 +631,15 @@
                 class="gate__still"
                 @click="settleAnyway"
               >仍然完成结算</button>
+              <!-- 持久出口（2026-11-21）：所有收束门禁都给同一颗「结束学习（不计入完成）」。
+                   服务端 end_only 以 allowOpenQuestion 豁免全部收束判据，任何门禁下都可用——
+                   不再让「结束学习」只存在于某一类 409 的说明文字里。 -->
+              <button
+                type="button"
+                class="gate__end"
+                :disabled="finalizing || actionBusy"
+                @click="endSession"
+              >{{ END_WITHOUT_FINISH_LABEL }}</button>
               <button type="button" class="gate__close" aria-label="关闭提示" @click="dismissSettleGate">✕</button>
             </div>
           </div>
@@ -984,8 +994,8 @@ watch(isDark, () => {
   scheduleMermaidRender();
 });
 
-/* 菜单项与确认弹窗标题共用同一句，收成单源避免改一处漏一处 */
-const END_WITHOUT_FINISH_LABEL = '结束学习（不计入完成）';
+/* 菜单项与确认弹窗标题共用同一句，收成单源避免改一处漏一处（与反馈页共用） */
+import { END_WITHOUT_FINISH_LABEL, resolveClosureGateCopy } from './closureGate';
 
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
@@ -1265,42 +1275,8 @@ interface SettleGate {
   server?: boolean
 }
 const settleBlock = ref<SettleGate | null>(null)
-const SETTLE_GATE_COPY: Record<string, { title: string; action: SettleGateAction; actionLabel: string; guide?: string }> = {
-  /* 2026-11-01 课堂走查：答完一问后老师常紧接新问题 / 新小测，再点结算又吃 409——
-     循环缺「先把这一轮讲完再结算」的引导。服务端 409 响应体带 error.code（ai-teaching
-     路由统一错误出口），按原因各补一句「为什么被拦 + 现在该做什么」。
-     2026-11-03 真人走查修正：原话「老师回应完这一轮，再来结算课堂」是**空头支票**——
-     这位老师每轮都以提问收尾，实测连答 4 轮才等到一次不问的回应。改成如实说明
-     「可能还会再拦」+ 指出随时可用的出口（结束学习不计入完成），学员不必在循环里干等。 */
-  FINALIZATION_OPEN_QUESTION: {
-    title: '先回答老师的问题',
-    action: 'composer',
-    actionLabel: '去回答',
-    guide: '回答它之后就能结算。若老师这一轮又以新问题收尾，这里会再拦一次。也可以点「仍然完成结算」（那一问会记进本次总结的待验证清单），或选「结束学习」（总结照常生成，本次不计入完成）。'
-  },
-  FINALIZATION_PENDING_CHECKPOINT: {
-    title: '先完成这道小测',
-    action: 'checkpoint',
-    actionLabel: '去作答',
-    guide: '先答完这道小测。等老师讲完这一轮，再来结算课堂。'
-  },
-  FINALIZATION_LAST_CHECKPOINT_FAILED: { title: '先把最后一道小测处理完', action: 'checkpoint', actionLabel: '去查看' },
-  /* 2026-11-20 课堂走查：契约门 409（LESSON_CONTRACT_NOT_MET）此前落到通用失败弹窗
-     「课堂结算遇到问题，稍后重试」——实际不是故障，是核心 KC 缺证据，重试永远同一结果，
-     还把用户往「查看学习反馈」这个死胡同里推。服务端 error.message 已带逐条缺口，
-     与上面三条门禁同样走页内常驻提示，把原因原文和「继续作答」出口一起给到。 */
-  LESSON_CONTRACT_NOT_MET: {
-    title: '还差几步才能完成本节课',
-    action: 'composer',
-    actionLabel: '继续学习'
-  }
-}
 function showSettleGate(code: string, message: string, server = false) {
-  const copy = SETTLE_GATE_COPY[code] || {
-    title: '课堂还有未完成的问答',
-    action: 'composer' as SettleGateAction,
-    actionLabel: '去看看'
-  }
+  const copy = resolveClosureGateCopy(code)
   settleBlock.value = {
     code,
     title: copy.title,
@@ -2394,8 +2370,8 @@ const SEND_FALLBACK_TIMEOUT_MS = 90_000;
  */
 const streamingBubbleIndex = ref(-1);
 
-/** 最后一条 AI 消息的下标：「重新生成」入口只对它开放——重生成会删掉该气泡并重发
- *  其前驱问题，对历史中段的 AI 消息触发会把其后整个对话错位清掉 */
+/** 最后一条 AI 消息的下标：「再回答一次」入口只对它开放——追加语义下保留旧答案，
+ *  只把对应问题作为新一轮发送；历史中段的消息不开放（避免新回答接到错误位置） */
 const lastAiIndex = computed(() => {
   for (let i = msgs.value.length - 1; i >= 0; i--) {
     if (msgs.value[i].role === 'ai') return i;
@@ -2535,8 +2511,8 @@ async function sendTurnOnce(
   }
 }
 
-async function doSend(text: string, allowStaleRetry = true, skipUserPush = false, retryKey?: string, images: TeachingMessageImage[] = []) {
-  if (!session.value) return;
+async function doSend(text: string, allowStaleRetry = true, skipUserPush = false, retryKey?: string, images: TeachingMessageImage[] = []): Promise<boolean> {
+  if (!session.value) return false;
   /* 学员真的推进了一轮 → 恢复横幅的使命结束（2026-11-03 心理课走查实锤）：
      横幅此前只在「输入框有字」（watch(input)）和「勾选小测选项」时收起，而真人常用
      「点快选」推进——那条路走 sendDirect → 这里，没人清，于是答完多轮它仍挂在聊天区顶部，
@@ -2568,7 +2544,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
       if (attempt > 0) {
         // 退避 0.8s → 2s；等待期间仍可点「停止」
         await new Promise((resolve) => window.setTimeout(resolve, attempt === 1 ? 800 : 2000));
-        if (stopRequested || !session.value) return;
+        if (stopRequested || !session.value) return false;
       }
       // 停滞看门狗：流式与回退阶段都算——收到任意 delta/restart/心跳注释行会重置。
       // 90s 无任何传输活动即中止，避免 typing 永久为 true（#111/#113）；心跳续命后
@@ -2620,14 +2596,15 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
     await applyTurnResult(r, aiMsg);
     // 本轮回复已送达：老师末问的结算门禁已回应，常驻提示撤掉（否则用户会以为还没回应）
     if (settleBlock.value?.action === 'composer') settleBlock.value = null;
+    return true;
   } catch (e) {
     // 离页/用户停止：静默丢弃，不重发也不展示失败气泡
-    if ((e as { cancelled?: boolean })?.cancelled || stopRequested && !turnTimedOut) return;
+    if ((e as { cancelled?: boolean })?.cancelled || stopRequested && !turnTimedOut) return false;
     // 流式气泡可能已有部分内容：移除后展示统一失败气泡
     if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
     if ((e as { turnTimedOut?: boolean })?.turnTimedOut) {
       pushMsg({ role: 'ai', text: '回复超时，已停止等待。你可以点重试或直接继续输入。', time: nowTime(), failed: true });
-      return;
+      return false;
     }
     // 陈旧 revision（多标签页/刷新竞态）：同步最新 revision 后重发一次，避免重试死循环
     const raw = e as any;
@@ -2638,8 +2615,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
         if (typeof fresh?.revision === 'number') session.value.revision = fresh.revision;
       } catch { /* 同步失败则直接展示失败气泡 */ }
       // 重发不再重复推送用户气泡：首轮已经乐观渲染过，再推一次就是两条同样的「你」
-      await doSend(text, false, true, undefined, images);
-      return;
+      return await doSend(text, false, true, undefined, images);
     }
     // 服务端明确拒绝（4xx，如图片超限/格式不符 400）：带上原文，用户知道该删图还是改字
     const serverMsg = String(raw?.response?.data?.error?.message || '').trim();
@@ -2651,6 +2627,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
       time: nowTime(),
       failed: true,
     });
+    return false;
   } finally {
     streamingBubbleIndex.value = -1;
     typing.value = false;
@@ -3731,7 +3708,9 @@ onBeforeUnmount(() => {
   resize: vertical;
   outline: none;
 }
-.msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+/* 追加语义说明（2026-11-21）：让「修正后重发」不再被读成改写历史 */
+.msg__edit-hint { margin-right: auto; font-size: 11.5px; color: var(--muted); }
 .msg__edit-save, .msg__edit-cancel {
   font-size: 12px; font-weight: 700;
   padding: 5px 14px;
@@ -4595,6 +4574,15 @@ onBeforeUnmount(() => {
   color: var(--ink); font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
 .gate__still:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+/* 持久出口「结束学习（不计入完成）」：所有门禁同一颗，描边中性色，低于「去回答」主路径。 */
+.gate__end {
+  border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 11px;
+  background: transparent;
+  color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.gate__end:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+.gate__end:disabled { opacity: .55; cursor: default; }
 .gate__close {
   width: 26px; height: 26px; border: 0; border-radius: 50%;
   background: transparent; color: var(--muted);

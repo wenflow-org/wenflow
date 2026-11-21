@@ -19,6 +19,7 @@ import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './
 // 非正常终态判定（幽灵课 / 弃跑状态泄漏）：叶子方向的单向依赖，不成环（lifecycle 不 import 本服务）
 import { isAbnormalSessionClosure } from './teaching-session-lifecycle';
 import { evaluateSessionClosable } from './teaching-closure';
+import { computeEffectiveDurationMinutes } from './teaching-session-views';
 import { parseSessionArtifacts } from './checkpoint-shared';
 import { mapKnowledgeStatusToMastery } from '../memory/memory-trace.service';
 import { validateTaskTerminalConsistency } from './terminal-consistency';
@@ -72,6 +73,40 @@ function finalizationRequestIdentity(input: FinalizeSessionInput) {
     requestJson,
     requestHash: createHash('sha256').update(requestJson).digest('hex')
   };
+}
+
+/**
+ * 结算/台账的有效时长唯一口径（2026-11-21）。
+ *
+ * 优先级：
+ * 1. 会话 `duration` 列——收束时已由 `computeEffectiveDurationMinutes` 写入，是课后概要/
+ *    反馈页/学习历史共读的同一份值；
+ * 2. `computeEffectiveDurationMinutes` 现场重算——兼容 duration 缺失的历史会话
+ *    （已收束时函数按 endTime 计，不会像旧实现那样越读越高）；
+ * 3. 客户端 `actualMinutes`——仅作为两条服务端路径都拿不到数值时的历史兜底。
+ *
+ * 为什么放在这里：此前 `complete_task` 把前端算的 `actualMinutes` 原样写进今日调度台账、
+ * 任务完成指标与学习报告，而课后概要/反馈页读的是服务端 `duration`——同一次收束出现
+ * 「反馈 31 分钟 / 台账 18 分钟」。幂等请求身份仍按入参 `actualMinutes` 计算，重试/重放
+ * 语义不变；本次起写台账/指标改用服务端有效时长。
+ */
+function resolveEffectiveDurationMinutes(
+  session: TeachingSessionRecord,
+  legacyActualMinutes?: number
+): number | undefined {
+  const stored = Number(session.duration);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  // 历史夹具/异常记录可能缺 startTime（纯时长计算无法成立）：不因重算让结算整体失败。
+  if (session.startTime instanceof Date && Number.isFinite(session.startTime.getTime())) {
+    try {
+      const computed = computeEffectiveDurationMinutes(session);
+      if (Number.isFinite(computed) && computed > 0) return computed;
+    } catch {
+      /* fall through to legacy input */
+    }
+  }
+  const legacy = Number(legacyActualMinutes);
+  return Number.isFinite(legacy) && legacy > 0 ? legacy : undefined;
 }
 
 /**
@@ -329,11 +364,14 @@ export class SessionFinalizationService {
 
     const leaseGuard = new FinalizationLeaseGuard(input.sessionId, claim.operationId, claim.leaseOwner);
     leaseGuard.start();
+    // 服务端有效时长是结算台账/任务指标/学习报告的唯一来源（见 resolveEffectiveDurationMinutes）。
+    // 客户端 actualMinutes 只保留在幂等请求身份里，不再直接写账。
+    const effectiveMinutes = resolveEffectiveDurationMinutes(claim.session, input.actualMinutes);
     try {
       const completion = await learningService.completeTask({
         taskId: session.taskId,
         userId: session.userId,
-        actualMinutes: input.actualMinutes,
+        actualMinutes: effectiveMinutes,
         subjectiveDifficulty: input.subjectiveDifficulty,
         // #105 观测统一：事件记录收束通道与会话 id（真人与 VL 都可能走 finalize，轨道由 isVirtualLearner 派生）
         completionSource: 'teaching-finalize',

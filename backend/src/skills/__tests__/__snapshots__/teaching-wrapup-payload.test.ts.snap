@@ -16,6 +16,7 @@ exports[`teaching-wrapup payload snapshot parity payload carries the tagged sect
 【课堂最终状态】null
 【课堂事件历史】[{"type":"checkpoint"}]
 【阶段轨迹】[{"stage":"teaching","at":"t0"}]
+【课堂契约报告】null
 【结束原因】task-completed
 【知识点状态】[{"name":"闭包","status":"learning","progress":50},{"name":"词法作用域","status":"mastered","progress":90}]
 【知识点变化】{"newlyMastered":["词法作用域"],"stillLearning":["闭包"]}
