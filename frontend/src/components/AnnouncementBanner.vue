@@ -1,6 +1,6 @@
 <template>
   <Transition name="anb">
-    <div v-if="current" class="anb" :class="`anb--${current.severity}`" role="alert">
+    <div v-if="current" ref="bannerEl" class="anb" :class="`anb--${current.severity}`" role="alert">
       <span class="anb__dot"></span>
       <div class="anb__main">
         <strong class="anb__title">{{ current.title }}</strong>
@@ -17,10 +17,46 @@
  * 位置：全站最顶部（导航栏上方）
  * 数据：GET /api/announcements/active（需登录）
  */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/utils/api'
 import { useUserStore } from '@/stores/user'
+
+/* 吸顶叠层协调（2026-11-21 公告遮住导航修复）：
+   本横幅与 V2Nav 顶栏都是 sticky top:0——横幅展示期两者同点吸顶，z-index 200 的横幅
+   会盖住导航。横幅把实测高度写进 :root 的 --wf-anb-h，V2Nav 用它作吸顶 top 偏移，
+   两层上下堆叠互不遮挡；横幅隐藏/关闭后变量清除，导航回到 top:0。 */
+const ANB_HEIGHT_VAR = '--wf-anb-h'
+const bannerEl = ref<HTMLElement | null>(null)
+let heightObserver: ResizeObserver | null = null
+
+function syncHeightVar() {
+  const el = bannerEl.value
+  if (el) {
+    document.documentElement.style.setProperty(ANB_HEIGHT_VAR, `${Math.round(el.getBoundingClientRect().height)}px`)
+  } else {
+    document.documentElement.style.removeProperty(ANB_HEIGHT_VAR)
+  }
+}
+
+function watchBannerHeight() {
+  heightObserver?.disconnect()
+  heightObserver = null
+  const el = bannerEl.value
+  if (!el || !current.value) {
+    syncHeightVar()
+    return
+  }
+  heightObserver = new ResizeObserver(syncHeightVar)
+  heightObserver.observe(el)
+  syncHeightVar()
+}
+
+onBeforeUnmount(() => {
+  heightObserver?.disconnect()
+  heightObserver = null
+  document.documentElement.style.removeProperty(ANB_HEIGHT_VAR)
+})
 
 interface ActiveAnnouncement {
   id: string
@@ -102,6 +138,11 @@ watch(
   },
   { immediate: true }
 )
+
+// 公告出现/消失/切换 → 同步吸顶偏移变量（等 DOM 渲染后再量高度）。
+// bannerEl 一并纳入：离场动画结束后 v-if 卸载元素、ref 置 null，此时也要把变量清掉，
+// 否则导航会永久停在一个不存在的横幅高度下方。
+watch([current, bannerEl], () => void nextTick(watchBannerHeight), { immediate: true })
 </script>
 
 <style scoped>

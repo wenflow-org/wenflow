@@ -300,7 +300,10 @@ onUnmounted(() => {
    底色改引 --mk-surface（暗色档由 tokens.css 自动翻转，不再需要 --v2nav-bg
    这个半透明兜底——它在暗色下曾是一层白纱）。 */
 .v2nav-bar {
-  position: sticky; top: 0; z-index: 30;
+  /* 吸顶 top 让位公告横幅（2026-11-21 重叠修复）：AnnouncementBanner 也是 sticky top:0
+     （z-index 200 > 本栏 30），横幅展示期两者同点吸顶会叠字。横幅把实测高度写进
+     :root 的 --wf-anb-h，本栏吸顶点贴其下缘堆叠；横幅隐藏/关闭后变量清除回落 top:0。 */
+  position: sticky; top: var(--wf-anb-h, 0px); z-index: 30;
   display: flex; align-items: center; gap: 8px;
   padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
   background: var(--mk-surface);
