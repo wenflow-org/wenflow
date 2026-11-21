@@ -34,11 +34,7 @@
       >{{ showAll ? '收起' : `+${attached.length - CHIP_LIMIT}` }}</button>
     </div>
 
-    <div class="mat-upload__meta">
-      <span v-if="!attached.length" class="mat-upload__note">未挂载资料——只有这里挂载的资料会进入路径生成（最多 {{ PATH_LIMIT }} 份）</span>
-      <span v-else-if="library && library.uploadCount > attached.length" class="mat-upload__note">资料库共 {{ library.uploadCount }} 份，已挂载 {{ attached.length }} 份进本次路径</span>
-      <router-link to="/library" class="mat-upload__manage">管理资料库</router-link>
-    </div>
+    <!-- 说明性文案不再占位（2026-11-21 走查）：挂载语义只在挂载弹层内一句话交代，库管理入口也在弹层 -->
 
     <p v-if="error" class="mat-upload__error">{{ error }}</p>
 
@@ -75,7 +71,7 @@
           <button type="button" class="mat-upload__picker-upload" :disabled="uploading" @click="inputRef?.click()">
             {{ uploading ? '上传中…' : '上传新文件' }}
           </button>
-          <span class="mat-upload__picker-hint">挂载的资料会随本次目标进入路径生成</span>
+          <span class="mat-upload__picker-hint">挂载的资料会随本次目标进入路径生成 · <router-link to="/library" class="mat-upload__picker-lib">管理资料库</router-link></span>
           <button type="button" class="mat-upload__picker-done" @click="closePicker">完成</button>
         </footer>
       </div>
@@ -164,7 +160,7 @@ function isAttached(id: string): boolean {
   return attached.value.some((item) => item.id === id);
 }
 
-/** 资料库清单：只喂挂载弹层与空态提示，不再冒充“已挂载”chips。 */
+/** 资料库清单：只喂挂载弹层，不再冒充“已挂载”chips。 */
 async function refresh() {
   try {
     const data = await getMaterialLibrary();
@@ -327,31 +323,19 @@ defineExpose({ refresh, openPicker, addFiles });
   cursor: pointer;
 }
 
-.mat-upload__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-}
+/* 说明性提示行已撤（2026-11-21 走查）：不占输入框上方空间；挂载语义与库管理入口
+   都收进挂载选择弹层（见 .mat-upload__picker-lib）。 */
 
-.mat-upload__note {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-}
-
-.mat-upload__manage {
-  color: var(--blue-deep);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.mat-upload__manage:hover {
+.mat-upload__picker-lib {
+  color: inherit;
   text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+
+.mat-upload__picker-lib:hover {
+  color: var(--blue-deep);
+  text-decoration-color: currentColor;
 }
 
 .mat-upload__error {

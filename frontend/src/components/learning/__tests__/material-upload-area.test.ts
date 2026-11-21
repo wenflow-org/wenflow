@@ -90,15 +90,28 @@ describe('MaterialUploadArea（挂载器语义）', () => {
     expect(w.classes()).toContain('mat-upload--empty');
   });
 
-  it('库里有文件但未挂载 → 显示空态提示（资料不会静默进入路径生成）', async () => {
+  it('库里有文件但未挂载 → 不渲染任何说明行（不占输入框上方空间），库文件也不冒充 chips', async () => {
     mockLibrary.mockResolvedValue(libraryOf([baseMaterial()]));
     const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
     expect(w.classes()).not.toContain('mat-upload--empty');
-    expect(w.find('.mat-upload__note').text()).toContain('未挂载资料');
-    expect(w.find('.mat-upload__note').text()).toContain('进入路径生成');
+    // 说明性文案彻底撤出 composer（2026-11-21 走查）：挂载语义只在挂载弹层里交代
+    expect(w.find('.mat-upload__meta').exists()).toBe(false);
+    expect(w.find('.mat-upload__note').exists()).toBe(false);
     // 库文件不再冒充已挂载 chips
     expect(w.find('.mat-upload__chips').exists()).toBe(false);
+  });
+
+  it('挂载弹层底栏交代挂载语义并保留库管理入口', async () => {
+    mockLibrary.mockResolvedValue(libraryOf([baseMaterial()]));
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
+    await flushPromises();
+    await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker();
+    await flushPromises();
+    expect(w.find('.mat-upload__picker-hint').text()).toContain('进入路径生成');
+    const lib = w.find('.mat-upload__picker-lib');
+    expect(lib.exists()).toBe(true);
+    expect(lib.text()).toBe('管理资料库');
   });
 
   it('v-model 挂载列表 → chips 展示；× 只摘挂载并 emit 全量列表，不删库文件', async () => {
