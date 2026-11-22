@@ -160,14 +160,39 @@ export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerReferee
     scores.evidenceSufficiency = Math.min(scores.evidenceSufficiency, 45)
   }
 
-  // 完整性门：缺分/非法分/悬空**证据引用**一律判 inconclusive。
+  // 逐维实质证据覆盖（外部评审 P1.4）：已计分的体验/理解维度必须至少有一条指到对应
+  // 阶段**实质内容**（对话轮次/可见任务/作答动作等 observation 非 stage 路径）的
+  // publicTrace 证据——纯元数据（observation.stage）只证明"跑过该阶段"，
+  // 不足以支撑"教得怎么样"的分数。controlConsistency/boundaryIntegrity 属控制面维度，
+  // control/experimentSummary 引用即算实质，不在此列。
+  const REQUIRED_STAGE_BY_DIM: Record<string, string> = {
+    goalExperience: 'goal',
+    goalUnderstanding: 'goal',
+    pathExperience: 'path',
+    teachingExperience: 'teaching',
+  }
+  const missingDimensionEvidence: string[] = []
+  for (const [dim, stage] of Object.entries(REQUIRED_STAGE_BY_DIM)) {
+    if (!required.has(dim)) continue
+    const covered = evidence.some((item) => {
+      if (item.source !== 'publicTrace' || !Number.isInteger(item.index)) return false
+      const path = String(item.path || '')
+      if (!path.startsWith('observation.') || path === 'observation.stage') return false
+      return input.publicTrace[item.index as number]?.observation?.stage === stage
+    })
+    if (!covered) missingDimensionEvidence.push(dim)
+  }
+
+  // 完整性门：缺分/非法分/悬空**证据引用**/维度证据覆盖不足一律判 inconclusive。
   // findingCodes 悬空只做诊断（推荐项允许引用被过滤的 finding，不改变裁判结论）。
   const integrity = {
-    valid: evidence.length > 0 && missingScores.length === 0 && danglingEvidenceRefs.length === 0,
+    valid: evidence.length > 0 && missingScores.length === 0 && danglingEvidenceRefs.length === 0
+      && missingDimensionEvidence.length === 0,
     missingEvidence: evidence.length === 0,
     missingScores,
     danglingEvidenceRefs: [...new Set(danglingEvidenceRefs)],
     danglingFindingCodes: [...new Set(danglingFindingCodes)],
+    missingDimensionEvidence,
   }
   if (!integrity.valid) {
     scores.evidenceSufficiency = Math.min(scores.evidenceSufficiency, 45)
@@ -260,9 +285,22 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
       valid: !!parsed?.scores && Array.isArray(parsed?.findings) && Array.isArray(parsed?.evidence),
       failureReason: 'missing scores/findings/evidence'
     }),
-    softValidateParsedOutput: (parsed) => normalizeRefereeOutput(parsed, input).integrity?.valid
-      ? { valid: true }
-      : { valid: false, failureReason: '裁判分数或证据无效。至少引用一项输入中的实际字段，且每条发现都须引用有效证据。' },
+    softValidateParsedOutput: (parsed) => {
+      const integrity = normalizeRefereeOutput(parsed, input).integrity
+      if (integrity?.valid) return { valid: true }
+      const reasons = [
+        integrity?.missingEvidence ? '没有任何可定位的有效证据' : null,
+        integrity?.missingScores.length ? `缺少合法分数: ${integrity.missingScores.join('、')}` : null,
+        integrity?.missingDimensionEvidence?.length
+          ? `以下已计分维度缺少对应阶段的实质证据（须引用 publicTrace 中该阶段 observation 的非 stage 字段）: ${integrity.missingDimensionEvidence.join('、')}`
+          : null,
+        integrity?.danglingEvidenceRefs.length ? `发现引用了不存在的证据 id: ${integrity.danglingEvidenceRefs.slice(0, 5).join('、')}` : null,
+      ].filter(Boolean).join('；')
+      return {
+        valid: false,
+        failureReason: reasons || '裁判分数或证据无效。至少引用一项输入中的实际字段，且每条发现都须引用有效证据。',
+      }
+    },
     normalizeOutput: normalizeRefereeOutput,
     mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
       phase: 'completed',

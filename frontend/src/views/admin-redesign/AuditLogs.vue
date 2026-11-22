@@ -30,9 +30,14 @@
          2026-11-02 评审：三张与失败同源的卡（失败记录 / 失败率 / 失败动作）同一套着色，
          此前「失败动作」是白字，同排三个读数用两种强调方式。 -->
     <section class="mk-kpi-grid" aria-label="审计日志统计" :aria-busy="statsLoading || undefined">
+      <!-- 2026-11-22 审计 P2：stats 随 keyword/timeRange/success 筛选同口径变化，此前无任何
+           标注——筛「仅成功」后失败率 0% 会被读成平台级结论。有筛选时给口径披露行。 -->
+      <p v-if="statsFilterActive" class="al-kpi-scope" role="note">
+        统计跟随当前筛选（{{ statsFilterSummary }}），清空筛选后统计全部记录
+      </p>
       <MkKpi
         label="记录总数"
-        :value="statsLoading || statsError ? '—' : total.toLocaleString()"
+        :value="statsLoading || (statsError && !total) ? '—' : total.toLocaleString()"
       />
       <MkKpi
         clickable
@@ -881,6 +886,9 @@ async function applyFilters() {
   loadError.value = ''
   loading.value = true
   page.value = 1
+  /* 已应用关键词快照（2026-11-22 审计 P3）：「清空筛选」/KPI 口径标注 / 空态文案
+     曾按输入框实时值判断——打字未回车时表格没筛、按钮却已出现。落定时机 = 发起请求。 */
+  appliedKeyword.value = keyword.value.trim()
   syncFiltersToRoute()
   logs.value = []
   attempts.value = []
@@ -950,7 +958,18 @@ watch([alSortKey, alSortDir], () => {
 /* 顶栏刷新：重取当前页（与旧页头钮同一语义，保留页码与列表） */
 watch(liveRefreshSeq, () => { void refreshPage() })
 
-const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'all' || !!statusFilter.value)
+const appliedKeyword = ref('')
+const isFiltered = computed(() => !!appliedKeyword.value || timeRange.value !== 'all' || !!statusFilter.value)
+/** KPI 带口径披露（2026-11-22 审计 P2）：stats 与列表同走筛选参数，有筛选时披露口径 */
+const statsFilterActive = isFiltered
+const statsFilterSummary = computed(() => {
+  const parts: string[] = []
+  if (appliedKeyword.value) parts.push(`关键词「${appliedKeyword.value}」`)
+  if (timeRange.value !== 'all') parts.push(timeRangeLabels[timeRange.value])
+  if (statusFilter.value === 'ok') parts.push('仅成功')
+  if (statusFilter.value === 'err') parts.push('仅失败')
+  return parts.join(' · ') || '当前筛选'
+})
 function clearFilters() {
   keyword.value = ''
   timeRange.value = 'all'
@@ -1335,6 +1354,13 @@ function goExport() {
 /* 失败域 KPI 激活态：与教学组 .ts-kpi--on 同构（只改描边，不做位移） */
 .al-kpi--on { border-color: var(--mk-blue); }
 .al-stats-error { padding: 2px 8px; }
+/* KPI 带随筛选变口径的披露行（2026-11-22 审计 P2）：只在有筛选时出现 */
+.al-kpi-scope {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+}
 .log-tt {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);

@@ -8,7 +8,7 @@
       <div class="login-gate">
         <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" class="login-gate__logo" />
         <h1>登录后体验真实对话</h1>
-        <p>登录后，和问流聊聊你最近想解决的事。两三分钟的对话，就能梳理出你的第一版学习计划。</p>
+        <p>登录后，说说你想学会什么。问流 AI 会先澄清目标，你确认方案后再生成学习路径。</p>
         <a class="btn-primary btn-primary--lg" href="/login?redirect=/goal-conversation">去登录</a>
       </div>
     </main>
@@ -18,7 +18,7 @@
       <div class="entry__hero">
         <div class="entry__hero-text">
           <h1>从一件真实的小事开始</h1>
-          <p>聊几句话，问流会梳理出目标和第一阶段安排。</p>
+          <p>比如「想学 SQL 自己查数据」。问流 AI 先澄清目标，你确认方案后再生成路径。</p>
         </div>
         <button v-if="live.hasSession()" type="button" class="resume" @click="doResume">
           <span class="resume__dot"></span>
@@ -32,10 +32,10 @@
 
       <!-- stopped 与 failed 并行：主动停止不是「连接失败」，用独立文案（useGoalLive.stopped） -->
       <div v-if="live.failed === 'start' && !live.stopped" class="errorbar">
-        {{ CONNECT_FAIL_MSG }}<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+        {{ live.startFailureMessage }}<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
       </div>
-      <div v-else-if="live.stopped === 'start'" class="errorbar">
-        已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+      <div v-else-if="live.stopped" class="errorbar" role="status">
+        {{ stoppedWaitText }}<button type="button" class="errorbar__retry" :disabled="live.sending" @click="doRetry">{{ stoppedRetryLabel }}</button>
       </div>
 
       <!-- 入口态的独立生成胶囊已删（2026-11-06 走查 图4）：它悬在「最近会话」与
@@ -96,7 +96,7 @@
             v-else
             type="button"
             class="composer__send composer__send--stop"
-            aria-label="停止生成"
+            aria-label="停止等待"
             :title="STOP_WAIT_HINT"
             @click="live.stop()"
           >
@@ -187,7 +187,7 @@
              右边还露出半截气泡的边角；压暗一层让面板成为唯一焦点，点遮罩即收起 -->
         <div v-if="panelOpen" class="panel__mask" aria-hidden="true" @click="togglePanel"></div>
         <div class="panel__body">
-          <!-- 内容整体包进 .panel__scroll（2026-11-05）：窄屏面板内部滚动时半颗「清空重聊」
+          <!-- 内容整体包进 .panel__scroll（2026-11-05）：窄屏面板内部滚动时半颗「开始新规划」
                被滚动视口硬切在底边。滚动发生在内层，底缘渐隐 mask 才能只作用于内容、
                不把面板自己的描边/圆角/投影一起淡掉（sticky 伪元素钉不进 padding 区，已试无效） -->
           <div class="panel__scroll">
@@ -248,14 +248,14 @@
             </ul>
           </div>
           </div>
-          <!-- 移动端清空重聊入口（2026-11-05 UX 审计）：唯一入口 .chat__clear 在 ≤1100px
+          <!-- 移动端开始新规划入口（2026-11-05 UX 审计）：唯一入口 .chat__clear 在 ≤1100px
                被 display:none 后移动端无任何替代入口。窄屏头部一行已被阶段导航+学情画像
                药丸占满，这里收进悬浮面板底部（点「学情 6/7」两步可达）；
                桌面端仍走头部按钮，不重复。
                2026-11-05 二次调整：从滚动层里挪出来钉在面板底部——之前它在滚动层末尾，
                静止时整颗溶进底缘渐隐带里，用户以为按钮没了（本次反馈）；钉死后永远可见，
                滚动层里只剩清单本身，配合渐隐带也不会再出现半颗按钮 -->
-          <button type="button" class="panel__clear" @click="doReset">清空重聊</button>
+          <button type="button" class="panel__clear" @click="doReset">开始新规划</button>
         </div>
       </aside>
 
@@ -283,16 +283,16 @@
             class="chat__show-proposal"
             @click="openProposalReview"
           >查看方案</button>
-          <button type="button" class="chat__clear" @click="doReset">清空重聊</button>
+          <button type="button" class="chat__clear" @click="doReset">开始新规划</button>
         </div>
 
         <!-- 会话态内 start 失败：错误条 + 重试（初始态 errorbar 在此视图不渲染）；
              主动停止走「已停止」分支，不误报「连接失败」 -->
         <div v-if="live.failed === 'start' && !live.stopped" class="errorbar chat__errorbar">
-          {{ CONNECT_FAIL_MSG }}<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+          {{ live.startFailureMessage }}<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
         </div>
-        <div v-else-if="live.stopped === 'start'" class="errorbar chat__errorbar">
-          已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+        <div v-else-if="live.stopped" class="errorbar chat__errorbar" role="status">
+          {{ stoppedWaitText }}<button type="button" class="errorbar__retry" :disabled="live.sending" @click="doRetry">{{ stoppedRetryLabel }}</button>
         </div>
 
         <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
@@ -442,7 +442,10 @@
           @drop.prevent="onBoxDrop"
         >
           <MaterialUploadArea ref="uploadRef" v-model="attachedMaterials" @change="materialCount = $event" />
-          <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
+          <!-- label 只报字段名（与入口「你想解决什么」同模式）；状态化指引是 placeholder 的职责
+               （chatPlaceholder 已按 弹窗/停止/失败/proposing 各分支给话），label 写死指令会
+               在收口/锁定态和 placeholder 打架（2026-11-22 全量走查） -->
+          <label class="visually-hidden" for="goal-chat-input">你的回复</label>
           <div class="composer__box" :class="{ 'composer__box--dropping': boxDropping }">
             <button
               type="button"
@@ -462,7 +465,7 @@
               rows="1"
               :maxlength="INPUT_MAX"
               :placeholder="chatPlaceholder"
-              :disabled="startFailed || showProposal"
+              :disabled="startFailed || showProposal || !!live.stopped"
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
             <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
@@ -473,8 +476,8 @@
               v-if="!live.sending"
               type="button"
               class="composer__send"
-              :class="{ 'composer__send--off': startFailed || showProposal || !input.trim() }"
-              :disabled="startFailed || showProposal || !input.trim()"
+              :class="{ 'composer__send--off': startFailed || showProposal || !!live.stopped || !input.trim() }"
+              :disabled="startFailed || showProposal || !!live.stopped || !input.trim()"
               aria-label="发送"
               @click="doSend"
             >
@@ -484,7 +487,7 @@
               v-else
               type="button"
               class="composer__send composer__send--stop"
-              aria-label="停止生成"
+              aria-label="停止等待"
               :title="STOP_WAIT_HINT"
               :disabled="showProposal"
               @click="live.stop()"
@@ -599,7 +602,7 @@
              单一焦点，声明与「确认/再补充」抢同一块视觉重量；全断面唯一的 AI 声明出口
              是输入框正下方的 .chat__under-hint（移动端由底部导航档接管） -->
         <div v-if="materialCount" class="proposal__note">
-          <span>已挂载 {{ materialCount }} 份资料，将随本次目标进入路径生成；未挂载的资料库文件不会参与生成。</span>
+          <span>已挂载 {{ materialCount }} 份资料，将随本次目标进入路径生成。未挂载的资料库文件不会参与生成。</span>
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
 
@@ -638,7 +641,7 @@
         <button v-if="proposalSnapshot" type="button" class="proposal__stop" @click="openReadOnlyReview">回看已确认的方案</button>
         <button type="button" class="proposal__stop" @click="live.stop()">
           <svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
-          停止生成
+          停止等待
         </button>
       </div>
 
@@ -760,7 +763,6 @@ const INPUT_MAX = 4096;
 /* 短字段双列（2026-11-05 用户裁定）：期望周期 / 可用时间通常只有「30 天」「25 分钟」几个字，
    各占一整行把面板撑到要滚动；这两项改半宽小卡并排，面板一屏更装得下 */
 /* 双视图（初始态/会话态）各自渲染一份的错误条与输入提示，文案收成单源避免改一处漏一处 */
-const CONNECT_FAIL_MSG = '连接失败，没能开始对话。';
 const ATTACH_HINT = '挂载资料（进入本次路径生成）：从资料库勾选或上传新文件，也可以直接拖到输入框';
 const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
 /** 生成中发送键变成停止方块：补一句 hover 说明，纯图标按钮不靠自己猜 */
@@ -768,6 +770,14 @@ const STOP_WAIT_HINT = '停止等待回复';
 const CLOSE_ESC_HINT = '关闭（Esc）';
 /* 首轮 start 失败且尚无任何 AI 回复：底部输入框不能继续「假装能问」，否则用户会再次失败 */
 const startFailed = computed(() => live.failed === 'start' && !live.stopped);
+/* 停止等待 ≠ 取消任务：SSE/非流式都只中止本页请求，服务端生成可能仍在继续。
+   有会话时「查看最新进展」走快照回读（useGoalLive.retry），无会话（首轮未创建）只能重新开始。 */
+const stoppedWaitText = computed(() =>
+  live.hasSession()
+    ? '已停止等待回复。已提交的生成可能仍在后台继续，可稍后回来查看结果。'
+    : '已停止等待首轮回复，本轮没有创建会话。'
+);
+const stoppedRetryLabel = computed(() => (live.hasSession() ? '查看最新进展' : '重新开始'));
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
 const chatPlaceholder = computed(() => {
@@ -789,6 +799,7 @@ const chatPlaceholder = computed(() => {
   }
   // 不写「上方」：输入框与重试按钮同屏，点哪儿由位置自明（文案门禁 R2）
   if (startFailed.value) return '首轮对话失败，请先重试';
+  if (live.stopped) return '已停止等待，可先查看进展或重新开始';
   // 方案已成形（2026-11-18）：输入框的职责从「回答澄清问题」变成「说调整 or 去确认」，
   // 占位符必须跟着阶段走，否则用户还在按「回答问题」理解这个框，不知道可以直接确认。
   if (live.stage === 'proposing' && live.proposal) {
@@ -1174,10 +1185,9 @@ const CHAT_WAIT_STAGES: Array<[number, string]> = [
   [Infinity, '内容较多，仍在生成，请稍候…'],
 ];
 const GEN_WAIT_STAGES: Array<[number, string]> = [
-  [8, '正在梳理你的目标…'],
-  [25, '正在拆解阶段…'],
-  [60, '正在排布任务…'],
-  [Infinity, '正在收尾…'],
+  [15, '正在生成方案…'],
+  [45, '仍在生成，内容较多时会久一些…'],
+  [Infinity, '比预期更久。可以先停止等待，稍后回来查看结果。'],
 ];
 function stageText(stages: Array<[number, string]>) {
   for (const [until, text] of stages) if (waitTick.value < until) return text;
@@ -1185,10 +1195,9 @@ function stageText(stages: Array<[number, string]>) {
 }
 const chatWaitText = computed(() => stageText(CHAT_WAIT_STAGES));
 const genWaitText = computed(() => stageText(GEN_WAIT_STAGES));
-/* 等待态只报「现在在做什么」（正在梳理关键信息… / 正在拆解阶段…），不报秒数
-   （2026-11-06 用户裁定：去掉「· 已等待 11s」）。阶段文案本身随 tick 推进就已经说明
-   「还在走」；一串一直在涨的秒数只增加焦虑，不增加信息。故 chatWaitMeta 整层撤除，
-   模板直接读 chatWaitText。 */
+/* 等待态只说「仍在生成」，不虚构内部阶段（拆解/排布/收尾前端无从得知，秒数推测会编造进度）；
+   也不报秒数（2026-11-06 用户裁定）。超时档改说「可停止等待、稍后查看」，
+   与停止语义（只中止本页等待，不取消后台任务）一致。 */
 /* 用户消息内联编辑（仅最后一条用户消息可编辑） */
 const editingMsgId = ref<string | null>(null);
 const editingText = ref('');
@@ -1638,10 +1647,9 @@ async function doResume() {
 
 async function doReset() {
   const ok = await askConfirm({
-    title: '清空重聊',
-    message: '清空后本机保存的对话记录将被删除，此操作不可恢复。',
-    confirmText: '清空',
-    danger: true,
+    title: '开始新规划',
+    message: '将结束当前页面的规划，回到目标输入页。已保存的会话仍可从最近会话或原链接打开。',
+    confirmText: '开始新规划',
   });
   if (!ok) return;
   live.reset();
@@ -2080,7 +2088,7 @@ function shuffleScenes() {
 .composer__hint :deep(.ai-note) { font-size: 12px; opacity: .85; }
 /* 「聊到的内容会自动整理成这份清单。」tip 已删（2026-11-05 用户裁定）：
    面板里 7 项清单本身就是整理结果，这句机制说明是重复信息 */
-/* 清空重聊：桌面档隐藏（头部 .chat__clear 承担），≤1100 由面板底部的本按钮承担 */
+/* 开始新规划：桌面档隐藏（头部 .chat__clear 承担），≤1100 由面板底部的本按钮承担 */
 .panel__clear { display: none; }
 .composer__count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -3108,7 +3116,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
     -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent 100%);
   }
   .panel:not(.panel--collapsed) .panel__scroll::-webkit-scrollbar { display: none; }
-  /* 清空重聊钉在面板底部（滚动层之外，2026-11-05 二次反馈）：之前它在滚动层末尾，
+  /* 开始新规划钉在面板底部（滚动层之外，2026-11-05 二次反馈）：之前它在滚动层末尾，
      静止时整颗溶进底缘渐隐带里，用户以为按钮没了。钉死后永远完整可见，
      滚动层里只剩清单，配合渐隐带也不会再出现半颗按钮 */
   .panel__clear {
@@ -3251,7 +3259,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
     .composer__count { display: none; }
   }
   .chat__clear { display: none; }
-  /* 清空重聊移动端入口的样式在上方 .panel:not(--collapsed) 区块（钉在面板底部，
+  /* 开始新规划移动端入口的样式在上方 .panel:not(--collapsed) 区块（钉在面板底部，
      2026-11-05 从滚动层挪出）；此处不再重复声明 */
 
   /* ===== 移动端密度（2026-09-24，2026-09-30 随原型对齐更新）=====

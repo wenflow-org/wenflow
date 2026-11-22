@@ -218,10 +218,10 @@
              只展示达成度；契约外探索不判失败，停车区把跑题问题留到课后。 -->
         <div v-if="contractCoreKcs.length" class="contract">
           <div class="contract__row">
-            <span class="contract__tag">本节契约</span>
+            <span class="contract__tag">本节完成要求</span>
             <span class="contract__meta">
-              {{ contractCoveredCount }}/{{ contractCoreKcs.length }} 核心 KC
-              · 独立证据 {{ lessonReport?.independentCount ?? 0 }}/{{ lessonContract?.minIndependentEvidence ?? 0 }}
+              已验证 {{ contractCoveredCount }}/{{ contractCoreKcs.length }} 个重点
+              · 独立答对 {{ independentProgressLabel }}
             </span>
             <span class="contract__branch" :class="{ 'contract__branch--active': branchActive }">
               自由支线：{{ branchLabel }}<template v-if="branchActive"> · 剩 {{ branchRemaining }} 轮</template>
@@ -236,13 +236,13 @@
             >{{ kc.name }}</span>
           </div>
           <div v-if="exitTicket" class="contract__exit" :class="`contract__exit--${exitTicket.status}`">
-            最后一道题（独立终检）：
-            <span v-if="exitTicket.status === 'pending'">待作答</span>
+            课末独立作答：
+            <span v-if="exitTicket.status === 'pending'">请在输入框写下你的答案</span>
             <span v-else-if="exitTicket.status === 'passed'">已通过</span>
-            <span v-else>未通过，继续补救</span>
+            <span v-else>还没答对，请根据讲解再试一次</span>
           </div>
           <div v-if="contractParkingLot.length" class="contract__park">
-            停车区 {{ contractParkingLot.length }} 条：{{ contractParkingLot.map(p => p.topic).slice(0, 2).join('、') }}
+            留待课后探索的 {{ contractParkingLot.length }} 个问题：{{ contractParkingLot.map(p => p.topic).slice(0, 2).join('、') }}
             <span v-if="contractParkingLot.length > 2">…</span>
           </div>
         </div>
@@ -664,7 +664,7 @@
               <strong>{{ finishBlockedTitle }}</strong>
               <span>{{ finishBlockedText }}</span>
             </div>
-            <button type="button" class="btn-ghost ready__go" @click="goAnswerFinishGate">去作答</button>
+            <button type="button" class="btn-ghost ready__go" @click="goAnswerFinishGate">继续练习</button>
           </div>
         </Transition>
 
@@ -746,7 +746,7 @@
               rows="1"
               maxlength="800"
               :disabled="completed"
-              :placeholder="checkpoint && !completed ? '答完小测后也可以提问…' : '随时提问，或说说你的理解…'"
+              :placeholder="checkpoint && !completed ? '小测请在题目卡作答。这里也可以提问…' : exitTicket?.status === 'pending' ? '在这里独立回答课末题，写下答案和思路…' : '写下你的答案、思路，或具体卡住的地方…'"
               @input="interactionMeta.onInput(input.length)"
               @keydown.enter.exact.prevent="send"
               @paste="onComposerPaste"
@@ -805,9 +805,9 @@
             </div>
             <!-- 课堂契约报告：主线覆盖/独立证据/停车区（2026-11-19） -->
             <p v-if="lessonContract && contractCoreKcs.length" class="finish__contract">
-              本节契约：{{ contractCoveredCount }}/{{ contractCoreKcs.length }} 个核心 KC 有证据
-              <template v-if="lessonReport"> · 独立证据 {{ lessonReport.independentCount }}/{{ lessonReport.requiredIndependent }}</template>
-              <template v-if="contractParkingLot.length"> · 停车区 {{ contractParkingLot.length }} 条待课后处理</template>
+              本节验证：{{ contractCoveredCount }}/{{ contractCoreKcs.length }} 个重点已有正确作答记录
+              <template v-if="lessonReport"> · 独立答对 {{ independentProgressLabel }}</template>
+              <template v-if="contractParkingLot.length"> · {{ contractParkingLot.length }} 个问题留待课后探索</template>
             </p>
             <div class="finish__actions">
               <span v-if="evaluationUrl" class="btn-primary" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation" @keydown.space.prevent="goEvaluation">查看学习反馈</span>
@@ -1542,6 +1542,15 @@ const {
 } = useCheckpointFlow(session, typing, completed, {
   append: appendExplanationDelta,
   settle: settleExplanation,
+}, (state) => {
+  /* 小测提交回合的契约四件套（2026-11-22 链路#1 走查实锤）：小测是拿证据的主通道，
+     首答即对后契约卡必须当场跳变——此前提交响应不带这四个字段，读数要等下一条
+     普通消息或刷新才跟上（库里 lessonReport 已 1/1，页面还挂 0/1）。与 applyTurnResult
+     的消息路径同一消费口径；缺席字段不动本地值。 */
+  if (state.lessonContract) lessonContract.value = state.lessonContract;
+  if (state.lessonReport) lessonReport.value = state.lessonReport;
+  if (state.exitTicket) exitTicket.value = state.exitTicket;
+  if (state.branch) branchInfo.value = state.branch;
 })
 /* F-W（2026-10-10 新人走查实锤）：检查点裁决+讲解此前只渲染在卡片内——答对后卡片 3 秒自动收起，
    整段回复（含「下一问」）随之消失，聊天流不追加该回合（刷新才在历史里见到），新人会以为
@@ -1618,16 +1627,35 @@ const showFinishBlocked = computed(() =>
   && !settleBlock.value
   && !finalizing.value
 )
+/* 完成受阻（2026-11-22 走查）：不再笼统说「检查与证据」，按契约账本列出真实缺口——
+   缺哪几类（重点覆盖 / 独立作答 / 课末题）各说各的，学员才知道下一步做什么。 */
+const exitTicketUnpassed = computed(() => {
+  const et = lessonReport.value?.exitTicket;
+  return et?.asked === true && et.passed !== true;
+});
+const finishMissingItems = computed(() => {
+  const items: string[] = [];
+  const report = lessonReport.value;
+  const coreKcs = lessonContract.value?.coreKcs || [];
+  if (coreKcs.length) {
+    const covered = new Set(report?.coveredKcs || []);
+    const missing = coreKcs.filter((kc) => !covered.has(kc.name)).length;
+    if (missing > 0) items.push(`还有 ${missing} 个重点没有验证记录`);
+  }
+  const required = report?.requiredIndependent ?? lessonContract.value?.minIndependentEvidence ?? 0;
+  const got = report?.independentCount ?? 0;
+  if (required > 0 && got < required) items.push(`还需独立答对 ${required - got} 个知识点（不靠提示）`);
+  if (exitTicketUnpassed.value) items.push('课末独立作答还没通过');
+  return items;
+});
 const finishBlockedTitle = computed(() =>
-  lessonReport.value?.exitTicket?.asked && lessonReport.value.exitTicket.passed !== true
-    ? '还差课末终检'
-    : '本课契约还未达标'
+  exitTicketUnpassed.value ? '还差课末独立作答' : '本节完成要求还未达标'
 )
-const finishBlockedText = computed(() =>
-  lessonReport.value?.exitTicket?.asked && lessonReport.value.exitTicket.passed !== true
-    ? '继续作答最后一道独立终检题，通过后即可完成本节。'
-    : '继续完成课堂契约要求的检查与证据后即可完成本节。'
-)
+const finishBlockedText = computed(() => {
+  const items = finishMissingItems.value;
+  if (!items.length) return '继续完成课堂要求的检查后即可完成本节。';
+  return `${items.join('，')}。完成这些就可以结束本节。`;
+})
 /* 结束提示（2026-11-20 用户走查）：满足完课条件后只在页头多一颗「完成」，
    对话里没有任何「这节课可以收了」的提示，学员会以为老师还在布置下一步。
    在输入区上方给一条常驻收束条；无知识点的课不提前摆，避免开课即「已达成」。 */
@@ -1644,6 +1672,16 @@ const contractCoreKcs = computed(() => lessonContract.value?.coreKcs || []);
 const contractCoveredCount = computed(() => {
   const covered = new Set(lessonReport.value?.coveredKcs || []);
   return contractCoreKcs.value.filter((kc) => covered.has(kc.name)).length;
+});
+/* 独立答对展示口径（2026-11-22 走查观察）：契约只要求 N 个 KC 有独立证据（requiredIndependent
+   可以小于 coreKcs 总数），两个 KC 都独立答对时会读出「2/1」这种像出错的超额分数。
+   超额时不写分数、改「达标线」措辞——数据照实（计数不减不藏），只是不再伪装成进度条。 */
+const independentProgressLabel = computed(() => {
+  const done = lessonReport.value?.independentCount ?? 0;
+  const required = lessonReport.value?.requiredIndependent ?? lessonContract.value?.minIndependentEvidence ?? 0;
+  return done > required && required > 0
+    ? `${done} 个知识点（达标线 ${required}）`
+    : `${done}/${required} 个知识点`;
 });
 const contractParkingLot = computed(() => branchInfo.value?.parkingLot || lessonReport.value?.parkingLot || []);
 const BRANCH_LABELS: Record<string, string> = {

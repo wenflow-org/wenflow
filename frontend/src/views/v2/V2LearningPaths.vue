@@ -155,7 +155,7 @@
                   <div v-if="menuFor === card.id" class="pcard__menu-scrim" @click.stop="menuFor = ''"></div>
                   <div v-if="menuFor === card.id" class="pcard__menu" role="menu" @click.stop>
                     <button type="button" v-if="card.kind === 'failed'" class="pcard__menu-item" role="menuitem" @click="doRetry(card)">
-                      <RotateCcw :size="15" aria-hidden="true" />重新生成
+                      <RotateCcw :size="15" aria-hidden="true" />{{ card.retryLabel }}
                     </button>
                     <div v-if="card.kind === 'failed'" class="pcard__menu-sep" role="separator"></div>
                     <button type="button" class="pcard__menu-item pcard__menu-item--danger" role="menuitem" @click="askDelete(card)">
@@ -193,10 +193,7 @@
 
             <!-- failed：待重试 -->
             <template v-else>
-              <!-- P2-30（设计评审）：错误行动词与按钮对齐——后端兜底句在渲染层改说「主结构」，见 failReasonText -->
-              <!-- 保留语义对齐（paths/xiaomi/1）：后端保留的是已完成任务与进度，标题/描述
-                   会被重新生成，「目标和已确认信息已保留」与重排事实不符，改说学习进度 -->
-              <div class="pcard__fail-reason">{{ failReasonText(card) || '生成失败，已完成的学习进度会保留。' }}</div>
+              <div class="pcard__fail-reason">{{ failReasonText(card) }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 <span>{{ CONFIRM_DELETE_PATH_MSG }}</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
@@ -205,7 +202,7 @@
               <div class="pcard__actions">
                 <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying === card.id }" @click.stop="doRetry(card)">
                   <span v-if="retrying === card.id" class="spinner spinner--sm"></span>
-                  {{ retrying === card.id ? '正在重新生成…' : card.retryLabel }}
+                  {{ retrying === card.id ? buildGenerationRetryCopy(card.retryType).pending : card.retryLabel }}
                 </button>
               </div>
             </template>
@@ -263,14 +260,13 @@ import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import MkSelect from '@/components/mk/MkSelect.vue';
-import { buildPathActivityAnchor, isDesignPollingActive } from './learningPathProgress';
+import { buildGenerationRetryCopy, buildPathActivityAnchor, isDesignPollingActive } from './learningPathProgress';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 
 /* 复读单源化：删除确认在卡片模板出现两份，生成结果 toast 在轮询/手动刷新两条路径各一份 */
 const CONFIRM_DELETE_PATH_MSG = '确认删除这条路径？删除后不可自行恢复。';
 const GEN_DONE_TAIL = '已生成，可以开始了';
-const GEN_FAIL_TAIL = '生成失败，可重试';
 interface PathCard {
   id: string;
   title: string;
@@ -371,7 +367,7 @@ function normalize(p: Record<string, any>): PathCard {
       return {
         id: p.id, title, desc, sub: buildSub(stages), kind: 'failed', stages, stageDone: lc.completedStages ?? 0,
         percent: 0, hours, retryType: lc.retryType,
-        retryLabel: lc.retryType === 'stage_design' ? '重新准备课程' : '重新生成路径',
+        retryLabel: buildGenerationRetryCopy(lc.retryType).action,
         phaseText: '', errorText: lc.errorMessage || '', designActive: false
       };
     }
@@ -473,7 +469,7 @@ async function pollOnce() {
       // 新阶段会随 load() 静默出现；只有整卡生成/失败才提示。
       if (r.value.card.kind !== 'generating') continue;
       if (r.value.lc.phase === 'ready') toast.success(`「${r.value.card.title}」${GEN_DONE_TAIL}`);
-      else toast.error(`「${r.value.card.title}」${GEN_FAIL_TAIL}`);
+      else toast.error(`「${r.value.card.title}」${buildGenerationRetryCopy(r.value.lc.retryType).title}，可重试`);
     }
     await load();
     return;
@@ -510,12 +506,13 @@ async function doRetry(card: PathCard) {
     } else {
       await learningAPI.retryPathGeneration(card.id);
     }
-    toast.info('已提交重新生成，正在处理…');
+    const copy = buildGenerationRetryCopy(card.retryType);
+    toast.info(copy.submitted);
     const idx = cards.value.findIndex((c) => c.id === card.id);
-    if (idx >= 0) cards.value[idx] = { ...cards.value[idx], kind: 'generating', phaseText: '已提交，正在重新生成…' };
+    if (idx >= 0) cards.value[idx] = { ...cards.value[idx], kind: 'generating', phaseText: copy.submitted };
     schedulePolling();
   } catch {
-    toast.error('重试失败，请稍后再试');
+    toast.error(buildGenerationRetryCopy(card.retryType).submitError);
   } finally {
     retrying.value = '';
   }
@@ -640,16 +637,12 @@ function statusLabel(card: PathCard) {
   if (card.kind === 'completed') return '已完成';
   if (card.kind === 'ready') return '进行中';
   if (card.kind === 'generating') return '生成中';
-  return card.retryType === 'stage_design' ? '课程失败' : '路径失败';
+  return buildGenerationRetryCopy(card.retryType).title;
 }
 
-/** P2-30（设计评审 2026-10-04）：后端失败兜底句「学习路径生成失败，请先重新生成路径。」
- *  （errorMessage/lastError 缺失时回退 learningBlockedReason，见 api/learning.ts normalizeGenerationLifecycle）
- *  与徽章/按钮的「主结构失败 / 重新生成主结构」是同一重试动作两套名词——渲染处按卡自身
- *  重试名词改说（core→主结构、stage_design→阶段任务），其余 errorMessage 原样直出；后端模板不动。 */
+/** 旧接口的通用失败兜底也按真实重试类型展示；具体错误原因原样保留。 */
 function failReasonText(card: PathCard): string {
-  if (card.errorText.trim() !== '学习路径生成失败，请先重新生成路径。') return card.errorText;
-  return card.retryType === 'stage_design' ? '课程准备中断，可重试。' : '路径生成中断，可重试。';
+  return buildGenerationRetryCopy(card.retryType, card.errorText).reason;
 }
 function badgeCls(card: PathCard) {
   if (card.kind === 'completed') return 'pcard__badge--green';

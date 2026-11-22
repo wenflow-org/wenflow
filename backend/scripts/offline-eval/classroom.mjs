@@ -227,6 +227,22 @@ export function buildClassroomPrompt(block) {
   return `${RUBRIC}\n\n=== 案例 ===\n${block}`;
 }
 
+/**
+ * 确定性收口闸（外部评审 P3.2，2026-11-22）：服务端 closureAudit 已把「是否留了未答问题」
+ * 写成事实并随【收口事实】行进案例块。只要 finalizationAction 是结算类（complete_task /
+ * complete_review）且 openQuestion=true，unclosedComplete 直接锁 true——不依赖模型自觉，
+ * 也不给「均分很高」的软通过留后门；end_only（学员主动结束、未结算任务）不在此列，
+ * 由 rubric 收口语义判 false（诚实收口）。
+ */
+function deterministicClosureOverride(block) {
+  const line = String(block || '').split('\n').find((row) => row.startsWith('【收口事实】')) || '';
+  if (!line) return null;
+  const action = /finalizationAction=([^｜]*)/.exec(line)?.[1]?.trim() || '';
+  const open = /openQuestion=(true|false)/.exec(line)?.[1] || '';
+  const settling = action === 'complete_task' || action === 'complete_review';
+  return settling && open === 'true' ? { action } : null;
+}
+
 export function validateClassroomVerdict(raw, block) {
   const errors = [];
   const dimensions = {};
@@ -245,6 +261,13 @@ export function validateClassroomVerdict(raw, block) {
       else { flags[key] = false; invalidQuotes.push(key); }
     } else flags[key] = false;
   }
+  // 结算类收口 + 服务端确认存在未答问题 → 覆盖模型判读（含引文缺失被降级的情形）
+  const closureLock = deterministicClosureOverride(block);
+  const deterministicOverrides = [];
+  if (closureLock && !flags.unclosedComplete) {
+    flags.unclosedComplete = true;
+    deterministicOverrides.push('unclosedComplete');
+  }
   const confidence = Number(raw?.confidence);
   const result = {
     ok: errors.length === 0,
@@ -253,6 +276,7 @@ export function validateClassroomVerdict(raw, block) {
     dims: dimensions,
     flags,
     invalidQuotes,
+    deterministicOverrides,
     issues: validateIssues(raw?.issues, DIMENSIONS),
     confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : null,
   };
@@ -282,6 +306,7 @@ export function aggregateClassroomJudgments(judgments) {
     verdict: hardFail || (overall !== null && overall < 0.70) ? 'fail' : 'pass',
     issues: dedupeIssues(issues),
     invalidQuotes: [...new Set(valid.flatMap((j) => j.invalidQuotes || []))],
+    deterministicOverrides: [...new Set(valid.flatMap((j) => j.deterministicOverrides || []))],
     samples: valid.length,
     confidence: medianOf(valid.map((j) => j.confidence ?? 0.5)),
   };

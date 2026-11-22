@@ -191,6 +191,13 @@ export interface CheckpointSubmitResult {
   feedback: string;
   hint?: string;
   revision: number;
+  /** 答错就地换题面重答（#50，同 cpId）后的最新待答检查点（答案键已剥离）；答对/跳过时缺席 */
+  checkpoint?: Checkpoint | null;
+  /** 契约四件套随提交回合下发：小测是拿证据的主通道，契约卡据此实时跳变 */
+  lessonContract?: LessonContract | null;
+  lessonReport?: LessonReport | null;
+  exitTicket?: ExitTicket | null;
+  branch?: MessageResult['branch'] | null;
 }
 
 export interface MessageResult {

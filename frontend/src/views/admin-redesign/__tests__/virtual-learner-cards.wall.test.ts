@@ -359,7 +359,8 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
       data: { data: { cards: [card('a', 'beginner'), card('b', 'advanced')], summary: { total: 2, builtin: 0, custom: 2 } } },
     }));
     const mixed = await mountPage();
-    expect(mixed.findAll('.vlc-card__level').map((x) => x.text())).toEqual(['入门', '高阶']);
+    // 2026-11-22 审计：与画像/创建侧同字段同四级词表（beginner=零基础、advanced=进阶）
+    expect(mixed.findAll('.vlc-card__level').map((x) => x.text())).toEqual(['零基础', '进阶']);
     mixed.unmount();
   });
 

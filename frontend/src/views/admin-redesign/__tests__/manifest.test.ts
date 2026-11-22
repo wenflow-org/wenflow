@@ -39,12 +39,13 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-10-27 收口）：5 分组 + 置顶总览，18 个可见场景与目标 IA 一致', () => {
+  it('导航（2026-10-27 收口）：5 分组 + 置顶总览，19 个可见场景与目标 IA 一致', () => {
     // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
     // 2026-11-01 prompt-eval 下线：注册表 20 → 19，可见场景 19 → 18
+    // 2026-11-22 会话评审报告补页面：注册表 19 → 20，可见场景 18 → 19
     const visible = MOCK_SCENES.filter((s) => !s.hidden);
-    expect(MOCK_SCENES).toHaveLength(19);
-    expect(visible).toHaveLength(18);
+    expect(MOCK_SCENES).toHaveLength(20);
+    expect(visible).toHaveLength(19);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '运营', '学习', '仿真', 'Skill', '观测与排查']);
@@ -59,8 +60,8 @@ describe('AdminConsole 页面注册表', () => {
       运营: ['ops-hub', 'system-settings', 'people'],
       // 排列＝学习流程：Goal 目标对话 → Path 学习路径 → Learn 教学会话 → 学习状态（工作台）→ 复习积压
       学习: ['goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
-      // 组名与总览状态条同词（「仿真 · 仿真空闲」）：实例 + 身份池
-      仿真: ['virtual-learners', 'virtual-learner-cards'],
+      // 组名与总览状态条同词（「仿真 · 仿真空闲」）：实例 + 身份池 + 运行产出的评审报告
+      仿真: ['virtual-learners', 'session-audit', 'virtual-learner-cards'],
       // prompt-eval 2026-11-01 下线，Skill 组回到三项
       Skill: ['orchestrator', 'skills', 'addons'],
       // 健康中心 13 项都是排查项，与两份日志同一动线

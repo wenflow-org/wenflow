@@ -19,8 +19,11 @@ const read = (f: string) => readFileSync(join(here, '..', f), 'utf8');
 describe('总览小卡 0 行空态与列名', () => {
   const src = read('Overview.vue');
 
-  it('最近事件：有事件才渲染 feed 容器，0 行走卡内居中空态（不再有挂在卡底的 note）', () => {
-    expect(src).toContain('v-if="feedRows.length"');
+  it('最近事件：有事件才渲染 feed 容器，0 行走卡内居中空态（2026-11-22 补：取数失败先走错误空态，不再渲染「暂无动态」假空态）', () => {
+    expect(src).toContain('v-else-if="feedRows.length"');
+    // 失败域错误空态（feedFailed && 0 行）先于中性空态判定
+    expect(src).toContain('data.feedFailed && !feedRows.length');
+    expect(src).toContain('title="动态读取失败"');
     // 空态是共享原语 + 居中类，而不是 <p class="note"> 小字
     expect(src).toMatch(/<MkEmptyState[\s\S]{0,200}class="ov-card__empty"/);
     expect(src).not.toContain('近 24h 暂无动态。</p>');
@@ -34,10 +37,10 @@ describe('总览小卡 0 行空态与列名', () => {
   });
 
   it('空态骨架带「为什么空 + 下一步」，不是一行只有标题的空壳', () => {
-    // 四处 0 行空态都同时给了 title 与 description
+    // 五处 0 行空态都同时给了 title 与 description（2026-11-22 增：最近事件失败域空态）
     const empties = src.match(/<MkEmptyState[\s\S]*?\/>/g) || [];
     const cardEmpties = empties.filter((b) => b.includes('ov-card__empty'));
-    expect(cardEmpties).toHaveLength(4);
+    expect(cardEmpties).toHaveLength(5);
     for (const b of cardEmpties) {
       expect(b, `缺 description：${b.slice(0, 60)}`).toContain('description=');
     }

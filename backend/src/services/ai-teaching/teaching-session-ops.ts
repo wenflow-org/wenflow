@@ -39,13 +39,20 @@ import type { ProcessStudentMessageOptions } from './AITeachingCoordinator';
 
 /**
  * 检查点提交的对外结果（提交路由与幂等重放共用）：
- * 回合载荷 → `{passed, feedback, hint?, revision}`。
+ * 回合载荷 → `{passed, feedback, hint?, revision, checkpoint?, lessonContract?, lessonReport?, exitTicket?, branch?}`。
  */
 export function buildCheckpointSubmitResult(turn: {
   aiResponse: string;
   revision: number;
   analysis?: { confusionPoints?: string[] } | null;
   checkpointResolution?: { passed: boolean } | null;
+  /** 引擎已按 checkpointForMessageResult 剥答案键；答错换题面重答时非空（2026-11-22 走查实锤） */
+  checkpoint?: TeachingCheckpoint | null;
+  /** 契约四件套随提交回合下发：小测是拿证据的主通道，漏了它契约卡只能等下一条普通消息才刷新 */
+  lessonContract?: Record<string, any> | null;
+  lessonReport?: Record<string, any> | null;
+  exitTicket?: Record<string, any> | null;
+  branch?: Record<string, any> | null;
 }): CheckpointSubmitResult {
   const passed = turn.checkpointResolution?.passed === true;
   const hint = !passed && turn.analysis?.confusionPoints?.length
@@ -56,6 +63,16 @@ export function buildCheckpointSubmitResult(turn: {
     feedback: turn.aiResponse,
     ...(hint ? { hint } : {}),
     revision: turn.revision,
+    // 答错就地换题面（#50）后：把最新待答检查点带回给前端挂新卡（已剥答案键）。
+    // 答对/跳过/到顶强消时引擎给 null，键缺席——前端保持收卡不动。
+    ...(turn.checkpoint ? { checkpoint: turn.checkpoint } : {}),
+    // 契约卡实时读数（2026-11-22 链路#1 走查实锤：首答即对后页面仍显 0/1，
+    // 库里报告已 1/1——契约四件套只随 /messages 下发，提交响应把它丢了）。
+    // 出站与 /detail、/messages 同一把深剥离，裁决键绝不随行。
+    ...(turn.lessonContract ? { lessonContract: stripCheckpointAnswerKeys(turn.lessonContract) } : {}),
+    ...(turn.lessonReport ? { lessonReport: stripCheckpointAnswerKeys(turn.lessonReport) } : {}),
+    ...(turn.exitTicket ? { exitTicket: stripCheckpointAnswerKeys(turn.exitTicket) } : {}),
+    ...(turn.branch ? { branch: stripCheckpointAnswerKeys(turn.branch) } : {}),
   };
 }
 

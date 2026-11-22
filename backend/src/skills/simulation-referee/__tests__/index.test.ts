@@ -4,7 +4,7 @@ import type { VirtualLearnerRefereeInput } from '../../../virtual-lab/contracts'
 const input: VirtualLearnerRefereeInput = {
   publicTrace: [{
     timestamp: '2026-07-14T10:00:00.000Z',
-    observation: { stage: 'goal', visibleMessages: [], availableActions: ['chat'] },
+    observation: { stage: 'goal', visibleMessages: [{ role: 'platform', content: '你想解决什么？' }], availableActions: ['chat'] },
     control: {}
   }],
   refereeTrace: [{ timestamp: '2026-07-14T10:00:00.000Z', traceId: 'trace1', diagnostic: { completionCandidate: false } }],
@@ -34,6 +34,10 @@ describe('simulation-referee normalization', () => {
       evidence: [{
         id: 'E1', source: 'refereeTrace', index: 0, path: 'diagnostic.completionCandidate',
         traceId: 'trace1', excerpt: 'false', interpretation: '完成信号不一致'
+      }, {
+        // goalExperience 计分必须有对应阶段的实质证据（2026-11-22 P1.4 逐维门）
+        id: 'E2', source: 'publicTrace', index: 0, path: 'observation.visibleMessages',
+        excerpt: '你想解决什么？', interpretation: 'Goal 开场对话'
       }],
       findings: [{
         code: 'BOUNDARY_LEAK', severity: 'critical', category: 'boundary',
@@ -146,13 +150,26 @@ describe('simulation-referee normalization', () => {
     expect(output.verdict).toBe('inconclusive')
   })
 
-  it('教学阶段未覆盖（teachingSessions=0）不触发数据门禁', () => {
+  it('仅引用 observation.stage（纯元数据）不能通过：goalExperience 缺实质证据 → inconclusive（外部评审 P1.4）', () => {
     const output = normalizeRefereeOutput({
       scores: { goalExperience: 90, controlConsistency: 90, boundaryIntegrity: 90, evidenceSufficiency: 90 },
       evidence: [{ id: 'E1', source: 'publicTrace', index: 0, path: 'observation.stage' }], findings: [], recommendations: []
     }, input)
 
-    expect(output.scores.evidenceSufficiency).toBe(90)
+    expect(output.integrity?.missingDimensionEvidence).toContain('goalExperience')
+    expect(output.integrity?.valid).toBe(false)
+    expect(output.scores.evidenceSufficiency).toBeLessThanOrEqual(45)
+    expect(output.verdict).toBe('inconclusive')
+  })
+
+  it('引用对应阶段的实质内容（observation 非 stage 字段）→ 逐维覆盖满足，正常判 pass', () => {
+    const output = normalizeRefereeOutput({
+      scores: { goalExperience: 90, controlConsistency: 90, boundaryIntegrity: 90, evidenceSufficiency: 90 },
+      evidence: [{ id: 'E1', source: 'publicTrace', index: 0, path: 'observation.visibleMessages' }], findings: [], recommendations: []
+    }, input)
+
+    expect(output.integrity?.missingDimensionEvidence).toEqual([])
+    expect(output.integrity?.valid).toBe(true)
     expect(output.verdict).toBe('pass')
   })
 
@@ -204,10 +221,11 @@ describe('simulation-referee normalization', () => {
   it('合法低分仍按 fail 上报，不被当成证据不足', () => {
     const output = normalizeRefereeOutput({
       scores: { goalExperience: 30, controlConsistency: 30, boundaryIntegrity: 30, evidenceSufficiency: 70 },
-      evidence: [{ source: 'publicTrace', index: 0, path: 'observation.stage' }], findings: [], recommendations: []
+      evidence: [{ source: 'publicTrace', index: 0, path: 'observation.visibleMessages' }], findings: [], recommendations: []
     }, input)
 
     expect(output.integrity?.valid).toBe(true)
+    expect(output.integrity?.missingDimensionEvidence).toEqual([])
     expect(output.verdict).toBe('fail')
   })
 })

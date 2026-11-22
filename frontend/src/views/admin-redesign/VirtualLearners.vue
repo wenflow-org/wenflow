@@ -347,7 +347,7 @@
                       title="终止后会话标记为已放弃，数据保留，不可撤销"
                       @click="terminateSample(s)"
                     >终止</button>
-                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="运行记录一并删除，不可恢复" @click="menuRemove(s)">删除</button>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该学习者账号与全部学习数据（运行记录、记忆痕迹、误解记录、调用遥测），不可恢复" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
               </div>
@@ -548,6 +548,10 @@ async function onRowAction(s: Sample) {
       toast.info(action.key === 'pause' ? '没有可暂停的会话' : '没有可继续的会话')
     }
     if (result.done || result.failed) void refreshLiveVirtuals()
+  } catch (e) {
+    /* 2026-11-22 审计 P2：故事/会话接口失败曾静默复位 busy——按钮弹回但没有任何反馈，
+       读成「点了没反应」。就地给错误 toast，不吞。 */
+    toast.error(`${action.key === 'pause' ? '暂停' : '继续'}失败：${errMsg(e)}`)
   } finally {
     busyId.value = null
   }
@@ -802,7 +806,10 @@ function openLaunch(s: Sample) { void launchRef.value?.open(s) }
 async function removeSample(s: Sample) {
   const ok = await askConfirm({
     title: '删除虚拟学习者',
-    message: `确认删除虚拟学习者「${s.name}」？\n其运行记录将一并清理，该操作不可撤销。`,
+    // 2026-11-22 审计 P2：原「运行记录将一并清理」低估了真实删除面——后端级联还删
+    // 虚拟账号本体、记忆痕迹、误解记录、调用遥测（virtual-cleanup.service cascadeDeleteProfile），
+    // 与画像页删单会话的 F22 如实口径对齐
+    message: `确认删除虚拟学习者「${s.name}」？\n将删除该学习者账号与全部学习数据：运行记录、记忆痕迹、误解记录、调用遥测，不可恢复。`,
     confirmText: '删除',
     busy: true
   })
@@ -902,11 +909,13 @@ onMounted(() => {
   }
 })
 /* 运行中每 30s 轻刷（2026-10-31 三轮评审 P1）：自动驾驶在后台推进，页面停留时
-   「今日调用」/运行状态/正在运行 chips 若只靠进页取一次，读数会长期停滞在启动前 */
-const runPollTimer = setInterval(() => {
-  if (liveVirtualRunStats.value.running > 0) void refreshLiveVirtuals()
-}, 30000)
-onUnmounted(() => clearInterval(runPollTimer))
+   「今日调用」/运行状态/正在运行 chips 若只靠进页取一次，读数会长期停滞在启动前。
+   2026-11-22 审计：原裸 setInterval 后台标签页也持续打接口（同文件 RPM 轮询早已
+   useSafePolling）——收敛到同一 composable，隐藏时跳过 + 失败退避断路。 */
+const runPollPolling = useSafePolling(async () => {
+  if (liveVirtualRunStats.value.running > 0) await refreshLiveVirtuals()
+}, { interval: 30000, maxBackoff: 120000, skipWhenHidden: true, immediate: false })
+runPollPolling.start()
 
 /* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/运行状态/操作是
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
@@ -988,6 +997,7 @@ const vlRpmPolling = useSafePolling(() => loadVlRpm(), {
 vlRpmPolling.start()
 // 离开页面必须停：轮询是组件级副作用，卸载后继续打接口会打到已卸载页（泄漏到下一个页面）
 onUnmounted(() => vlRpmPolling.stop())
+onUnmounted(() => runPollPolling.stop())
 
 /** 容量与实验环境：抽屉承载（保存与脏态都在抽屉里，页面只负责打开） */
 const settingsDrawerRef = ref<InstanceType<typeof VirtualLearnerSettingsDrawer> | null>(null)

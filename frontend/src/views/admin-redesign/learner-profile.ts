@@ -217,6 +217,8 @@ export interface ListQueryState {
   bin?: Ref<number | null>
   /** pill 词表白名单：URL 里的值不在此列（脏深链 / 旧参数名）时回落 'all'，不把列表筛空 */
   allowedPills?: readonly string[]
+  /** pill 历史值 → 现行值（读侧别名）：旧深链不断；回写 URL 只写现行值，自然完成迁移 */
+  pillAliases?: Readonly<Record<string, string>>
   /** 页码默认 1；页大小默认值（与调用方 Pagination 初值一致才不误写 URL） */
   defaultPageSize?: number
   /**
@@ -323,7 +325,10 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
   /** URL → 状态（挂载落位 / 前进后退 / 手改地址） */
   function applyFromRoute(): void {
     const q = r.query
-    const rawPill = str(q[K.pill])
+    // pill 别名先行（2026-11-22）：URL 里的历史值先映射到现行值再过白名单——旧深链
+    // 不断，新值语义清晰；别名只影响读侧，回写 URL 时始终写现行值（自然完成迁移）。
+    const rawPillRaw = str(q[K.pill])
+    const rawPill = (rawPillRaw && state.pillAliases?.[rawPillRaw]) || rawPillRaw
     state.pill.value = rawPill && (!allowedPills || allowedPills.includes(rawPill)) ? rawPill : 'all'
     if (state.keyword) state.keyword.value = str(q[K.keyword])
     state.page.value = posInt(q[K.page], 1)

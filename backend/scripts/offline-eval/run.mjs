@@ -300,6 +300,24 @@ function selftest() {
   const bad = validateClassroomVerdict({ dimensions: { goalAlignment: 0.5 } }, block);
   assert(!bad.ok && bad.errors.length === 6, 'missing dimensions reported');
 
+  // 确定性收口闸自检（外部评审 P3.2）：结算类 + 服务端确认未答问题 → 模型漏判/引文缺失也锁 true
+  const NL = String.fromCharCode(10);
+  const closureLine = ['【收口事实】finalizationAction=complete_task', 'openQuestion=true', '未答问题：用你自己的话说说合力是什么'].join('｜');
+  const closureBlock = block + NL + NL + closureLine;
+  const closureMissed = validateClassroomVerdict({
+    dimensions: good.dimensions, flags: {}, evidence: {}, issues: [],
+  }, closureBlock);
+  assert(closureMissed.flags.unclosedComplete === true && closureMissed.verdict === 'fail', 'closure lock forces unclosedComplete');
+  assert(closureMissed.deterministicOverrides.includes('unclosedComplete'), 'closure lock marked as deterministic override');
+
+  // end_only（学员主动结束、未结算）不误伤：诚实收口不该被闸门打成 fail
+  const endOnlyLine = ['【收口事实】finalizationAction=end_only', 'openQuestion=true', '未答问题：还有一道延伸题没做'].join('｜');
+  const endOnlyBlock = block + NL + NL + endOnlyLine;
+  const endOnly = validateClassroomVerdict({
+    dimensions: good.dimensions, flags: {}, evidence: {}, issues: [],
+  }, endOnlyBlock);
+  assert(endOnly.flags.unclosedComplete === false && endOnly.verdict === 'pass', 'end_only honest closure not locked');
+
   const pathBlock = '预算 600 分钟｜实际/预算比 2.80\n阶段 1：入门\n  1. 了解基本概念｜验收：（无）';
   const p1 = validatePathVerdict({
     dimensions: { goalAlignment: 0.3, integrity: 0.3, granularity: 0.3, specificity: 0.3, progression: 0.3, feasibility: 0.9 },

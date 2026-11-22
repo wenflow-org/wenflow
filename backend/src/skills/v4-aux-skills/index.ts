@@ -27,8 +27,6 @@ export type AuxSkillId =
   | 'teaching-exit-ticket'
   | 'teaching-retention-probe'
   | 'profile-progress-report'
-  | 'skill-author'
-  | 'skill-compiler'
   | 'profile-state-review'
   | 'profile-concept-consolidate'
   | 'profile-concept-load'
@@ -41,8 +39,6 @@ const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'teaching-exit-ticket': loadPromptFile('skill:teaching-exit-ticket')?.systemPrompt || '',
   'teaching-retention-probe': loadPromptFile('skill:teaching-retention-probe')?.systemPrompt || '',
   'profile-progress-report': loadPromptFile('skill:profile-progress-report')?.systemPrompt || '',
-  'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
-  'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
   'profile-state-review': loadPromptFile('skill:profile-state-review')?.systemPrompt || '',
   'profile-concept-consolidate': loadPromptFile('skill:profile-concept-consolidate')?.systemPrompt || '',
   'profile-concept-load': loadPromptFile('skill:profile-concept-load')?.systemPrompt || '',
@@ -248,8 +244,6 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-exit-ticket': { skillId: 'teaching-exit-ticket', displayName: '课末终检题生成器', description: '结课前生成一道覆盖契约核心 KC 的新情境终检题（独立于课内检查点）', category: 'generation' },
   'teaching-retention-probe': { skillId: 'teaching-retention-probe', displayName: '延迟保持探针生成器', description: '课后 24–72 小时对已学核心 KC 生成一道新情境单点题（独立判分）', category: 'generation' },
   'profile-progress-report': { skillId: 'profile-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
-  'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
-  'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
   'profile-state-review': { skillId: 'profile-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
   'profile-concept-consolidate': { skillId: 'profile-concept-consolidate', displayName: '概念身份归并器', description: '判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议', category: 'analysis' },
   'profile-concept-load': { skillId: 'profile-concept-load', displayName: '概念负担判定器', description: '逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪', category: 'analysis' },
@@ -401,30 +395,6 @@ async function learnerProgressReportHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'LEARNER_PROGRESS_REPORT_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function skillAuthorHandler(input: any) {
-  return runAux<string>({
-    meta: META['skill-author'],
-    input,
-        buildUserPayload: (d) => d,
-    normalize: (parsed) => (typeof parsed === 'string' ? parsed : String(parsed?.systemPrompt || '')),
-    validate: (parsed) => typeof parsed === 'string' && parsed.trim()
-      ? { valid: true }
-      : { valid: false, failureReason: 'SKILL_AUTHOR_EMPTY_OUTPUT' },
-  });
-}
-
-async function skillCompilerHandler(input: any) {
-  return runAux({
-    meta: META['skill-compiler'],
-    input,
-        buildUserPayload: (d) => d,
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'SKILL_COMPILER_OUTPUT_NOT_OBJECT' },
   });
 }
 
@@ -802,8 +772,6 @@ const AUX_SKILL_HANDLER_TABLE: Record<AuxSkillId, (input: any) => Promise<SkillE
   'teaching-exit-ticket': teachingExitTicketHandler,
   'teaching-retention-probe': teachingRetentionProbeHandler,
   'profile-progress-report': learnerProgressReportHandler,
-  'skill-author': skillAuthorHandler,
-  'skill-compiler': skillCompilerHandler,
   'profile-state-review': learnerStateReviewHandler,
   'profile-concept-consolidate': conceptConsolidatorHandler,
   'profile-concept-load': conceptLoadEstimatorHandler,

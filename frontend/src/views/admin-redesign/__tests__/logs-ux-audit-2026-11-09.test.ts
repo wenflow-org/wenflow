@@ -253,7 +253,7 @@ describe('A. ExecLogs 调用总数卡：主值不染红，失败数走 valueNote
 
 /* ======================= B. AuditLogs 失败态 ======================= */
 
-describe('B. AuditLogs 统计失败：记录总数读「—」，且只有一个重试入口', () => {
+describe('B. AuditLogs 统计失败：失败侧读「—」且只有一个重试入口', () => {
   beforeEach(() => {
     h.getLogs.mockReset();
     h.getStats.mockReset();
@@ -263,7 +263,7 @@ describe('B. AuditLogs 统计失败：记录总数读「—」，且只有一个
     window.scrollTo = vi.fn();
   });
 
-  it('统计请求失败：记录总数与其余三卡同为「—」，不把失败读成 0 条', async () => {
+  it('统计请求失败：失败侧三卡读「—」；记录总数回落列表分页 total（2026-11-22 审计：分页 total 就在手边，不再与「共 N 条」打架）', async () => {
     h.getStats.mockRejectedValue(new Error('stats down'));
     const w = await mountAudit();
     await flushPromises();
@@ -271,12 +271,11 @@ describe('B. AuditLogs 统计失败：记录总数读「—」，且只有一个
 
     const kpis = w.findAll('.mk-kpi');
     const byLabel = (label: string) => kpis.find((k) => k.find('.mk-kpi__label').text() === label)!;
-    expect(byLabel('记录总数').find('.mk-kpi__num').text()).toBe('—');
+    // 记录总数回落分页 total（同一筛选口径的真实读数，不是把失败读成 0）
+    expect(byLabel('记录总数').find('.mk-kpi__num').text()).toBe('1');
     expect(byLabel('失败记录').find('.mk-kpi__num').text()).toBe('—');
     expect(byLabel('失败率').find('.mk-kpi__num').text()).toBe('—');
     expect(byLabel('失败动作').find('.mk-kpi__num').text()).toBe('—');
-    // 记录总数卡不得出现 0
-    expect(byLabel('记录总数').find('.mk-kpi__num').text()).not.toBe('0');
     w.unmount();
   });
 

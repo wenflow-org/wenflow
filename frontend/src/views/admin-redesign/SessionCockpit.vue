@@ -110,6 +110,16 @@
         </template>
         <!-- 动作区只放真实能力（原型「导出日志」假钮不搬）：会话生命周期控制（vlab-controls 统一模型）
              从统一控制台迁入 hero 动作位；危险动作（停止/删除）用 danger 形态（原型「中断会话」位） -->
+        <!-- 评审报告入口（2026-11-22 审计 P3）：黑盒终态会话的排查动线此前在座舱断一跳——
+             报告只能从画像页运行行进；与「执行日志」并排补直达，可评判据与后端一致
+             （blackbox-api + 终态 completed/abandoned/failed）。 -->
+        <button
+          v-if="!isRealMode && isBlackbox && isTerminal"
+          type="button"
+          class="mk-btn"
+          title="生成或查看这次运行的双评估报告：裁判终局评审与角色保真审计"
+          @click="goSessionAudit"
+        >评审报告</button>
         <button
           v-for="c in lifeControlsCockpit"
           :key="c.key"
@@ -1507,6 +1517,12 @@ function goExecLogs() {
      会得到「按会话查但一页空」，看起来像这个会话没有执行记录。 */
   intent.timeRange = ''
   openSession(sessionId.value)
+}
+
+/** 会话评审报告（2026-11-22 审计）：黑盒终态会话直达双评估报告页，自动生成 */
+function goSessionAudit() {
+  if (!sessionId.value) return
+  void router.push({ path: '/admin/session-audit', query: { session: sessionId.value } })
 }
 
 /** 真实会话的教学建议（advisory）：接口字段为松类型，仅取有效档位渲染。

@@ -471,7 +471,7 @@ function matchKc(contract: LessonContract, rawName: unknown, rawKcId?: unknown):
 
 /**
  * 从检查点历史 + 当前知识看板收敛证据账本。
- * 独立证据 = 代码裁决（judgedBy=code）且首答正确；模型 rubric / 看板 mastered 只算覆盖，不算独立。
+ * 独立证据 = 有答案键的 code/model-rubric 首答正确，且没有可靠的已给答案标记；看板只算覆盖。
  */
 export function collectLessonEvidence(input: {
   contract: LessonContract;
@@ -527,9 +527,9 @@ export function collectLessonEvidence(input: {
       source,
       firstAttempt: attempts <= 1,
       attempts,
-      // 独立证据：首答通过且不是「无答案键时的模型参考判分」。代码裁决优先，但简答题的
-      // rubric 首答通过也算独立（否则全简答课永远达不成契约，完成率会被人为锁死）。
-      independent: source !== 'model-reference' && attempts <= 1,
+      // 只认服务端已记录的可靠标记，不按「曾讲过同一 KC」猜提示：新题无提示首答仍可独立。
+      // rubric 首答通过也算独立，否则全简答课的契约会被锁死。
+      independent: source !== 'model-reference' && attempts <= 1 && record.answerAlreadyGiven !== true,
       correct: true,
       at: answeredAt,
       turn: resolveTurnRef(record.turn ?? record.turnIndex, turn),

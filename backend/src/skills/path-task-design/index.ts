@@ -103,9 +103,14 @@ export function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
       cognitiveLevel: ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'].includes(item?.cognitiveLevel)
         ? item.cognitiveLevel
         : null,
-      icapLevel: ['passive', 'active', 'constructive', 'interactive'].includes(item?.icapLevel)
-        ? item.icapLevel
-        : null,
+      // ICAP 收 2 档（2026-11-22）：1:1 平台 interactive 不可达（并入 constructive）、
+      // passive 永不产出——历史输出的 interactive 按 1:1 口径降级为 constructive，passive 归 active。
+      icapLevel: (() => {
+        const raw = item?.icapLevel;
+        if (raw === 'constructive' || raw === 'interactive') return 'constructive';
+        if (raw === 'active' || raw === 'passive') return 'active';
+        return null;
+      })(),
       transferable: !!item?.transferable,
       // 动态规划（2026-10-17）：任务级可调整性，重排压缩时据此保护骨干（core）、
       // 优先删减 flexible。白名单归一必须带上，否则模型输出会被剥掉（与 materialRefs 同坑）。

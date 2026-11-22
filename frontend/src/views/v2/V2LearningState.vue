@@ -12,7 +12,7 @@
           <p>训练负荷、疲劳度与掌握进度</p>
         </div>
         <div class="state__head-side">
-          <div v-if="!stateEmpty" class="kpis">
+          <div v-if="!stateEmpty && !stateLoading" class="kpis">
             <div class="kpis__grid" role="list" aria-label="学习状态概览">
               <div v-if="kpiLoading" class="kpis__loading" role="listitem">
                 <SkeletonLoader variant="lines" :count="2" />
@@ -41,19 +41,25 @@
         <!-- 全空态整卡（2026-11-06 走查）：趋势 / AI 建议 / 复习 / 掌握此前四张卡各说一遍
              「完成第一次学习后…」，PC 双栏还因 advisory order:-1 提前产生两处空洞；
              真新用户（无趋势数据且三 KPI 全 0）收成一张卡说完状态 + 唯一出口 -->
-        <section v-if="stateEmpty" class="state__hero">
-          <!-- 与图谱/学习路径同一套空态原语（2026-11-06 走查「空态设计不一样」）：
-               V2ResultState 66px 图标盘 + 标题 + 说明 + 胶囊主动作，画布上直接居中 -->
+        <section v-if="stateLoading" class="state__hero chart__loading" role="status">
+          <p>正在读取你的学习记录…</p>
+          <SkeletonLoader variant="lines" :count="2" />
+        </section>
+        <section v-else-if="stateEmpty" class="state__hero">
           <V2ResultState
             tone="empty"
-            title="学习状态正在积累中"
-            description="完成第一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。"
+            title="还没有可分析的学习记录"
+            description="完成一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。"
             action-text="去开始学习"
             @action="router.push('/learning-paths')"
           />
         </section>
         <template v-else>
         <div class="state__col">
+          <div v-if="sessionsLoaded && !sessionsOk" class="card chart__empty" role="alert">
+            <strong>学习时长与连续天数暂时无法读取</strong>
+            <button type="button" class="chart__retry" @click="loadSessions">重新读取</button>
+          </div>
           <!-- 趋势图（PC 满宽：图表吃满容器，下方再切 60/40 双栏） -->
           <section class="card band state__trend">
             <div class="band__head">
@@ -74,6 +80,10 @@
                          用户不需要知道状态是怎么算出来的，只需要知道落在哪一档 -->
                     <li><b class="dot dot--green"></b>整体状态：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
                     <li><b class="dot dot--blue"></b>数据积累期显示「积累中」，暂不定档</li>
+                    <!-- 三种尺度（2026-11-22 UI 走查）：同屏并排的 −5.75 / 1.15 / 6.9 / 23 分别是
+                         相对量、0-10、0-100、0-100，用户拿整体状态的 <20 图例去套 6.9 分的疲劳
+                         会得出「该休息」的误读——补一行尺度说明 -->
+                    <li><b class="dot dot--purple"></b>四项尺度不同：整体状态 −100~+100，训练负荷 0–10，压力/疲劳 0–100——别跨指标比数值大小</li>
                     <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
                   </ul>
                 </details>
@@ -154,10 +164,10 @@
             </div>
 
             <div v-if="trendLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
-            <div v-else-if="trendError" class="chart__empty">
-              <strong>学习状态数据加载失败</strong>
+            <div v-else-if="trendError" class="chart__empty" role="alert">
+              <strong>学习趋势暂时无法读取</strong>
               <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
-              <button type="button" class="chart__retry" @click="loadTrends">重试</button>
+              <button type="button" class="chart__retry" @click="loadTrends">重新读取</button>
             </div>
             <div v-else-if="!hasAnyLoad" class="chart__empty chart__empty--first">
               <span class="chart__empty-icon" aria-hidden="true">
@@ -257,10 +267,13 @@
               <!-- aria-live：SVG 本体 aria-hidden，唯一的历史值出口在这里，切日时 polite 播报 -->
               <div v-if="displayDay" class="ff-info" aria-live="polite">
                 <b>{{ displayDay.label }}</b>
-                <span>时长 {{ displayDay.minutes }} 分钟</span>
-                <span class="ff-info__fitness">负荷 {{ displayDay.ktl ?? '—' }}</span>
-                <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }}</span>
-                <span>状态 {{ displayDay.lsb ?? '—' }}（{{ displayDay.zone?.label || '暂无' }}）</span>
+                <span v-if="displayDay.date <= todayKey">时长 {{ !sessionsOk ? '未读取' : `${displayDay.minutes} 分钟` }}</span>
+                <template v-if="displayDay.ktl !== null || displayDay.lf !== null || displayDay.lsb !== null">
+                  <span class="ff-info__fitness">负荷 {{ displayDay.ktl ?? '—' }}</span>
+                  <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }}</span>
+                  <span v-if="displayDay.lsb !== null">状态 {{ displayDay.lsb }}（{{ displayDay.zone?.label || '暂不定档' }}）</span>
+                </template>
+                <span v-else>该日暂无状态记录</span>
               </div>
               <!-- 三档阈值行已删（2026-09-27）：口径折进侧栏「指标说明」，图上一行字不占。
                    两条状态阈值线本身保留（图内虚线），文字说明在图例里（.ff-legend__zone）。 -->
@@ -363,23 +376,24 @@
               </article>
             </div>
 
-            <!-- 主次双按钮（原型 wf-advisory__actions）：采用建议 = primary 蓝渐变，保持原计划 = ghost。
-                 多于一条待确认时不再在卡头重复同一组动作，改到下方逐条确认，避免 6 个按钮同屏。 -->
-            <div v-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length <= 1" class="advisory__actions">
+            <div v-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length === 1" class="advisory__actions">
               <button
                 type="button"
                 class="adv-btn adv-btn--primary"
-                :disabled="replanBusy || !!adoptBlockReason"
+                :disabled="replanBusy || !!adoptBlockReason || !pendingAdjust[0]?.pathId"
                 :title="adoptBlockReason || undefined"
-                @click="adoptSuggestion"
-              >采用建议</button>
+                :aria-expanded="confirmingId === pendingAdjust[0]?.id"
+                @click="openAdjustConfirmation(pendingAdjust[0])"
+              >查看并确认调整</button>
               <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion">保持原计划</button>
             </div>
-            <p v-else-if="hasKpiData && hasAdvisoryAction" class="advisory__multi">
-              <!-- 不写「下方」：调整项就在同一张卡里（文案门禁 R2） -->
-              有 {{ pendingAdjust.length }} 条待确认调整，请逐条确认或查看建议。
+            <p v-else-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length > 1" class="advisory__multi">
+              有 {{ pendingAdjust.length }} 条待确认调整，请逐条查看。
             </p>
-            <p v-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length <= 1 && adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
+            <div v-else-if="hasKpiData && hasAdvisoryAction && guideActions[0]" class="advisory__actions">
+              <router-link class="adv-btn adv-btn--primary" :to="guideActions[0].resolved">{{ guideActions[0].action }}</router-link>
+            </div>
+            <p v-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length === 1 && adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，暂不可确认调整。</p>
             <!-- 回执行（原型 wf-advisory__done）：采用 / 保持成功后就地播报，不靠 toast 一次性带过 -->
             <p v-if="advisoryDone" class="advisory__done" role="status">{{ advisoryDone }}</p>
 
@@ -407,21 +421,22 @@
                     <button
                       type="button"
                       class="ctl-btn ctl-btn--primary"
-                      :disabled="replanBusy || !!cardAdjustBlockReason(card)"
+                      :disabled="replanBusy || !card.pathId || !!cardAdjustBlockReason(card)"
                       :title="cardAdjustBlockReason(card) || undefined"
-                      @click="confirmingId = card.id"
-                    >确认调整</button>
-                    <button type="button" class="ctl-btn" :disabled="!card.pathId" @click="jumpToAdjust(card)">查看建议</button>
+                      @click="openAdjustConfirmation(card)"
+                    >查看影响范围</button>
+                    <button type="button" class="ctl-btn" :disabled="!card.pathId" @click="jumpToAdjust(card)">查看路径</button>
                   </div>
-                  <div v-else class="ctl-card__confirm">
-                    <span>这会调整该路径的后续阶段安排，已完成内容保留不变。</span>
+                  <div v-else :id="`state-adjust-${card.id}`" class="ctl-card__confirm" tabindex="-1">
+                    <span>将调整「{{ card.pathTitle || '当前路径' }}」的{{ adjustmentScopeLabel(card) }}。已完成内容会保留。</span>
                     <button
                       type="button"
                       class="ctl-btn ctl-btn--primary"
                       :disabled="replanBusy || !!cardAdjustBlockReason(card)"
                       @click="confirmAdjust(card)"
-                    >{{ replanBusy ? '正在调整…' : '确认' }}</button>
-                    <button type="button" class="ctl-btn ctl-btn--ghost" @click="confirmingId = ''">取消</button>
+                    >{{ replanBusy ? '正在提交…' : '确认调整' }}</button>
+                    <button type="button" class="ctl-btn ctl-btn--ghost" :disabled="replanBusy" @click="confirmingId = ''">暂不调整</button>
+                    <p v-if="adjustError" role="alert">{{ adjustError }}</p>
                   </div>
                 </article>
               </section>
@@ -584,7 +599,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import request from '@/utils/api';
 import { toast } from '@/utils/toast';
@@ -828,19 +843,7 @@ const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' |
       zone: zoneOfLsb(lsb, t?.mature)
     });
   }
-  /* 首次学习前的空白日补 0（2026-11-06 走查）：原实现留 null，折线从首个数据日才起笔——
-     单日数据画不出线，只剩一根孤点和一条竖着的虚线残段。补 0 后三条线从
-     (首前日, 0) 斜向爬升到真实值，「从 0 起步」的趋势在实线上读出来，
-     不再需要上一版的 0 基准虚线 lead（已随之删除）。 */
-  const firstWithData = days.findIndex((d) => d.ktl !== null || d.lf !== null || d.lsb !== null || d.minutes > 0);
-  if (firstWithData > 0) {
-    for (let i = 0; i < firstWithData; i += 1) {
-      days[i].ktl = 0;
-      days[i].lf = 0;
-      days[i].lsb = 0;
-      days[i].zone = zoneOfLsb(0);
-    }
-  }
+  // 未观测日保持空值，单个观测用图上的实点表达。
   return days;
 });
 
@@ -1086,6 +1089,7 @@ const sessionsTruncated = ref(false);
 const sessionsLoaded = ref(false);
 const sessionsOk = ref(false);
 async function loadSessions() {
+  sessionsLoaded.value = false;
   try {
     const sessionRes = await request.get('/users/me/sessions', { params: { limit: SESSIONS_LIMIT } });
     const list = unwrapArray(sessionRes);
@@ -1101,7 +1105,7 @@ async function loadSessions() {
     dailyLoad.value = [...map.entries()].map(([date, minutes]) => ({ date, minutes }));
     sessionsOk.value = true;
   } catch {
-    // 背景柱是装饰层：失败就少画柱，不值得把整张趋势图打成错误态
+    sessionsOk.value = false;
   } finally {
     sessionsLoaded.value = true;
   }
@@ -1151,6 +1155,7 @@ const masteryLoaded = ref(false);
 const masteryOk = ref(false);
 
 async function loadMastery() {
+  masteryLoaded.value = false;
   try {
     const res = await request.get('/learning/concept-graph');
     const graph = unwrap<{ nodes?: GraphNode[] }>(res);
@@ -1202,9 +1207,17 @@ const hasKpiData = computed(
   () => sessionsOk.value && masteryOk.value
     && ((kpiStreak.value ?? 0) > 0 || (kpiWeekMinutes.value ?? 0) > 0 || (kpiMastered.value ?? 0) > 0)
 );
-/* 全空态（2026-11-06 走查）：无趋势数据且三 KPI 全 0 = 真新用户。
-   四张空卡收成一张 state__hero；有任一真实数据的学员仍走原布局。 */
-const stateEmpty = computed(() => !hasAnyLoad.value && !hasKpiData.value);
+/* 只有读取成功后才判断全空；任一个来源有记录就保留各区块。 */
+const hasStateRecords = computed(() =>
+  hasAnyLoad.value || dailyLoad.value.length > 0 || masteryNodes.value.length > 0 || reviewDue.value.length > 0
+);
+const stateReadFailed = computed(() =>
+  trendError.value || (sessionsLoaded.value && !sessionsOk.value)
+  || (masteryLoaded.value && !masteryOk.value) || reviewLoadFailed.value
+);
+const stateReading = computed(() => trendLoading.value || kpiLoading.value || reviewLoading.value);
+const stateLoading = computed(() => !hasStateRecords.value && !stateReadFailed.value && stateReading.value);
+const stateEmpty = computed(() => !hasStateRecords.value && !stateReadFailed.value && !stateReading.value);
 
 /* ---------- 复习台账（既有 GET /ai-teaching/review/due + /review/plan，学习台同源） ----------
    due = 全部到期清单（上限 20），retention 0-1 就是条宽与百分比；
@@ -1470,6 +1483,27 @@ const evidenceHint = computed(() => pendingAdjust.value[0]?.captured || '');
 /* 内联确认：与完课卡同一个 replan 接口、同一份 evidence 语义 */
 const confirmingId = ref('');
 const replanBusy = ref(false);
+const adjustError = ref('');
+
+function adjustmentStageParams(card: DecisionCard): { stageNumber?: number; fromStageNumber?: number } {
+  const stage = card.advisory?.targetStageNumber;
+  if (typeof stage !== 'number' || !Number.isInteger(stage) || stage < 1) return {};
+  return card.advisory?.scope === 'downstream_path' ? { fromStageNumber: stage } : { stageNumber: stage };
+}
+
+function adjustmentScopeLabel(card: DecisionCard) {
+  const { fromStageNumber, stageNumber } = adjustmentStageParams(card);
+  if (fromStageNumber) return `第 ${fromStageNumber} 阶段及之后的未完成阶段`;
+  if (stageNumber) return `第 ${stageNumber} 阶段`;
+  return '当前未完成阶段';
+}
+
+async function openAdjustConfirmation(card: DecisionCard) {
+  adjustError.value = '';
+  confirmingId.value = card.id;
+  await nextTick();
+  document.getElementById(`state-adjust-${card.id}`)?.focus();
+}
 const REPLAN_REASON: Record<string, string> = {
   reinforce: '根据课后建议，为下一阶段补强关键薄弱点',
   resequence: '根据课后建议，调整下一阶段顺序以降低理解风险',
@@ -1486,40 +1520,37 @@ async function confirmAdjust(card: DecisionCard) {
     return;
   }
   replanBusy.value = true;
+  adjustError.value = '';
   try {
-    // #58：建议卡承诺的范围必须与执行落点一致——next_milestone 传 stageNumber，
-    // downstream_path 传 fromStageNumber；不再让后端「缺省 = 当前活动阶段」把「下一阶段」吃掉。
-    const advisory = (card.advisory || {}) as { scope?: string; targetStageNumber?: number | null };
-    const targetStage = typeof advisory.targetStageNumber === 'number' && advisory.targetStageNumber > 0
-      ? advisory.targetStageNumber
-      : null;
-    const stageParams = targetStage
-      ? advisory.scope === 'downstream_path' ? { fromStageNumber: targetStage } : { stageNumber: targetStage }
-      : {};
-    await request.post(`/learning/paths/${card.pathId}/replan`, {
+    const response = await request.post(`/learning/paths/${card.pathId}/replan`, {
       triggerSource: 'ai-teaching',
       mode: replanModeForRecommendation(card.recommendation),
       reason: REPLAN_REASON[card.recommendation || 'reinforce'] || '根据课后建议调整后续阶段',
       requireConfirmation: false,
-      ...stageParams,
+      ...adjustmentStageParams(card),
       evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
     });
-    toast.success(`已调整「${card.pathTitle || '当前路径'}」的${advisory.scope === 'downstream_path' ? '后续阶段' : '下一阶段'}`);
+    const result = unwrap<{ status?: string }>(response);
+    const target = `「${card.pathTitle || '当前路径'}」的${adjustmentScopeLabel(card)}`;
+    if (result?.status === 'accepted') {
+      advisoryDone.value = `已提交${target}的调整，可到路径详情查看进度。`;
+    } else if (result?.status === 'redesigned-stage') {
+      advisoryDone.value = `已调整${target}，已完成内容保留。`;
+    } else {
+      adjustError.value = '暂未确认调整结果，请到路径详情查看最新安排。';
+      return;
+    }
     // P1-7：真执行也回写处置埋点，漏斗才不只看到「保留/稍后/预览」。
     if (card.sessionId) {
       void aiTeachingAPI.recordAdvisoryResponse(card.sessionId, 'adopt').catch(() => { /* 埋点失败静默 */ });
     }
-    // 卡头双按钮的回执行（原型 wf-advisory__done）：确认成功后就地留一行，不只靠 toast 一闪而过
-    advisoryDone.value = `已采用建议：「${card.pathTitle || '当前路径'}」的后续阶段已调整，已完成内容保留不变。`;
     dismissDecision(card);
   } catch (e: any) {
-    // 409 冲突（未结束课堂/进行中任务）在本页没有清场 UI —— 指到路径详情页的「一键清场」闭环，
-    // 别让用户对着一句「仍有进行中的任务」死胡同（审计 B2）。
     const code = e?.response?.data?.error?.code;
     if (e?.response?.status === 409 && typeof code === 'string' && code.startsWith('PATH_MUTATION_HAS_')) {
-      toast.error('这条路径还有没结束的课堂：去路径详情页点「一键清场」后再调整（不影响已完成内容）');
+      adjustError.value = '路径里还有未结束的课堂。请先到路径详情处理，再回来确认。';
     } else {
-      toast.error(e?.message || '调整失败，请稍后再试');
+      adjustError.value = '调整未能完成。请稍后重试，或到路径详情查看安排。';
     }
   } finally {
     replanBusy.value = false;
@@ -1537,20 +1568,6 @@ function jumpToAdjust(card: DecisionCard) {
    保持原计划 = 消掉那条待确认（本地忽略，不发请求），与调控区的同名按钮同一语义。
    两条路径的全部动作在下方「学习调控」次级区块里仍然逐条可操作，这里只是把主路径提到卡头。 */
 const advisoryDone = ref('');
-
-function adoptSuggestion() {
-  const card = pendingAdjust.value[0];
-  if (card) {
-    void confirmAdjust(card);
-    return;
-  }
-  const action = guideActions.value[0];
-  if (action) {
-    void router.push(action.resolved);
-    return;
-  }
-  advisoryDone.value = '当前没有需要采用的调整，保持现在的节奏就好。';
-}
 
 function keepSuggestion() {
   const card = pendingAdjust.value[0];

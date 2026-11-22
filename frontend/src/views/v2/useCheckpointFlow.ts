@@ -5,7 +5,7 @@
  */
 import { nextTick, ref, watch, type Ref } from 'vue';
 import { toast } from '@/utils/toast';
-import { aiTeachingAPI } from '@/api/aiTeaching';
+import { aiTeachingAPI, type LessonContract, type LessonReport, type ExitTicket, type MessageResult } from '@/api/aiTeaching';
 import { isCheckpointAlreadyHandled } from '@/utils/checkpoint';
 
 /**
@@ -26,7 +26,14 @@ export function useCheckpointFlow(
   session: Ref<{ sessionId: string; revision: number } | null>,
   typing: Ref<boolean>,
   completed: Ref<boolean>,
-  explanation?: ExplanationSink
+  explanation?: ExplanationSink,
+  /** 提交回合带回的契约四件套落点（2026-11-22：小测是拿证据的主通道，契约卡据此实时跳变） */
+  onContractState?: (state: {
+    lessonContract?: LessonContract | null;
+    lessonReport?: LessonReport | null;
+    exitTicket?: ExitTicket | null;
+    branch?: MessageResult['branch'] | null;
+  }) => void
 ) {
   const checkpoint = ref<Record<string, any> | null>(null);
   const selectedOptions = ref<string[]>([]);
@@ -268,6 +275,13 @@ export function useCheckpointFlow(
       checkpointPassed.value = r.passed === true;
       // 卡片只报判定（讲解正文归对话区，不再回写进卡片）
       checkpointFeedback.value = r.passed ? '回答正确' : '这道没答对';
+      // 答错就地换题面重答（#50，同 cpId；2026-11-22 走查实锤）：提交响应带回更新后的
+      // 待答检查点（答案键已剥离）。旧卡收起后必须把新卡挂回来——否则新题只剩正文文本，
+      // 学员只能抄题手打答案（绕开代码裁决）或刷新页面等 /detail 恢复。答对/跳过/到顶强消
+      // 时服务端不给该字段，reArmed 为空，保持收卡不动。
+      const reArmed = (r.passed === false && r.checkpoint && session.value === sessionAtSubmit)
+        ? r.checkpoint
+        : null;
       if (session.value === sessionAtSubmit) {
         // 流式路径已在 onJudgement 补过作答气泡；非流式回退（没有 judgement 回调）在这里补，
         // 并等 watcher 把它推进对话流后再落讲解——否则「我的答案」会排在讲解后面。
@@ -286,9 +300,30 @@ export function useCheckpointFlow(
       // 提交成功后服务端已消费该检查点：一律上锁。
       // 答错时旧实现保持可提交（nextAction='review'），用户重交必然 404（走查 P2）
       checkpointSubmitting.value = true;
+      // 契约四件套随提交回合下发（2026-11-22 链路#1 走查实锤）：首答即对后契约卡必须
+      // 当场跳变，而不是等下一条普通消息/刷新才把「独立答对 1/1」送到屏上。
+      if (session.value === sessionAtSubmit && onContractState) {
+        onContractState({
+          lessonContract: r.lessonContract ?? null,
+          lessonReport: r.lessonReport ?? null,
+          exitTicket: r.exitTicket ?? null,
+          branch: r.branch ?? null,
+        });
+      }
       clearDraft();
-      // 流式路径的卡片收起由 onJudgement 的判定窗负责；非流式回退没有 judgement，从这里起算
-      if (!judgementArrived) scheduleCardCollapse();
+      // 流式路径的卡片收起由 onJudgement 的判定窗负责；非流式回退没有 judgement，从这里起算。
+      // 有换题面重答卡时优先挂新卡（清掉可能还在走的判定窗收起 timer）。
+      if (reArmed) {
+        window.clearTimeout(checkpointCloseTimer);
+        checkpoint.value = reArmed;
+        checkpointFeedback.value = '';
+        checkpointPassed.value = false;
+        checkpointSubmitting.value = false;
+        selectedOptions.value = [];
+        answerText.value = '';
+      } else if (!judgementArrived) {
+        scheduleCardCollapse();
+      }
     } catch (e: any) {
       if (isCheckpointAlreadyHandled(e)) {
         // 服务端已消费 / 已作废 / 响应丢失后重试（「理解检查不存在或已处理」= 404 语义）：

@@ -86,6 +86,12 @@ export function resolveSchoolAnchorForTeaching(
  * 起步路径标记：goal 的 `learnerProfile.entryState` 随 normalizedInput 落库，
  * 但教学层此前只投影 pathProgress/taskIntent，课堂拿不到「这条路径是探索起步段」。
  * 这里按与学校锚相同的持久化形态回退读取；无值 → null（课堂行为不变）。
+ *
+ * 2026-11-22 Phase 4 缝隙：澄清契约存在时定帧层把 entryState 置空（身份标签退场），
+ * 落库模板里该键缺席（实测隔离库 6/6 条 2026-11-22 契约路径全部 absent）→ 本函数对
+ * 新契约路径恒返回 null，teaching-turn 的起步段例外（Meno 闸豁免/起步段末课）静默失效。
+ * 调用方（TeachingContextBuilder）需用 resolvePathTopologyForTeaching 派生兜底：
+ * `pathTopology === 'exploratory'` 是契约下课堂唯一的起步段信号。
  */
 export function resolveEntryStateForTeaching(
   aiPromptTemplate: string | null | undefined,
@@ -104,6 +110,22 @@ export function resolveEntryStateForTeaching(
     if (value === 'focused' || value === 'exploratory') return value;
   }
   return null;
+}
+
+/**
+ * 路径拓扑读取（与 entryState 同一持久化形态）：path-planning 把 topology 写进模板顶层
+ * （promptTemplatePayload.pathTopology，2026-11-22 契约下仍持久化——隔离库实测 6/6 非空）。
+ * 契约起步段的 entryState 已退场，拓扑是教学层判定「探索起步段」的权威信号。
+ */
+export function resolvePathTopologyForTeaching(
+  aiPromptTemplate: string | null | undefined,
+): 'exploratory' | 'builder' | 'exam' | 'diagnostic' | null {
+  const parsed = parsePathPromptTemplate(aiPromptTemplate || null);
+  if (!parsed) return null;
+  const value = (parsed as { pathTopology?: unknown }).pathTopology;
+  return value === 'exploratory' || value === 'builder' || value === 'exam' || value === 'diagnostic'
+    ? value
+    : null;
 }
 
 /**

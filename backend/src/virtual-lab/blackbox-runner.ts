@@ -890,6 +890,11 @@ export class BlackboxVirtualLearnerRunner {
         result = control.teachingSessionId
           ? await adapter.endTeaching(control.teachingSessionId, control.teachingRevision, 'abandoned', action.reason)
           : adapter.abandonExperiment(latestObservation?.stage || 'goal', action.reason)
+        // 离场原因透传（外部评审 P1.3）：abandonExperiment 的合成回执只有 abandoned 终态，
+        // satisfied/declining 的差异在这里补进 control（projectPlatformResult 落库前）。
+        if (action.exitReason) {
+          result = { ...result, control: { ...result.control, learnerExitReason: action.exitReason } }
+        }
       } else if (!control.conversationId) {
         if (action.type !== 'chat') {
           throw new BlackboxRunStateError('Blackbox Goal 首轮必须使用 chat 动作', 'BLACKBOX_FIRST_ACTION_INVALID')
@@ -1050,6 +1055,26 @@ export class BlackboxVirtualLearnerRunner {
           snapshot,
           'goal'
         )
+        // 离场优先于一切后续动作（外部评审 P1.3）：Goal 支线此前不消费模拟器的 shouldEnd，
+        // 学习者明确告别后仍被下一轮 step 继续驱动。教学支线已有同款处理（learner-exited:…）。
+        // 离场且 readyToAdvance 同真时也按离场走——真人说了再见就不会再确认方案。
+        if (output?.shouldEnd === true && latest.availableActions.includes('abandon')) {
+          const exitReason = typeof output.endReason === 'string' && output.endReason.trim()
+            ? output.endReason.trim().slice(0, 40)
+            : 'other'
+          await this.persistPrivateState(session, state, 'goal', output.learnerState, {
+            emotion: output.emotion,
+            degraded: output.degraded,
+            visibleSignal: output.debug?.visibleSignal,
+            stateChangeReason: output.debug?.stateChangeReason
+          })
+          action = {
+            type: 'abandon',
+            reason: `learner-exited:${exitReason}:${String(output.reply || '').slice(0, 80)}`,
+            exitReason
+          }
+          return { action, result: await this.act(sessionId, operatorId, action) }
+        }
         const shouldConfirm = latest.availableActions.includes('confirm_proposal') && output?.learnerState?.readyToAdvance === true
         // C1（2026-11-21）：确认时把前置自测作答一起提交。题目在上一轮观测的旁路诊断里
         // （platform-user-adapter 从 confirmedProposal 抽取，含判分键，不回流学习者）；

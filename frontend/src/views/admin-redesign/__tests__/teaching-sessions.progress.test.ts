@@ -366,7 +366,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(options).toContain('失败（2）');
     expect(options).toContain('已完成（1）');
     expect(options).toContain('超时（0）');
-    expect(options).toContain('异常（失败 · 超时）（2）');
+    expect(options).toContain('异常（失败 · 收尾失败 · 超时）（2）');
     // 选中一档后计数不变（仍按未筛窗口）
     await chooseFilter(wrapper as never, '状态', '失败');
     expect(filterOptions(wrapper as never, '状态')).toContain('已完成（1）');
@@ -596,7 +596,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 2026-11-02 P2-1：每档带当前窗口的条数（与 KPI 同源；本夹具两行：failed / active 各 1）
     expect(filterOptions(wrapper as never, '状态')).toEqual([
       '全部',
-      '异常（失败 · 超时）（1）',
+      '异常（失败 · 收尾失败 · 超时）（1）',
       '初始化中（0）',
       '进行中（1）',
       '已暂停（0）',

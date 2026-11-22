@@ -100,7 +100,6 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'POST', pattern: /^\/api\/admin\/prompt-lab\/compile-core$/, action: 'prompt-compile-core' },
   { method: 'POST', pattern: /^\/api\/admin\/prompt-lab\/publish-core$/, action: 'prompt-publish-core' },
   { method: 'POST', pattern: /^\/api\/admin\/prompt-workbench\/compile-core$/, action: 'prompt-compile-core' },
-  { method: 'POST', pattern: /^\/api\/admin\/skill-author\/draft$/, action: 'skill-author-draft' },
   { method: 'POST', pattern: /^\/api\/admin\/achievements\/grant$/, action: 'achievement-grant', targetType: 'user' },
   // 低频但会在审计里出现的虚拟学习者/配置类接口：补齐语义名，避免动作列显示原始 HTTP 串
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/draft-profile$/, action: 'virtual-draft-profile', targetType: 'virtual-learner' },

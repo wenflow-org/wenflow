@@ -19,7 +19,7 @@ inputs:
   - name: preferredLevels
     type: string[]
     ref: sandbox:simulation.preferredLevels
-    desc: 偏好水平档位
+    desc: 偏好水平档位（词表 beginner|intermediate|advanced，来自学习者档案 knowledgeLevel；导入卡缺省 beginner）
   - name: preferredMotivations
     type: string[]
     ref: sandbox:simulation.preferredMotivations

@@ -124,7 +124,8 @@
                就在哪根上得到答案，卡头不必替图表说话。 -->
           <div class="tc-card-head__main">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
-            <span class="mk-card__meta">单位：Token</span>
+            <!-- 窗口含起点整日，柱数 = 天数 + 1（后端按本地日聚合，2026-11-22 审计 P3 披露） -->
+            <span class="mk-card__meta">单位：Token · 含窗口起点当日</span>
           </div>
           <div class="tc-head-links">
             <button type="button" class="mk-link" @click="goOverview">前往平台总览 →</button>
@@ -238,7 +239,9 @@
               <span class="mk-card__meta">全部账号 · 含虚拟学习者</span>
               <!-- D13：中小用户此前不可见——加按 用户ID/昵称/邮箱 的服务端搜索（不改动 summary/趋势） -->
               <MkFilterSearch v-model="userQuery" placeholder="搜索用户 ID / 昵称 / 邮箱" />
-              <span class="mk-card__meta">{{ byUserStale ? `上次结果 ${byUser.length}` : userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}</span>
+              <!-- 2026-11-22 审计 P3：服务端 100 条封顶，命中满额时「匹配 100」会被读成
+                   精确总数，改「匹配 100+」 -->
+              <span class="mk-card__meta">{{ byUserStale ? `上次结果 ${byUser.length}` : userQuery ? (byUser.length >= userFetchLimit ? `匹配 ${byUser.length}+` : `匹配 ${byUser.length}`) : `Top ${byUser.length}` }}</span>
               <!-- G8（2026-10-10）：搜索失败静默保留旧列表时的行内 stale 提示——此前失败无任何反馈，
                    meta「匹配 N」仍按输入框实时读数，与表格脱源（N 是旧结果的行数）。对齐 Skills.vue
                    liveSkillsError 行内告警判例：辅助数据失败不弹遮主表的 toast，但必须指认数据来源 -->
@@ -553,7 +556,12 @@ function exportCsv() {
         typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens), costSharePct(r.usd)].join(',')),
     '',
     '[用户用量排行]',
-    /* 表头已改「Token 占比」（成本另列），导出同步写全口径，避免同名列跨表不同义 */
+    /* 表头已改「Token 占比」（成本另列），导出同步写全口径，避免同名列跨表不同义。
+       2026-11-22 审计 P3：搜索失败时本段是默认 Top 榜而非搜索结果——CSV 自带数据来源
+       标注，防止「旧结果」被当目标数据带进决策。 */
+    ...(byUserStale.value
+      ? [`# 注：用户搜索失败，本段为默认 Top ${byUser.value.length} 榜（非搜索结果）`]
+      : []),
     '用户,邮箱,调用,失败,Token,成本USD,Token占比%',
     ...byUser.value.map((r) =>
       [esc(r.display), esc(r.email || ''), r.calls, r.failed, r.tokens,

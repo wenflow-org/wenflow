@@ -101,6 +101,20 @@ export const EXEMPT_PLATFORM_ROOTS: ExemptRootSpec[] = [
     note: 'KC 依赖图由后端从 conceptKcs.prerequisiteKCs 派生（2026-11-18），模型不再输出；core fields 不再声明，属于平台派生字段',
   },
   {
+    root: 'score',
+    kind: 'platform',
+    coreAliases: [],
+    evidence: 'src/skills/path-reviewer/contract.ts computePathReviewScore',
+    note: '评审加权参考分由平台按五维档位锚点确定性重算（2026-11-22 档位制），模型不再输出；core fields 只声明 issues/dimensions/replanInstructions',
+  },
+  {
+    root: 'passed',
+    kind: 'platform',
+    coreAliases: [],
+    evidence: 'src/skills/path-reviewer/contract.ts computePathReviewNeedsReplan',
+    note: '评审通过判定由平台合取闸判定（加权分 ∨ severity=high 红线 ∨ fail 档，2026-11-22），模型不再输出',
+  },
+  {
     root: 'path',
     kind: 'wrapper',
     coreAliases: ['name', 'summary', 'totalMilestones'],

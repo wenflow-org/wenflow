@@ -33,17 +33,12 @@
         <section v-if="lifecycle && lifecycle.phase !== 'ready'" class="genbar card" :class="`genbar--${lifecycleFailed ? 'failed' : 'working'}`">
           <template v-if="lifecycleFailed">
             <div class="genbar__text">
-              <strong>{{ lifecycle.retryType === 'stage_design' ? '课程准备失败' : '路径生成失败' }}</strong>
-              <!-- 保留语义对齐（paths/xiaomi/1）：后端重排/重试保留的是已完成任务与学习进度
-                   （preserveCompletedTasks/preserveCoreTasks），标题与描述会被重新生成——
-                   旧句「目标和已确认信息已保留」与事实不符（走查实证标题被改写）；
-                   也不承诺「一般能成功」，只说状态与动作（仓库文案口径） -->
-              <p v-if="canLearn">已就绪的阶段可以继续学习；{{ lifecycle.errorMessage || '后续阶段准备失败，可以重试。' }}</p>
-              <p v-else>{{ lifecycle.errorMessage || '已完成的学习进度会保留，可以重试。' }}</p>
+              <strong>{{ retryCopy.title }}</strong>
+              <p><template v-if="canLearn">已就绪的阶段可以继续学习。</template>{{ retryCopy.reason }}</p>
             </div>
             <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
               <span v-if="retrying" class="spinner spinner--sm"></span>
-              {{ retrying ? '正在重新生成…' : (lifecycle.retryType === 'stage_design' ? '重新准备课程' : '重新生成路径') }}
+              {{ retrying ? retryCopy.pending : retryCopy.action }}
             </button>
           </template>
           <template v-else>
@@ -86,7 +81,7 @@
               <span v-if="lifecyclePreparing && !lifecycleFailed" class="metric"><b>准备中</b>课程与任务</span>
               <template v-else-if="!lifecyclePreparing">
                 <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
-                <span class="metric" :title="`已生成 ${lessonCount} 节课，合计约 ${preparedHours} 小时；整条路径计划约 ${path.estimatedHours} 小时`"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${preparedHours} 小时` : '—' }}</b>已备好</span>
+                <span class="metric" :title="`已生成 ${lessonCount} 节课，合计约 ${preparedHours} 小时。整条路径计划约 ${path.estimatedHours} 小时`"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${preparedHours} 小时` : '—' }}</b>已备好</span>
               </template>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
               <span v-if="designActive && canLearn" class="metric"><b>后续</b>课程正在准备</span>
@@ -173,7 +168,7 @@
                   <input v-model="coreOnly" type="checkbox" />
                   <span>⏱ 时间紧，只看核心主干</span>
                 </label>
-                <small v-if="coreOnly" class="stages__toolbar-note">已隐藏 {{ hiddenFlexibleCount }} 节可跳过课</small>
+                <small v-if="coreOnly" class="stages__toolbar-note">已隐藏 {{ hiddenFlexibleCount }} 节课，仅筛选显示，不改变学习安排与完成要求</small>
               </span>
             </div>
             <section v-if="!stages.length" class="stages__empty card">
@@ -692,8 +687,8 @@
               </button>
             </div>
             <p v-if="!adjustText.trim() && !adjusting" class="adjust-form__hint">
-              <template v-if="adjustMode === 'rebuild'">不写也行：直接按原目标重排；想定向调整就写几句。</template>
-              <template v-else>先写几句想怎么调整；点「{{ adjustConfirmText }}」继续。</template>
+              <template v-if="adjustMode === 'rebuild'">不写也行：直接按原目标重排。想定向调整就写几句。</template>
+              <template v-else>先写几句想怎么调整，点「{{ adjustConfirmText }}」继续。</template>
             </p>
             <!-- 回退保障句跟随真实能力（paths/iphone/2）：AI 重排会留存快照 → 承诺成立并给
                  就地入口（此前入口只挂 hero，审计全 UI 搜索不到「回退」）；无快照（如仅做过
@@ -761,7 +756,7 @@ import { dedupeMaterialRefs, normalizeMaterialMarkdown } from '@/utils/materialT
 import { plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { pickCurrentTask } from '@/composables/useCurrentTask';
-import { buildGenerationProgress, isDesignPollingActive } from './learningPathProgress';
+import { buildGenerationProgress, buildGenerationRetryCopy, isDesignPollingActive } from './learningPathProgress';
 import {
   adjustEntryAllowedByPolicy,
   adjustPolicyBlockReason,
@@ -1148,6 +1143,7 @@ async function pollOnce() {
   schedulePoll();
 }
 
+const retryCopy = computed(() => buildGenerationRetryCopy(lifecycle.value?.retryType, lifecycle.value?.errorMessage));
 async function doRetry() {
   if (retrying.value || !lifecycle.value) return;
   retrying.value = true;
@@ -1157,10 +1153,11 @@ async function doRetry() {
     } else {
       await learningAPI.retryPathGeneration(pathId.value);
     }
+    toast.info(retryCopy.value.submitted);
     lifecycle.value = { ...lifecycle.value, status: 'processing' };
     schedulePoll();
   } catch {
-    toast.error('重新生成失败，请稍后再试');
+    toast.error(retryCopy.value.submitError);
   } finally {
     retrying.value = false;
   }
@@ -1283,7 +1280,7 @@ const adjustDialogDesc = computed(() => {
 
 const adjustPlaceholder = computed(() => {
   if (adjustMode.value === 'rebuild') return '例如：排得太短、太偏理论，我想多安排实操。';
-  if (adjustMode.value === 'reshape') return '例如：第二阶段太难，想先补基础；或从第 3 阶段起多安排实操。';
+  if (adjustMode.value === 'reshape') return '例如：第二阶段太难，想先补基础，或从第 3 阶段起多安排实操。';
   if (adjustMode.value === 'auto') return '例如：最近学得吃力，卡在……。先帮我看看怎么调。';
   return '说说你想怎么调整……';
 });
@@ -1761,9 +1758,10 @@ const preparedHours = computed(() => (preparedMinutes.value > 0
   ? Math.max(0.1, Math.round(preparedMinutes.value / 6) / 10)
   : 0));
 const hasFlexibleTasks = computed(() => allTasks.value.some((t) => t.adjustability === 'flexible'));
-const hiddenFlexibleCount = computed(() => (coreOnly.value
-  ? allTasks.value.filter((t) => t.adjustability === 'flexible').length
-  : 0));
+const hiddenFlexibleCount = computed(() => stages.value.reduce(
+  (sum, stage) => sum + stageTasks(stage).length - displayStageTasks(stage).length,
+  0,
+));
 const finalDeliverable = computed(() => {
   // 2026-11-20：顶栏「走完会拿到」要读末阶段 goal，而不是 goal 层最初确认的
   // firstDeliverable——后者是路径级最早可见成果，路径生成后可能与末阶段验收脱节

@@ -195,8 +195,11 @@
         <div class="mk-card__head">
           <span class="mk-card__title">待处理事项</span>
           <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源；
-               只写在 title，不占可见行。卡头不挂条数徽章（2026-10-22 用户「右上角的 4 不要」）。 -->
-          <span class="mk-card__meta">近 7 天</span>
+               只写在 title，不占可见行。卡头不挂条数徽章（2026-10-22 用户「右上角的 4 不要」）。
+               2026-11-22 审计：原「近 7 天」以偏概全——卡内混有健康检查（无时间窗）、
+               仿真状态（全量）、今日失败（今日窗）条目，不再标单一窗口（完整范围在各
+               条目的悬停说明里，不在此处复述触发方式）。 -->
+          <span class="mk-card__meta">各事项统计范围不同</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
@@ -279,11 +282,24 @@
           <span class="mk-card__meta">近 24h</span>
         </div>
         <div class="ov-card__body">
+          <!-- 2026-11-22 审计 P2：动态域取数失败曾吞成空 feed 渲染「近 24h 暂无动态」假空态
+               （待办卡可能同时报着失败数，同屏两种结论）。失败是错误事实，先给错误空态。 -->
+          <MkEmptyState
+            v-if="data.feedFailed && !feedRows.length"
+            class="ov-card__empty"
+            tone="error"
+            title="动态读取失败"
+            description="近 24 小时的动态没有读到，不代表没有事件发生。"
+            action-text="重试"
+            @action="retryOverview"
+          >
+            <template #icon><Inbox :size="22" :stroke-width="1.7" aria-hidden="true" /></template>
+          </MkEmptyState>
           <!-- 2026-10-24 用户「最近事件设计有问题」：此前 feed 容器无条件渲染并 flex:1 撑满，
                0 行时那条「暂无动态」小字被顶到卡片最底部（卡头之下两百多像素空白）。
                现改为有事件才渲染 feed 容器，无事件走卡内居中空态（骨架：图标 + 为什么空 + 下一步）。 -->
           <div
-            v-if="feedRows.length"
+            v-else-if="feedRows.length"
             ref="feedRef"
             class="feed feed--capped"
             :class="{ 'feed--capped--overflow': feedOverflow }"
@@ -697,9 +713,12 @@ const allZeroActive = computed(
 const healthCheck = ref<{ total: number; warn: number; error: number } | null>(null);
 const healthState = ref<'loading' | 'ready' | 'error' | 'empty'>('loading');
 
-/** 今日失败数：读同屏「今日成功率」KPI 的 foot（唯一已发布读数），不另造一份计数。
-    按稳定 key 取，展示名改文案不会让这里静默变 0（旧夹具无 key 时按标签兜底）。 */
+/** 今日失败数：读 live 层结构化下发的 `todayFailed`（2026-11-22 拆雷）——原实现用正则
+    解析「今日成功率」KPI foot 的 `失败 N` 文案，改措辞待办行就无声归 0 且不报错。
+    正则仅作旧快照/演示夹具（未带结构化字段）的兜底，主路径不再依赖文案。 */
 const todayFailed = computed(() => {
+  const structured = data.value?.todayFailed
+  if (typeof structured === 'number') return structured
   const kpi = data.value?.kpis?.find((k) => k.key === 'todaySuccessRate')
     ?? data.value?.kpis?.find((k) => k.label === '今日成功率')
   const m = /失败\s*(\d+)/.exec(kpi?.foot || '')

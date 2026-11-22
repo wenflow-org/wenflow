@@ -7,13 +7,12 @@ import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapt
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import {
   PATH_REVIEW_DIMENSION_KEYS,
-  PATH_REVIEW_PASS_THRESHOLD,
   computePathReviewScore,
   validatePathReviewOutput,
   type PathReviewDimensions,
 } from './contract';
 
-export { PATH_REVIEW_PASS_THRESHOLD } from './contract';
+export { PATH_REVIEW_PASS_THRESHOLD, computePathReviewNeedsReplan } from './contract';
 
 // File-as-Truth：systemPrompt 以 prompts/skill.path-reviewer.md 为唯一事实源
 export const PATH_REVIEWER_PROMPT = loadPromptFile('skill:path-reviewer')?.systemPrompt || '';
@@ -63,7 +62,8 @@ function normalizeIssues(raw: any): Array<{ dimension: string; severity: string;
 }
 
 /**
- * 归一化前校验：五个维度必须齐全且在 [0,1]，低分必须带返工指令。
+ * 归一化前校验：五个维度必须齐全（档位 strong|adequate|weak|fail，兼容旧 0-1 数字），
+ * needsReplan（加权分不达标 ∨ severity=high ∨ fail 档）时必须带返工指令。
  * 失败即抛（callPrompt 会按 retryStrategy 重试）；重试耗尽后调用方记「证据不足」。
  */
 export function validatePathReviewerOutput(parsed: any) {
@@ -109,8 +109,9 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
           score: finalScore,
           dimensions: dims,
           issues: normalizeIssues(parsed?.issues),
-          // #172-6①：passed 与 score 同源——用确定性重算的 finalScore 判定，不再采信模型自报的 passed。
-          passed: finalScore >= PATH_REVIEW_PASS_THRESHOLD,
+          // #172-6① + 2026-11-22 合取闸：passed 由平台确定性判定（加权分 + severity=high
+          // 结构红线 + fail 档三合一，见 contract.ts），不采信模型自报 passed/score。
+          passed: !verdict.needsReplan,
           replanInstructions: typeof parsed?.replanInstructions === 'string' ? parsed.replanInstructions.trim() : null,
         };
       },
@@ -126,7 +127,7 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
       }),
       retryStrategy: {
         maxAttempts: 2,
-        onValidationFail: ({ failureReason }) => `请只输出一个路径评审 JSON 对象，必须包含 dimensions（clarity/integrity/depth/practicality/pertinence 五项 0-1 数字）、score、issues、passed 字段；总分 < 0.75 时必须给出具体 replanInstructions。上次失败原因：${failureReason}`,
+        onValidationFail: ({ failureReason }) => `请只输出一个路径评审 JSON 对象：dimensions 五维（clarity/integrity/depth/practicality/pertinence）各填 strong|adequate|weak|fail 档位（不要小数分数），先在 issues 里列具体缺陷（含 severity/dimension/description/suggestion）再定档；存在 severity=high 缺陷、或五维出现任意 fail/weak 档位、或加权分不达 0.75 时必须给出具体 replanInstructions。上次失败原因：${failureReason}`,
       },
     }, input);
 
@@ -145,9 +146,10 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
         score: finalScore,
         dimensions,
         issues: result.output.issues,
-        // #172-6①：passed 与 score 同源——用确定性重算的 finalScore 判定，不再采信模型自报的 passed。
-        // 模型若自报 passed=true 但 finalScore<0.75，这里照样判未通过。
-        passed: finalScore >= PATH_REVIEW_PASS_THRESHOLD,
+        // #172-6① + 2026-11-22 合取闸：passed 沿用 normalizeOutput 的确定性判定
+        // （加权分 ∨ severity=high ∨ fail 档）——分数可复算，fail 档信息只在归一化层可得，
+        // 这里不再用纯阈值重判，否则合取闸会被稀释。
+        passed: result.output.passed,
         replanInstructions: result.output.replanInstructions,
         runtimeEnvelope: result.runtimeEnvelope,
         _debug: {

@@ -67,7 +67,7 @@ describe('buildGenerationProgress · 渐进式', () => {
       { phase: 'stage_design', status: 'processing', canStartLearning: true, completedStages: 2, totalStages: 5, heartbeatAt: ago(220_000) },
       NOW
     );
-    expect(copy.secondary).toBe('已就绪的课程可以继续学习；后续设计最近一次进展在 3 分 40 秒 前。');
+    expect(copy.secondary).toBe('已就绪的课程可以继续学习。后续设计最近一次进展在 3 分 40 秒 前。');
     expect(copy.secondary).not.toContain('已等待');
   });
 });

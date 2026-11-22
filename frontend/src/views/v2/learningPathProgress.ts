@@ -39,6 +39,25 @@ export function isDesignPollingActive(lifecycle: GenerationLifecycleLike | null 
     && (lifecycle.status === 'queued' || lifecycle.status === 'processing');
 }
 
+/** 重试动作按实际失败类型命名；提交成功只表示请求已接收。 */
+export function buildGenerationRetryCopy(retryType?: string | null, errorMessage?: string | null) {
+  const courses = retryType === 'stage_design';
+  const title = courses ? '课程准备失败' : '路径生成失败';
+  const action = courses ? '重新准备课程' : '重新生成路径';
+  const error = String(errorMessage || '').trim();
+  const reason = !error || error === '学习路径生成失败，请先重新生成路径。'
+    ? `${title}，可以${action}。已完成的学习进度会保留。`
+    : error;
+  return {
+    title,
+    action,
+    pending: courses ? '正在提交课程准备…' : '正在提交路径生成…',
+    submitted: courses ? '已提交课程准备请求，正在处理…' : '已提交路径生成请求，正在处理…',
+    submitError: courses ? '课程准备请求提交失败，请稍后再试' : '路径生成请求提交失败，请稍后再试',
+    reason,
+  };
+}
+
 export interface GenerationProgressCopy {
   primary: string;
   secondary: string;
@@ -119,7 +138,7 @@ export function buildGenerationProgress(
   // 不能写成「已等待 X」（那是整场生成的时长，会被读者当成同一件事）。
   const secondary = lifecycle.canStartLearning === true
     ? (age !== null && age > HEARTBEAT_NOTICE_MS && waited
-      ? `已就绪的课程可以继续学习；后续设计最近一次进展在 ${waited} 前。`
+      ? `已就绪的课程可以继续学习。后续设计最近一次进展在 ${waited} 前。`
       : '已就绪的课程可以继续学习，后续阶段会在后台补齐。')
     : (age !== null && age > HEARTBEAT_NOTICE_MS && waited
       ? `最近一次进展在 ${waited} 前，仍在生成。`

@@ -4,7 +4,7 @@ jest.mock('../../composers/prompt-composer', () => ({
   callPrompt: mockCallPrompt,
 }))
 
-import { auxSkillHandlers } from '../v4-aux-skills'
+import { auxSkillHandlers, auxRetiredSkillHandlers } from '../v4-aux-skills'
 
 /**
  * 回归：aux skill 的**生成参数**（model/temperature/maxTokens）是传输层旋钮，不是业务字段。
@@ -24,11 +24,14 @@ describe('aux 生成参数不混入载荷', () => {
     })
   })
 
+  // 2026-11-22 元技能清理：skill-author/skill-compiler 已退役，夹具换 triage-judge
+  // （退役可执行面 auxRetiredSkillHandlers——eval/replay 直调同通道；白名单透传：
+  //   buildUserPayload 只挑 request/context/background 三个业务字段）
   it('model/temperature/maxTokens 提升为调用点覆盖，并从载荷里剥掉', async () => {
-    await auxSkillHandlers['skill-compiler']({
-      systemPrompt: 'S',
-      requiredFieldIds: ['a'],
-      testUserPrompt: '{}',
+    await auxRetiredSkillHandlers['triage-judge']({
+      request: 'R',
+      context: 'C',
+      background: 'B',
       model: 'frozen-model',
       temperature: 0.15,
       maxTokens: 321,
@@ -44,37 +47,38 @@ describe('aux 生成参数不混入载荷', () => {
       maxTokens: 321,
     })
 
-    // 载荷里不得再出现这三个键（buildUserPayload 是恒等透传，故从 domain 剥掉即可）
+    // 载荷里不得再出现这三个键（生成参数从 domain 剥掉后才进 buildUserPayload）
     const payload = spec.buildUserPayload({}, {}) as Record<string, unknown>
     expect(payload).not.toHaveProperty('model')
     expect(payload).not.toHaveProperty('temperature')
     expect(payload).not.toHaveProperty('maxTokens')
     // 真正的业务输入仍在
-    expect(payload).toMatchObject({ systemPrompt: 'S', requiredFieldIds: ['a'], testUserPrompt: '{}' })
+    expect(payload).toMatchObject({ request: 'R', context: 'C', background: 'B' })
   })
 
   it('未传生成参数时不产生 generationOverride（行为同改造前）', async () => {
-    await auxSkillHandlers['skill-compiler']({
-      systemPrompt: 'S',
-      requiredFieldIds: [],
-      testUserPrompt: '{}',
+    await auxRetiredSkillHandlers['triage-judge']({
+      request: 'R',
+      context: 'C',
+      background: 'B',
     })
 
     const [, , context] = mockCallPrompt.mock.calls[0] as any[]
     expect(context).not.toHaveProperty('generationOverride')
   })
 
-  it('只剥这三个生成参数，其余业务字段原样保留', async () => {
-    await auxSkillHandlers['skill-compiler']({
-      systemPrompt: 'S',
-      requiredFieldIds: ['a'],
-      testUserPrompt: '{}',
+  it('只剥这三个生成参数，额外键不混入载荷、业务字段原样保留', async () => {
+    await auxRetiredSkillHandlers['triage-judge']({
+      request: 'R',
+      context: 'C',
+      background: 'B',
       maxTokens: 100,
-      authorNote: '业务字段，必须保留',
+      authorNote: '额外键，白名单外不得泄漏',
     })
     const [spec] = mockCallPrompt.mock.calls[0] as any[]
     const payload = spec.buildUserPayload({}, {}) as Record<string, unknown>
     expect(payload).not.toHaveProperty('maxTokens')
-    expect(payload.authorNote).toBe('业务字段，必须保留')
+    expect(payload).not.toHaveProperty('authorNote')
+    expect(payload).toMatchObject({ request: 'R', context: 'C', background: 'B' })
   })
 })

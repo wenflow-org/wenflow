@@ -1003,12 +1003,27 @@ export async function processStudentMessage(
   const completionSignal = rawCompletionSignal || exitTicketJustPassed;
   // 课堂契约证据账本（2026-11-19）：只认已通过的检查点 + 课末终检 + 看板掌握；
   // 独立证据要求代码裁决且首答正确。本回合刚提交的检查点尚未写入 checkpointHistory，这里显式并入。
-  const currentCheckpointRows = (options.checkpointId && submittedCheckpoint && options.checkpointJudgement)
+  // 同一份作答元数据用于当轮契约和随后持久化的历史，避免重答在当轮被误算为首答。
+  const submittedConceptFallback = submittedCheckpoint && !submittedCheckpoint.conceptName
+    ? resolveCheckpointConceptAttribution(mergedKnowledge[mergedKnowledge.length - 1]?.name || '')
+    : null;
+  const checkpointAttempt = submittedCheckpoint ? {
+    checkpointId: submittedCheckpoint.id,
+    submittedAt: new Date().toISOString(),
+    attempts: (Array.isArray(previousTeachingState.checkpointHistory)
+      ? previousTeachingState.checkpointHistory.filter((row) => row?.checkpointId === submittedCheckpoint.id).length
+      : 0) + 1,
+    ...(submittedCheckpoint.conceptName || submittedConceptFallback?.conceptName
+      ? { conceptName: submittedCheckpoint.conceptName || submittedConceptFallback?.conceptName } : {}),
+    ...(submittedCheckpoint.conceptKey || submittedConceptFallback?.conceptKey
+      ? { conceptKey: submittedCheckpoint.conceptKey || submittedConceptFallback?.conceptKey } : {}),
+    ...(submittedCheckpoint.answerAlreadyGiven === true ? { answerAlreadyGiven: true as const } : {}),
+  } : null;
+  const currentCheckpointRows = (options.checkpointId && checkpointAttempt && options.checkpointJudgement)
     ? [{
-        conceptName: submittedCheckpoint.conceptName ?? null,
+        ...checkpointAttempt,
         passed: options.checkpointJudgement.passed === true,
         judgedBy: options.checkpointJudgement.judgedBy,
-        attempts: 1,
       }]
     : [];
   const lessonEvidence = collectLessonEvidence({
@@ -2223,24 +2238,10 @@ export async function processStudentMessage(
       const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
         ? [...teachingState.checkpointHistory]
         : [];
-      // 提交时归属兜底（2026-11-11）：pending 可能产生于本次修复前（无 conceptName），
-      // 用当前合并看板最后一个点补进 history——否则单焦点守门员永远匹配不到这道题。
-      const submittedConceptFallback = submittedCheckpoint.conceptName
-        ? null
-        : resolveCheckpointConceptAttribution(
-          Array.isArray(mergedKnowledge) && mergedKnowledge.length
-            ? mergedKnowledge[mergedKnowledge.length - 1]?.name
-            : ''
-        );
-      const historyConceptName = submittedCheckpoint.conceptName || submittedConceptFallback?.conceptName;
-      const historyConceptKey = submittedCheckpoint.conceptKey || submittedConceptFallback?.conceptKey;
-      // 同一 cpId 的累计作答次数（含本次）：既驱动重答上限，也写进 history 行，
-      // 让收束门禁（evaluateSessionClosable）能判断「最后一道题还有没有重答机会」。
-      const sameCheckpointAttempts = checkpointHistory.filter(
-        (row) => row?.checkpointId === submittedCheckpoint.id
-      ).length + 1;
+      // 与当轮契约复用作答次数、归属和复述标记；次数同时驱动重答上限。
+      const sameCheckpointAttempts = checkpointAttempt!.attempts;
       checkpointHistory.push({
-        checkpointId: submittedCheckpoint.id,
+        ...checkpointAttempt!,
         // title/type 一并留档（2026-09-17）：此前只记 id/passed，读侧无法知道"没通过的是什么题"
         title: submittedCheckpoint.title,
         type: submittedCheckpoint.type,
@@ -2259,18 +2260,9 @@ export async function processStudentMessage(
         ...(options.checkpointSubmission?.selectedOptionIds?.length
           ? { selectedOptionIds: options.checkpointSubmission.selectedOptionIds.map(String) }
           : {}),
-        submittedAt: new Date().toISOString(),
         passed,
-        attempts: sameCheckpointAttempts,
         judgedBy,
         understanding,
-        // 概念归属（F1 修复轮 a/b）：掌握聚合仲裁按归属概念消费 code 负证据——
-        // 无归属的存量检查点（修复前发出的 pending）不带这两字段，聚合侧不误伤
-        ...(historyConceptName ? { conceptName: historyConceptName } : {}),
-        ...(historyConceptKey ? { conceptKey: historyConceptKey } : {}),
-        // 复述问标记随行（修复批 4）：出题时代码判定过「答案键已在教师内容里逐字出现」，
-        // 提交后落到 history，下一题出题门槛据此判断「上一问是否复述型」（缺省即非复述）。
-        ...(submittedCheckpoint.answerAlreadyGiven === true ? { answerAlreadyGiven: true as const } : {}),
       });
 
       // #96 阈值拟合前置：在判分前解析系统对「该概念已掌握」的预测（ktEstimate 优先，

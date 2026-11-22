@@ -9,7 +9,7 @@
  * 本测试锁 `resolveSchoolAnchorForTeaching` 的读侧契约：三种持久化形态都能取到、
  * 空模板返回 null（键缺省、课堂行为不变）。
  */
-import { resolveEntryStateForTeaching, resolveSchoolAnchorForTeaching } from '../TeachingContextBuilder';
+import { resolveEntryStateForTeaching, resolvePathTopologyForTeaching, resolveSchoolAnchorForTeaching } from '../TeachingContextBuilder';
 
 const makeTemplate = (normalizedInput: Record<string, unknown>) => JSON.stringify({
   sceneFraming: { normalizedInput },
@@ -77,5 +77,22 @@ describe('resolveEntryStateForTeaching · 起步路径标记读侧', () => {
     expect(resolveEntryStateForTeaching(makeTemplate({ learnerProfile: { entryState: 'other' } }))).toBeNull();
     expect(resolveEntryStateForTeaching(null)).toBeNull();
     expect(resolveEntryStateForTeaching('not-json')).toBeNull();
+  });
+
+  it('Phase 4 缝隙：契约下落库 entryState 缺席，拓扑 exploratory 派生兜底（2026-11-22）', () => {
+    // 契约路径落库模板：learnerProfile.entryState 不存在（定帧层置空），只有顶层 pathTopology
+    const t = JSON.stringify({ normalizedInput: { learnerProfile: {} }, pathTopology: 'exploratory' });
+    expect(resolveEntryStateForTeaching(t)).toBeNull();
+    expect(resolvePathTopologyForTeaching(t)).toBe('exploratory');
+  });
+
+  it('resolvePathTopologyForTeaching：四档合法值透传、非法/缺失 → null', () => {
+    expect(resolvePathTopologyForTeaching(JSON.stringify({ pathTopology: 'builder' }))).toBe('builder');
+    expect(resolvePathTopologyForTeaching(JSON.stringify({ pathTopology: 'exam' }))).toBe('exam');
+    expect(resolvePathTopologyForTeaching(JSON.stringify({ pathTopology: 'diagnostic' }))).toBe('diagnostic');
+    expect(resolvePathTopologyForTeaching(JSON.stringify({ pathTopology: 'other' }))).toBeNull();
+    expect(resolvePathTopologyForTeaching(JSON.stringify({}))).toBeNull();
+    expect(resolvePathTopologyForTeaching(null)).toBeNull();
+    expect(resolvePathTopologyForTeaching('not-json')).toBeNull();
   });
 });

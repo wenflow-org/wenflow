@@ -697,7 +697,10 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     ...(memoryRecall.length ? { memoryRecall } : {}),
     friction: {
       budget: friction.budget,
-      triggerProbability: friction.triggered ? 1 : 0,
+      // triggerProbability 不下发（2026-11-22 字段联动审查）：该名在共享层是「预算基率」
+      //（0.15/0.3/…），此前这里装的是采样结果 0|1——同名字段双义，且提示词输入契约
+      //（simulation-learn-turn.yaml inputs.friction）只声明 budget/triggered/guidance。
+      // 是否触发看 triggered，怎么演看 guidance，模型不需要概率数字。
       triggered: friction.triggered,
       guidance: friction.guidance
     },

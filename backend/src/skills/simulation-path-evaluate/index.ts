@@ -223,27 +223,23 @@ function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
     pathProposal: input.pathProposal || {},
     friction: {
       budget: friction.budget,
-      triggerProbability: friction.triggered ? 1 : 0,
+      // triggerProbability 不下发（2026-11-22 字段联动审查，同 learn-turn）：该名在共享层
+      // 是「预算基率」，这里此前装的是采样结果 0|1——同名双义；yaml 输入契约只声明
+      // budget/triggered/guidance。是否触发看 triggered，怎么演看 guidance。
       triggered: friction.triggered,
       guidance: friction.guidance
     },
-    personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
-    task: {
-      mode: 'evaluate-virtual-learner-path-fit',
-      requirements: [
-        'evaluate path fit only from the learner perspective',
-        'if the path is mostly right but needs adjustment, prefer modify over reject',
-        'only expose learner-visible reaction to the platform',
-        'apply friction.guidance to calibrate how much resistance/concern this reaction expresses',
-        'let personaAnchorHint fields implicitly steer reaction style'
-      ]
-    }
+    personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT
+    // 2026-11-22 字段联动审查（对齐 learn-turn 2026-11-08 先例）：删掉整键 `task`——
+    // 它只装 5 条英文 requirements，提示词（simulation-path-evaluate.yaml）rules 53-60
+    // 全部有且更详细；其中 "apply friction.guidance to calibrate how much resistance…"
+    // 是旧语义（模型自行把握对抗强度），与编排层采样出的 friction.triggered 双权威打架。
+    // 且本 skill 的 yaml inputs 从未声明过 task，键纯无据。
   };
 
   // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块前置，逐次变化块后置
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
-      task: body.task,
       personaAnchorHint: body.personaAnchorHint,
       goalState: body.goalState,
       learner: body.learner,

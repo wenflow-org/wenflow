@@ -21,9 +21,9 @@
 
 import type { Component } from 'vue'
 import {
-  Activity, BookOpen, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
-  Megaphone, MessagesSquare, Puzzle, Route, ScrollText, Settings, ShieldCheck, Sparkles,
-  Target, Users, Workflow,
+  Activity, BookOpen, ClipboardCheck, Coins, FlaskConical, HeartPulse, History, IdCard,
+  LayoutDashboard, Megaphone, MessagesSquare, Puzzle, Route, ScrollText, Settings,
+  ShieldCheck, Sparkles, Target, Users, Workflow,
 } from 'lucide-vue-next'
 
 export interface MockSceneDef {
@@ -53,16 +53,17 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 学习组：排列＝学习流程（目标对话 → 学习路径 → 教学会话），工作台性质的学习状态收在流程尾
   { id: 'goal-conversations', label: '目标对话', group: '学习', glyph: '话', icon: Target, keywords: ['目标', '对话', '澄清'] },
   { id: 'learning-paths', label: '学习路径', group: '学习', glyph: '径', icon: Route, keywords: ['路径', '生成', '失败'] },
-  { id: 'teaching-sessions', label: '教学会话', group: '学习', glyph: '教', icon: MessagesSquare, keywords: ['课堂', '会话', '评估'] },
-  { id: 'learner-state', label: '学习状态', group: '学习', glyph: '态', icon: Activity, keywords: ['学习者', '干预', '疲劳', '风险'] },
+  { id: 'teaching-sessions', label: '教学会话', group: '学习', glyph: '教', icon: MessagesSquare, keywords: ['课堂', '会话', '评估', 'audit', '审计', '裁判', '评审'] },
+  { id: 'learner-state', label: '学习状态', group: '学习', glyph: '态', icon: Activity, keywords: ['学习者', '干预', '疲劳', '风险', '画像', 'profile', '证据', '预测'] },
   // 复习积压：按用户汇总的跨用户待复习榜；单用户明细在学习者详情「记忆与复习」页签
   { id: 'memory-review', label: '复习积压', group: '学习', glyph: '忆', icon: History, keywords: ['复习', '积压', '到期', '记忆'] },
-  // 仿真组：实例（虚拟学习者）+ 身份池（学习者卡库）
-  { id: 'virtual-learners', label: '虚拟学习者', group: '仿真', glyph: '拟', icon: FlaskConical, keywords: ['仿真', '实例', '故事'] },
-  { id: 'virtual-learner-cards', label: '学习者卡库', group: '仿真', glyph: '卡', icon: IdCard, keywords: ['卡库', '角色卡', '身份池'] },
+  // 仿真组：实例（虚拟学习者）+ 身份池（学习者卡库）+ 运行产出的评审报告（2026-11-22 补页面）
+  { id: 'virtual-learners', label: '虚拟学习者', group: '仿真', glyph: '拟', icon: FlaskConical, keywords: ['仿真', '实例', '故事', 'simulation', '黑盒', '辅助模拟', '裁判', '评审', 'referee', 'judge'] },
+  { id: 'session-audit', label: '会话评审报告', group: '仿真', glyph: '评', icon: ClipboardCheck, keywords: ['裁判', '评审', '角色保真', '审计', '报告', 'referee', 'audit'] },
+  { id: 'virtual-learner-cards', label: '学习者卡库', group: '仿真', glyph: '卡', icon: IdCard, keywords: ['卡库', '角色卡', '身份池', 'persona', '金标'] },
   // Skill 组：字段流转（管线/字段路由）+ Skill 目录 + 插件
   { id: 'orchestrator', label: '字段流转', group: 'Skill', glyph: '流', icon: Workflow, keywords: ['编排', '管线', '字段路由', '旅程'] },
-  { id: 'skills', label: 'Skill 目录', group: 'Skill', glyph: '能', icon: Sparkles, keywords: ['技能', '目录', '模型路由'] },
+  { id: 'skills', label: 'Skill 目录', group: 'Skill', glyph: '能', icon: Sparkles, keywords: ['技能', '目录', '模型路由', 'skill', '成功率', '试跑'] },
   { id: 'addons', label: '插件', group: 'Skill', glyph: '插', icon: Puzzle, keywords: ['密钥', 'MCP', '联网', '决策', '生图', '外挂'] },
   // 观测与排查：两份日志相邻，成本分析接在其后；健康中心 13 项全是排查项，与日志同一动线
   { id: 'execution-logs', label: '执行日志', group: '观测与排查', glyph: '志', icon: ScrollText, keywords: ['日志', '失败', '链路', '调用'] },
@@ -73,6 +74,6 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 2026-11-01 用户「这四个拆出来，和模型与接入作为一个页面，但是模型与接入要改名字了」：
   // 模型与接入 + 运营中心原系统运维三页签（数据导出/会话安全/访问与注册）合成「系统设置」。
   // 2026-11-11 运维工具页签下线（事件投递并回健康中心），本页只剩上述四项。
-  { id: 'system-settings', label: '系统设置', group: '运营', glyph: '设', icon: Settings, keywords: ['密钥', '上游', '单价', '模型', '导出', '会话安全', '访问', '注册'] },
-  { id: 'people', label: '用户账号', group: '运营', glyph: '人', icon: Users, keywords: ['用户', '账号', '角色', '密码'] }
+  { id: 'system-settings', label: '系统设置', group: '运营', glyph: '设', icon: Settings, keywords: ['密钥', '上游', '单价', '模型', '导出', '会话安全'] },
+  { id: 'people', label: '用户账号', group: '运营', glyph: '人', icon: Users, keywords: ['用户', '账号', '角色', '密码', '注册', '访问'] }
 ]

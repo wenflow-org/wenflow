@@ -62,6 +62,12 @@ jest.mock('../../services/virtual-lab/simulation-clock-resolver', () => ({
   resolveSessionSimulatedNow: (...args: unknown[]) => mockResolveSessionSimulatedNow(...args),
 }))
 
+// 并发设置固定为测试值，禁止本套件加载 system 库配置或读取运行时凭据。
+jest.mock('../../services/virtual-lab-settings.service', () => ({
+  DEFAULT_AUTOPILOT_CONCURRENCY_LIMIT: 10,
+  getRuntimeVirtualLabSettings: jest.fn(async () => ({ autopilotConcurrencyLimit: 10 })),
+}))
+
 import { AutopilotService, AutopilotConflictError, AutopilotTerminalError } from '../autopilot.service'
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -502,6 +508,32 @@ describe('AutopilotService 全自动模式', () => {
 
     const final = await waitTerminal()
     expect(final.status).toBe('stopped')
+  })
+
+  it('blackbox：created 会话经 final 真正执行 autoStep，并可停止后重新启动', async () => {
+    sessionRecord = buildSession('goal', 'created', {
+      experiment: { mode: 'blackbox-api' },
+      blackbox: { control: {}, publicTrace: [{ observation: { stage: 'goal', availableActions: ['chat'] } }] },
+    })
+    mockRunCommand.mockImplementation(async (_options: unknown, work: () => Promise<unknown>) => ({ result: await work(), reused: false }))
+    mockAutoStep.mockImplementation(async () => {
+      await service.stop('s1')
+      return { stage: 'goal' }
+    })
+
+    const started = await service.start('s1', { target: 'final' })
+    expect(started).toMatchObject({ mode: 'blackbox', target: 'final' })
+    expect((await waitTerminal()).status).toBe('stopped')
+    expect(mockAutoStep).toHaveBeenCalledWith('s1', 'autopilot')
+    expect(sessionRecord.status).toBe('created')
+
+    mockAutoStep.mockImplementation(async () => {
+      sessionRecord.status = 'completed'
+      return { stage: 'completed' }
+    })
+    await service.start('s1', { target: 'final' })
+    expect((await waitTerminal()).status).toBe('completed')
+    expect(mockAutoStep).toHaveBeenCalledTimes(2)
   })
 
   it('blackbox：自动步进到实验完成的终态；可恢复失败用同一 commandId 续跑', async () => {

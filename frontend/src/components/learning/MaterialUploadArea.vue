@@ -375,7 +375,7 @@ defineExpose({ refresh, openPicker, addFiles });
   gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
-  font-size: var(--mk-fs-m);
+  font-size: var(--mk-fs-body);
   color: var(--ink);
 }
 
@@ -391,7 +391,7 @@ defineExpose({ refresh, openPicker, addFiles });
   background: none;
   color: var(--faint);
   cursor: pointer;
-  font-size: var(--mk-fs-m);
+  font-size: var(--mk-fs-body);
 }
 
 .mat-upload__picker-close:hover {

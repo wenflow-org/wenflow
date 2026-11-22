@@ -33,7 +33,7 @@ inputs:
   - name: learnerPrediction
     type: object
     ref: sandbox:teaching.learnerPrediction
-    desc: 任务前学习表现预测（profile-learning-predict 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；开场节奏的参考信号，非命令；null 或缺省表示未预测
+    desc: 任务前学习表现预测（profile-learning-predict 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；evidence（string[]，确定性硬证据来源清单：contract_gaps/checkpoint_evidence/retention_hints/pace_mode）由编排层代码附加装配，不由预测器输出——可靠性双轨口径见下方规则；null 或缺省表示未预测
   - name: lastLessonRecap
     type: object
     ref: sandbox:teaching.lastLessonRecap

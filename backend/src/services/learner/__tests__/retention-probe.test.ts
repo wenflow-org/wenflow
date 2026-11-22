@@ -53,9 +53,11 @@ function makeDeps(overrides: Partial<RetentionProbeDeps> = {}) {
     },
     applyFailedProbe: async (probe) => {
       failed.push({ conceptKey: probe.conceptKey, mastery: RETENTION_PROBE_FAILED_MASTERY });
+      return { totalItems: 1, appliedItems: 1, skippedDuplicateItems: 0, skippedNegativeInterval: 0 };
     },
     applyPassedProbe: async (probe) => {
       passedReviews.push(probe.conceptKey);
+      return { totalItems: 1, appliedItems: 1, skippedDuplicateItems: 0, skippedNegativeInterval: 0 };
     },
     now: () => T0,
     ...overrides,
@@ -224,6 +226,25 @@ describe('RetentionProbeService.answer', () => {
     expect(failed).toEqual([]);
     // 通过也要推进 FSRS（否则 dueAt 不动，探针会无限重复到期）
     expect(passedReviews).toEqual([probe.conceptKey]);
+  });
+
+  it('降级事件被去重吞掉（appliedItems=0）→ downgraded=false，不假报已降级（外部评审 P1.1）', async () => {
+    const { service, probe, dueAt } = await dueProbe({
+      applyFailedProbe: async () => ({ totalItems: 1, appliedItems: 0, skippedDuplicateItems: 1, skippedNegativeInterval: 0 }),
+    });
+    const result = await service.answer('u1', probe.id, 'B', { now: dueAt });
+    expect(result.passed).toBe(false);
+    expect(result.downgraded).toBe(false);
+  });
+
+  it('答对但 FSRS 推进被去重（appliedItems=0）不炸：仍返回 passed，只是留痕', async () => {
+    const { service, probe, dueAt, evidence } = await dueProbe({
+      applyPassedProbe: async () => ({ totalItems: 1, appliedItems: 0, skippedDuplicateItems: 1, skippedNegativeInterval: 0 }),
+    });
+    const result = await service.answer('u1', probe.id, 'A', { now: dueAt });
+    expect(result.passed).toBe(true);
+    expect(result.downgraded).toBe(false);
+    expect(evidence).toHaveLength(1);
   });
 
   it('同一探针重复作答 → NOT_PENDING（不重复写证据/降级）', async () => {

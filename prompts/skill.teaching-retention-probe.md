@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-retention-probe
-coreHash: 203ebda46a5b07ebbcaabd6f851d308c98a213b1e81b6c10718ee0c895e4762c
+coreHash: 710c37ceb0817ea4ab901a401149d14f4a91f820a6767492205df99dea58d7e4
 coreVersion: 1
 temperature: 0.5
 maxTokens: 64000
@@ -34,7 +34,7 @@ failurePolicy: propagate
 4. 优先 single_choice（2-4 项，干扰项要像真实误解，不得明显荒谬）；不适合选择题时才用 short_answer，并给 1-3 个「任何正确作答都会出现」的核心词（用 | 合并同义写法，不得用题干里已有的词当要点）
 5. 选择题必须给 correctOptionIds（必须是 options 里真实存在的 id，单选只给一个）；简答题必须给 expectedKeywords
 6. 题干用自然、简短的中文（不超过 2 句），面向学生，不出现「探针/保持/测量/契约/系统/证据」等内部词
-7. 若选择题，题干末尾自然要求学生「回复选项字母」，让学生知道怎么作答
+7. 选择题题干保持自然完整即可，**不要写「回复选项字母」这类界面操作指令**——作答交互由界面承担（学习台小测卡选项可点选；对话场景学生看到 A/B 选项自然引用字母，2026-11-22 卡片形态走查）
 
 ## 输出字段
 

@@ -784,6 +784,7 @@
                 />
                 <div v-if="isLive && r.sessionId" class="vp-run-row__ops">
                   <button type="button" class="mk-link" title="进入该次运行的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSessionCockpit(r.sessionId)">打开座舱</button>
+                  <button v-if="isAuditableRun(r)" type="button" class="mk-link" title="打开会话评审报告页：生成或查看这次运行的裁判评审与角色保真审计" @click="openSessionAudit(r.sessionId)">评审报告</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" title="删除该次运行（仅终态可删，不可恢复）" @click="removeSession(r.sessionId)">删除</button>
                 </div>
               </div>
@@ -1126,11 +1127,12 @@ export function buildMemoryRetentionChartOption(
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { statusText } from './statusText'
 import { subPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { formatTime } from './cockpitFormat'
-import { personaDisplayName } from './cardDisplay'
+import { personaDisplayName, knowledgeLevelText } from './cardDisplay'
 import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { LEARNER_METRICS } from '@/utils/learnerMetrics'
@@ -1192,6 +1194,8 @@ interface RunItem {
   result: string
   tone: 'ok' | 'warn' | 'bad'
   paused?: boolean
+  /** 实验模式（stageResults.experiment.mode，缺省 assisted）：评审报告入口只给黑盒运行 */
+  mode?: string
   sessionId?: string
   storyId?: string | null
   storyTitle?: string | null
@@ -1511,6 +1515,24 @@ function openSessionCockpit(sessionId: string) {
   const pid = subPage.value?.id || ''
   openSubPage('session', sessionId, {
     from: { view: 'virtual', id: pid, label: subPage.value?.label }
+  })
+}
+
+/* 评审报告入口（2026-11-22 P2.1）：双评估拆独立 API 面后管理台无处可看，运行行终态
+   （completed/abandoned/failed，与后端可评状态一致）且为黑盒运行（裁判硬性要求
+   experiment.mode==='blackbox-api'，assisted 点了必报错）才渲染，落到
+   /admin/session-audit?session=<id>&fromProfile=<本画像> 自动生成并带回返回入口。 */
+const vpRouter = useRouter()
+const AUDITABLE_RUN_STATES = ['completed', 'abandoned', 'failed']
+function isAuditableRun(r: Pick<RunItem, 'result' | 'paused' | 'mode'>): boolean {
+  return AUDITABLE_RUN_STATES.includes(runDisplayState(r)) && r.mode === 'blackbox-api'
+}
+function openSessionAudit(sessionId?: string | null) {
+  if (!sessionId) return
+  const pid = subPage.value?.id || ''
+  void vpRouter.push({
+    path: '/admin/session-audit',
+    query: pid ? { session: sessionId, fromProfile: pid } : { session: sessionId }
   })
 }
 
@@ -2019,6 +2041,11 @@ async function loadDetail(id?: string, quiet = false) {
         const storyMeta = parseSessionStory(s)
         const sessionBindings = (s.bindings || {}) as Record<string, unknown>
         const pathId = sessionBindings.learningPathId ? String(sessionBindings.learningPathId) : s.learningPathId ? String(s.learningPathId) : null
+        /* stageResults 只解析一次：paused/mode/durationMs 三处共用（2026-11-22 审计：mode
+           供「评审报告」入口判黑盒——裁判硬性要求 experiment.mode==='blackbox-api'，
+           默认 assisted 运行挂评审入口点了必 502，不如不渲染） */
+        let sr: Record<string, unknown> | null = null
+        try { sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || null) } catch { sr = null }
         return {
           time: runTimeText(String(s.createdAt || s.startedAt || '')),
           createdAt: String(s.createdAt || s.startedAt || ''),
@@ -2030,15 +2057,13 @@ async function loadDetail(id?: string, quiet = false) {
               ? 'ok'
               : 'warn') as RunItem['tone'],
           paused: (() => {
-            try {
-              const sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || {})
-              /* 2026-10-31 四轮评审 R1：自动驾驶停机（进度保留）也算已暂停——与列表页
-                 pausedSessionIds 同一判据（live.ts stageResults.autopilot.status==='stopped'），
-                 否则列表灰点「已暂停」、详情满屏绿「进行中」两套状态打架 */
-              if (sr?.autopilot?.status === 'stopped') return true
-              return !!(sr?.teaching?.paused)
-            } catch { return false }
+            /* 2026-10-31 四轮评审 R1：自动驾驶停机（进度保留）也算已暂停——与列表页
+               pausedSessionIds 同一判据（live.ts stageResults.autopilot.status==='stopped'），
+               否则列表灰点「已暂停」、详情满屏绿「进行中」两套状态打架 */
+            if ((sr as any)?.autopilot?.status === 'stopped') return true
+            return !!((sr as any)?.teaching?.paused)
           })(),
+          mode: (sr as any)?.experiment?.mode ? String((sr as any).experiment.mode) : 'assisted',
           sessionId: String(s.id || s.sessionId || ''),
           storyId: storyMeta.storyId,
           storyTitle: storyMeta.title,
@@ -2051,9 +2076,7 @@ async function loadDetail(id?: string, quiet = false) {
             /* 2026-10-31 五轮评审 P2：挂机不计时——推进中/停机的会话以自动驾驶最后心跳为
                活动终点（停机后心跳冻结，暂停 3 小时不再被算进运行时长）；终态会话以最后
                一次落库写（updatedAt）收口（总结/收尾写入晚于最后一次心跳） */
-            let sr: Record<string, unknown> | null = null
-            try { sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || null) } catch { sr = null }
-            const ap = (sr?.autopilot || null) as Record<string, unknown> | null
+            const ap = ((sr as any)?.autopilot || null) as Record<string, unknown> | null
             const hb = Date.parse(String(ap?.heartbeatAt || ''))
             const upd = Date.parse(String(s.updatedAt || ''))
             const terminal = ['completed', 'failed', 'abandoned', 'timeout', 'cancelled', 'incomplete'].includes(String(s.status || '').toLowerCase())
@@ -2064,7 +2087,7 @@ async function loadDetail(id?: string, quiet = false) {
         }
       }),
       aiProfile: [
-        { label: '知识水平', value: { beginner: '零基础', elementary: '入门', intermediate: '中级', advanced: '进阶' }[String(raw.knowledgeLevel)] || String(raw.knowledgeLevel || '—') },
+        { label: '知识水平', value: knowledgeLevelText(String(raw.knowledgeLevel || '')) },
         { label: '性格基线', value: String(p.emotionalBaseline || p.corePersonality || '—') }
       ],
       simulationBudget: (() => {

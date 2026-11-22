@@ -186,7 +186,8 @@
              37 含插件（skill-catalog 口径）、32 是运行时 Skill 定义数，两数不同源不冲突，
              但必须自解释才不像「数字对不上」 -->
         <span class="mk-card__meta" :title="govMetaTitle">
-          编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}
+          <template v-if="defsFailed">定义加载失败</template>
+          <template v-else>编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}</template>
         </span>
       </div>
       <!-- 定义明细（definitionNotes 调试转储）2026-10-05 撤：Skill 行名称字段全空
@@ -350,6 +351,8 @@ function applyStageQuery() {
 
 const defsLoading = ref(false)
 const defsLoaded = ref(false)
+/** 定义清单取数失败：卡头不再把 0 当读数（2026-11-22 审计） */
+const defsFailed = ref(false)
 /** 阶段清单端点拉取中（与 defsLoading / recLoading 共同驱动页头「刷新」忙碌态） */
 const stagesLoading = ref(false)
 const orchCount = ref(0)
@@ -392,7 +395,13 @@ async function loadDefinitions() {
     orchCount.value = orchItems.length
     skillDefCount.value = skillItems.length
     orchDefs.value = orchItems
+    defsFailed.value = false
     defsLoaded.value = true
+  } catch (e) {
+    /* 2026-11-22 审计 P2：原来只有 try/finally——接口失败未捕获 rejection，计数保持 0，
+       卡头把「编排定义 0 · Skill 定义 0」当真实读数展示（失败渲染成 0）。置失败位后
+       卡头改显「定义加载失败」，不再冒充读数。 */
+    defsFailed.value = true
   } finally {
     defsLoading.value = false
   }
@@ -827,6 +836,7 @@ function skillNodeTitle(sk: Stage['skills'][number], s: Stage): string {
  *  2026-11-11（困惑测试 #53/#64）：光标下是「编排定义 5 · Skill 定义 36」，title 却只解释
  *  一致性核查——三个 Skill 计数（总览挂载 21 / 运行时定义 36 / 目录档案 30）无处对照。 */
 const govMetaTitle = computed(() => {
+  if (defsFailed.value) return '运行时定义读取失败，读数不可用。可刷新页面重试。'
   const scope = `三种 Skill 计数统计不同：本页总览「编排 Skill」= 各阶段挂载节点（${totalSkills.value} 个）· 这里「Skill 定义」= 运行时注册定义条数 · 「Skill 目录」页签 = 目录档案数。`
   return recReport.value
     ? `${scope}一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}`

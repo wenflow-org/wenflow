@@ -686,9 +686,18 @@ async function enrichLearningPathWithAndersonInner(
         stageTasks,
         wantedLessons,
         (stageHints as any)?.stageMinutesBudget,
-        // 与 path-task-design「补课调用」规则同源：只有 exam 路径把课数锚当下限；
-        // intentType 缺失（旧数据）时保持旧行为，已知非 exam 路径不再强补。
-        { intentType: (normalizedInput as any)?.learnerProfile?.intentType ?? undefined },
+        // 与 path-task-design「补课调用」规则同源：只有 exam 路径把课数锚当下限。
+        // 2026-11-22 修契约短路：Phase 4 标签退场后契约会话 intentType=null，经 `?? undefined`
+        // 会把门禁整个跳过（非考试契约路径按 70% 规则强补，与 Exit Node「宁少勿凑」相反）。
+        // 现按三层解析：显式旧标签 > 路径拓扑 exam（契约下由 path-planning 判定）> 其余关闸；
+        // 旧数据无标签且无拓扑时保持旧行为（门禁不启用）。
+        { intentType: (() => {
+            const learnerIntentType = (normalizedInput as any)?.learnerProfile?.intentType;
+            const pathTopology = (parsedTemplate as any)?.pathTopology;
+            if (learnerIntentType === 'exam' || pathTopology === 'exam') return 'exam';
+            if (learnerIntentType !== undefined) return learnerIntentType; // null（契约非考试）→ 门禁启用并关闭
+            return undefined; // 极旧数据无标签无拓扑：保持旧行为
+          })() },
       )) {
         const initialCount = stageTasks.length;
         const supplementRequest = buildSupplementRequest(

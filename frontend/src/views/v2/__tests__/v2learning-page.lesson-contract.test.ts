@@ -19,9 +19,13 @@ const gateCopySource = readFileSync(resolve(here, '../closureGate.ts'), 'utf8');
 describe('V2LearningPage 课堂契约卡与自由支线', () => {
   it('契约卡渲染核心 KC、独立证据门槛与覆盖度', () => {
     expect(source).toContain('class="contract"');
-    expect(source).toContain('本节契约');
+    expect(source).toContain('本节完成要求');
     expect(source).toContain('contractCoreKcs');
-    expect(source).toContain('lessonContract?.minIndependentEvidence');
+    // 独立答对口径收口到 independentProgressLabel computed（2026-11-22：超额时改「达标线」
+    // 措辞，不再读出 2/1 这类像出错的超额分数）；required/minIndependentEvidence 回退链
+    // 移进 computed，模板两处（契约头 + 结课浮层）统一消费它。
+    expect(source).toContain('independentProgressLabel');
+    expect(source).toContain('lessonReport.value?.requiredIndependent ?? lessonContract.value?.minIndependentEvidence');
     expect(source).toContain('contractCoveredCount');
   });
 
@@ -34,7 +38,7 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
 
   it('停车区可见，且不会渲染成主线失败', () => {
     expect(source).toContain('contractParkingLot');
-    expect(source).toContain('停车区');
+    expect(source).toContain('留待课后探索');
     expect(source).not.toContain('停车区（未完成）');
   });
 
@@ -48,8 +52,8 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
 
   it('结课浮层展示契约达成与停车区', () => {
     expect(source).toContain('class="finish__contract"');
-    expect(source).toContain('个核心 KC 有证据');
-    expect(source).toContain('待课后处理');
+    expect(source).toContain('个重点已有正确作答记录');
+    expect(source).toContain('留待课后探索');
   });
 
   it('结算被契约缺口拒绝时走页内门禁并展示逐条原因，不落「稍后重试」故障弹窗', () => {
@@ -87,8 +91,8 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
   it('契约报告存在时以 met 为准：课末终检未过不提前摆完成，改提示去作答', () => {
     expect(source).toContain('if (lessonReport.value) return lessonReport.value.met === true');
     expect(source).toContain('const showFinishBlocked = computed');
-    expect(source).toContain('还差课末终检');
-    expect(source).toContain('继续作答最后一道独立终检题');
+    expect(source).toContain('还差课末独立作答');
+    expect(source).toContain('finishMissingItems');
     expect(source).toContain('goAnswerFinishGate');
   });
 

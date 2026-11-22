@@ -201,7 +201,7 @@ import { errMsg, liveRefreshSeq } from './live'
 import { formatTime } from './cockpitFormat'
 import { toast } from '@/utils/toast'
 import { isInternalTag, isPlaceholderCardKey } from './cardTags'
-import { cardDisplayTitle, isWallHiddenTag, tierLabel, TIER_RE } from './cardDisplay'
+import { cardDisplayTitle, isWallHiddenTag, tierLabel, TIER_RE, knowledgeLevelText } from './cardDisplay'
 
 /* 文案单源（R6 复读单源化）：hero 副文与来源徽章悬停释共用一份 */
 const PRESET_SYNC_NOTE = '平台预置角色（卡库内「一键加载」同步）'
@@ -351,16 +351,16 @@ function sourceTitle(c: Pick<CardDetail, 'preset' | 'sourceKind' | 'derivedFrom'
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
   return '后台手动 / AI 创建'
 }
+/* 知识水平译名单源化（2026-11-22 审计 P3）：原三档映射漏 elementary（裸出英文），
+   且与画像/创建侧同字段两套名字——改用 cardDisplay.knowledgeLevelText 四级词表 */
 function levelText(level: string): string {
-  const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
-  return map[level] || level || '—'
+  return knowledgeLevelText(level)
 }
 /** 等级徽章的悬停释（2026-11-11 困惑测试 #46）：它与档位徽章（A–E / F1–F5B）是两个维度，
  *  第一次看卡的人会把「入门」当成档位名。 */
 function levelTitle(level: string): string {
-  const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
-  const name = map[level]
-  return `知识水平：${name || level || '未标注'}（beginner / intermediate / advanced，与卡库档位 A–E / F1–F5B 是两个维度）`
+  const name = knowledgeLevelText(level)
+  return `知识水平：${name === '—' ? '未标注' : name}（与卡库档位 A–E / F1–F5B 是两个维度）`
 }
 /** 来源标识的悬停释（2026-11-11 困惑测试 #48）：读到「Frontier-100 F100」的人不知道它是什么。 */
 const SOURCE_REF_TITLE = '来源标识：卡文档导入时写入的批次标签，不是可跳转网址。例如 Frontier-100 = 前沿 100 张评测基线、Golden-100 = 基准 100 张'

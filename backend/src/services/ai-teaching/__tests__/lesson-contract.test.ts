@@ -141,6 +141,20 @@ describe('证据账本与契约完成', () => {
     expect(evidence.filter((item) => item.kcName === '解释 ReAct 往返' && item.independent)).toHaveLength(1);
   });
 
+  it('教师已给过答案的复述成功（answerAlreadyGiven）不计独立证据（2026-11-22 走查）', () => {
+    const evidence = collectLessonEvidence({
+      contract,
+      checkpointHistory: [
+        { conceptName: '识别工具返回', passed: true, judgedBy: 'code', attempts: 1, answerAlreadyGiven: true },
+        { conceptName: '解释 ReAct 往返', passed: true, judgedBy: 'code', attempts: 1 },
+      ],
+      knowledgeState: [],
+      teachingTurns: 2,
+    });
+    expect(evidence.find((item) => item.kcName === '识别工具返回')?.independent).toBe(false);
+    expect(evidence.find((item) => item.kcName === '解释 ReAct 往返')?.independent).toBe(true);
+  });
+
   it('核心 KC 全有证据且独立数达标才 met', () => {
     const evidence = collectLessonEvidence({
       contract,

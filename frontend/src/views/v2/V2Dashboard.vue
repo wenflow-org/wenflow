@@ -144,21 +144,64 @@
             </template>
           </section>
 
+          <!-- 隔日小测（外部评审 P1.2，2026-11-22）：24–72h 延迟保持探针此前只有 API 没有真人
+               入口，延迟保持测量一直缺真人数据。有到期题才出现，不占空态主流程；
+               作答就地反馈对错与一句话解析，答完即收。 -->
+          <section v-if="pageState !== 'attention' && probeCardVisible" class="card probe">
+            <div class="action__eyebrow">
+              <span>隔日小测</span>
+              <span class="action__from">检验前几天学的内容还记得多少，答错不影响进度</span>
+            </div>
+            <template v-if="probeError">
+              <p class="probe__error" role="alert">到期小测暂时取不到，稍后再来。</p>
+              <button type="button" class="link-muted" @click="loadProbes">重试</button>
+            </template>
+            <template v-else>
+              <div v-for="(p, i) in probeItems" :key="p.id" class="probe__item">
+                <template v-if="probeResults[i]">
+                  <p class="probe__verdict" :class="probeResults[i].passed ? 'probe__verdict--ok' : 'probe__verdict--miss'">
+                    {{ probeResults[i].passed ? '还记得：' : '这次没答对：' }}{{ probeResults[i].detail }}
+                  </p>
+                </template>
+                <template v-else>
+                  <p class="probe__q"><b>{{ p.label }}</b>：{{ p.question.question }}</p>
+                  <div v-if="p.question.type !== 'short_answer'" class="probe__options">
+                    <button
+                      v-for="opt in (p.question.options || [])" :key="opt.id" type="button"
+                      class="probe__opt" :disabled="probeSubmitting" @click="answerProbe(p, opt.id, i)"
+                    >{{ opt.text }}</button>
+                  </div>
+                  <div v-else class="probe__answer">
+                    <input
+                      v-model="probeAnswers[i]" class="probe__input"
+                      placeholder="写下你的答案…" :disabled="probeSubmitting"
+                      @keydown.enter="answerProbe(p, probeAnswers[i], i)"
+                    />
+                    <button
+                      type="button" class="btn-primary" :disabled="probeSubmitting || !(probeAnswers[i] || '').trim()"
+                      @click="answerProbe(p, probeAnswers[i], i)"
+                    >提交</button>
+                  </div>
+                  <p v-if="p.attempts > 0" class="probe__meta">这是第 {{ p.attempts + 1 }} 次作答，按最近一次判定。</p>
+                </template>
+              </div>
+            </template>
+          </section>
+
           <section v-else-if="pageState === 'attention'" class="card action action--alert">
             <div class="action__eyebrow action__eyebrow--alert">
               <span>需要先处理</span>
               <span class="action__from">路径「{{ primaryPath?.title }}」</span>
             </div>
-            <h2 class="action__title">这版路径没生成出来，重试一般能好</h2>
-            <p class="action__desc">{{ primaryPath?.errorText || '目标和已确认的信息都保留着，不会丢。' }}</p>
+            <h2 class="action__title">{{ retryCopy.title }}</h2>
+            <p class="action__desc">{{ retryCopy.reason }}</p>
             <div class="action__meta">
-              <span class="tag tag--red">{{ primaryPath?.retryType === 'stage_design' ? '部分阶段生成失败' : '路径生成失败' }}</span>
-              <span class="tag">信息已保留</span>
+              <span class="tag">已完成的学习进度会保留</span>
             </div>
             <div class="action__footer">
-              <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
+              <button type="button" class="btn-primary" :disabled="retrying" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
                 <span v-if="retrying" class="spinner spinner--sm"></span>
-                {{ retrying ? '正在重新生成…' : '重新生成路径' }}
+                {{ retrying ? retryCopy.pending : retryCopy.action }}
               </button>
               <router-link :to="`/learning-path/${primaryPath?.id}`" class="btn-ghost">查看详情</router-link>
               <router-link to="/goal-conversation" class="link-muted">先修改目标</router-link>
@@ -196,7 +239,7 @@
             <div class="action__head">
               <span class="action__art" aria-hidden="true"><Box :size="20" :stroke-width="1.7" /></span>
               <div class="action__head-text">
-                <h2 class="action__title">用 2 分钟，理出一条能执行的路径</h2>
+                <h2 class="action__title">先说说想解决的事，一起确认怎么学</h2>
                 <p class="action__desc">{{ guidanceEmptyText }}</p>
               </div>
             </div>
@@ -493,10 +536,11 @@ import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { describeRequestError } from '@/utils/httpError';
 import { computeStreakDays } from './streak';
-import { formatLocalDateTime, formatRelativeTime, isDesignPollingActive } from './learningPathProgress';
+import { buildGenerationRetryCopy, formatLocalDateTime, formatRelativeTime, isDesignPollingActive } from './learningPathProgress';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
 import { unwrapArray } from './unwrap';
+import { aiTeachingAPI, type RetentionProbeDueItem } from '@/api/aiTeaching';
 
 /* 日弹层空态与当天观察文案引擎共用同一句，收成单源避免改一处漏一处。
    任务单 §7③：空态提示精简到 15~20 字，去掉「补一次短时学习」这类机制解释式罗列。 */
@@ -624,6 +668,40 @@ function buildDashboardSnapshot() {
   };
 }
 let dashboardSnapshot: ReturnType<typeof buildDashboardSnapshot> | null = null;
+
+/* ---------- 隔日小测（延迟保持探针，外部评审 P1.2） ----------
+   后端到期清单不含答案键，作答走服务端裁决；「无到期/读取中」不渲染卡片，
+   读取失败给重试——不把「取不到」说成「没有到期」。 */
+const probeItems = ref<RetentionProbeDueItem[]>([]);
+const probeError = ref(false);
+const probeAnswers = ref<Record<number, string>>({});
+const probeResults = ref<Record<number, { passed: boolean; detail: string }>>({});
+const probeSubmitting = ref(false);
+const probeCardVisible = computed(() => probeError.value || probeItems.value.length > 0);
+
+async function loadProbes() {
+  probeError.value = false;
+  try {
+    probeItems.value = await aiTeachingAPI.getRetentionProbesDue();
+  } catch {
+    probeError.value = true;
+    probeItems.value = [];
+  }
+}
+
+async function answerProbe(p: RetentionProbeDueItem, answer: string, index: number) {
+  const text = String(answer || '').trim();
+  if (!text || probeSubmitting.value) return;
+  probeSubmitting.value = true;
+  try {
+    const result = await aiTeachingAPI.answerRetentionProbe(p.id, text);
+    probeResults.value = { ...probeResults.value, [index]: { passed: result.passed, detail: result.detail } };
+  } catch (e) {
+    toast.error(describeRequestError(e));
+  } finally {
+    probeSubmitting.value = false;
+  }
+}
 
 async function loadAll() {
   const snap = dashboardSnapshot;
@@ -875,9 +953,8 @@ const actionTitle = computed(() => {
   return '今天没有待办任务';
 });
 
-/* 引导空态兜底（任务单 §7③）：15~20 字内、只给一句可做的事，
-   不再解释「问流会梳理成目标和阶段安排」的机制；skill 给了 emptyStateCopy 时以它为准 */
-const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '说说最近想解决的事，帮你理成一条路径。');
+/* 起步预期固定说明确认与渐进生成，不承诺对话或生成耗时。 */
+const guidanceEmptyText = '先聊清目标、起点和可用时间，由你确认方案后再生成路径。后续课程会随学习进展逐步准备。';
 
 /* skill 今日行动（todayActions 语义跳转解析） */
 interface SkillAction { label: string; to: string; primary: boolean }
@@ -954,7 +1031,7 @@ const todayBarPct = computed(() => {
 const todayProgressText = computed(() => {
   const done = todayMinutes.value;
   const target = todayTarget.value;
-  if (done > target) return `今日已学 ${done} 分钟 · 今日目标 ${target} 分钟，已超出 ${done - target} 分钟`;
+  if (done > target) return `今日已学 ${done} 分钟 · 今日目标 ${target} 分钟已达成，多学 ${done - target} 分钟`;
   return `今日已学 ${done} / ${target} 分钟`;
 });
 const todayProgressTitle = computed(() => `今日已学 ${todayMinutes.value} 分钟，今日目标 ${todayTarget.value} 分钟`);
@@ -1060,6 +1137,7 @@ const tipText = computed(() => {
 const tipVisible = computed(() => !!tipText.value && !tipDismissed.value);
 
 /* ================= 重试 ================= */
+const retryCopy = computed(() => buildGenerationRetryCopy(primaryPath.value?.retryType, primaryPath.value?.errorText));
 async function doRetry() {
   if (retrying.value || !primaryPath.value || primaryPath.value.generating) return;
   retrying.value = true;
@@ -1069,9 +1147,10 @@ async function doRetry() {
     } else {
       await learningAPI.retryPathGeneration(primaryPath.value.id);
     }
-    window.setTimeout(loadAll, 4000);
+    toast.info(retryCopy.value.submitted);
+    await loadAll();
   } catch {
-    toast.error('重新生成失败，请稍后再试');
+    toast.error(retryCopy.value.submitError);
   } finally {
     retrying.value = false;
   }
@@ -1492,10 +1571,29 @@ const daySheet = computed(() => {
   };
 });
 
-onMounted(loadAll);
+onMounted(() => {
+  void loadAll();
+  void loadProbes();
+});
 </script>
 
 <style scoped>
+/* ---------- 隔日小测卡 ---------- */
+.probe__error { margin: 4px 0 8px; color: var(--red-ink, #b42318); font-size: 13px; }
+.probe__item { padding: 8px 0; }
+.probe__item + .probe__item { border-top: 1px solid var(--line, #e5e7eb); }
+.probe__q { margin: 0 0 8px; font-size: 13.5px; line-height: 1.6; }
+.probe__q b { font-weight: 600; }
+.probe__options { display: flex; flex-wrap: wrap; gap: 8px; }
+.probe__opt { padding: 6px 12px; border: 1px solid var(--line, #e5e7eb); border-radius: 8px; background: transparent; font-size: 13px; cursor: pointer; }
+.probe__opt:hover:not(:disabled) { border-color: var(--blue, #2563eb); color: var(--blue, #2563eb); }
+.probe__opt:disabled { opacity: .6; cursor: default; }
+.probe__answer { display: flex; gap: 8px; }
+.probe__input { flex: 1 1 auto; min-width: 0; padding: 6px 10px; border: 1px solid var(--line, #e5e7eb); border-radius: 8px; font-size: 13px; }
+.probe__meta { margin: 6px 0 0; font-size: 12px; color: var(--faint, #6b7280); }
+.probe__verdict { margin: 0; font-size: 13px; line-height: 1.6; }
+.probe__verdict--ok { color: var(--green-ink, #15803d); }
+.probe__verdict--miss { color: var(--amber-ink, #b45309); }
 /* ---------- 布局 ---------- */
 /* 页面宽度对齐原型：≥1024 档 1140、≥1440 档 1260（newui 921-935） */
 .dash__main {
@@ -1763,7 +1861,6 @@ onMounted(loadAll);
   white-space: nowrap; flex-shrink: 0;
 }
 .tag--blue { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep); }
-.tag--red { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); color: var(--red-ink); }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
 /* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方**。
    P1-6（2026-10-04）：轨道必须显式 minmax(0,1fr)——隐式 auto 轨道按子项 max-content

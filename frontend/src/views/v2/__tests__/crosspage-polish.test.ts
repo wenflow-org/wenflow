@@ -228,11 +228,12 @@ describe('学习状态：单日折线图与卡头紧凑化', () => {
     expect(state).toContain('const x = n === 1 ? plotX0 + usableW / 2 : plotX0 + step * i;');
   });
 
-  it('首次学习前的空白日数值补 0（折线从 0 斜向爬升，不再只有孤点+竖虚线）', () => {
+  it('未观测日不补 0（2026-11-22 走查：补 0 会把没学的日子判成「需要休息」）', () => {
     const live = strip(state);
-    expect(live).toContain('const firstWithData = days.findIndex');
-    expect(live).toContain('days[i].ktl = 0;');
-    /* 补 0 方案取代了上一版的 0 基准虚线 lead（实线自带起步段） */
+    // 缺失值保持 null：不进分档函数、不参与状态判断，单日数据靠图上的实点表达
+    expect(live).not.toContain('days[i].ktl = 0;');
+    expect(live).toContain('未观测日保持空值');
+    /* 上一版补 0 方案的 0 基准虚线 lead 保持退场 */
     expect(live).not.toContain('leadPaths');
     expect(live).not.toContain('.ff-lead');
   });

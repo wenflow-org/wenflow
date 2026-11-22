@@ -472,9 +472,7 @@ async function collectBusy(): Promise<void> {
       const progress = designTotal ? `（已就绪 ${designDone}/${designTotal} 阶段）` : '';
       const stage = lc.canStartLearning === true
         ? `后续阶段正在准备${progress}，已就绪部分可继续学习`
-        : (lc.phase === 'stage_design'
-          ? `正在规划阶段与课时…${designTotal ? `（${designDone}/${designTotal}）` : ''}`
-          : '正在规划阶段与课时…');
+        : `正在规划阶段与课时…${designTotal ? `（${designDone}/${designTotal}）` : ''}`;
       busyItems.value.push({
         key: `path-${busyPath.id}`,
         // 标题写「哪条路径」而不是「正在生成学习路径」：后者在 tab/段标题/进度条上已重复到第四遍

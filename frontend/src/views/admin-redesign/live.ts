@@ -942,6 +942,13 @@ export interface LiveOverviewFull {
   /** G2/G3：近 7 天每日新增注册 / 活跃用户 */
   growth7d: { date: string; newUsers: number; activeUsers: number }[]
   feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number; errorCategory?: string; agentId?: string }[]
+  /** 动态域取数失败标记（2026-11-22 审计 P2）：catch(() => null) 曾把失败吞成空 feed，
+   *  页面渲染「近 24h 暂无动态」假空态，与待办卡的失败数同屏矛盾。 */
+  feedFailed?: boolean
+  /** 今日失败数（结构化下发，2026-11-22 拆雷）：成功率字段缺失（统计不可用）时为
+   *  undefined——此前 Overview 靠正则解析「今日成功率」KPI foot 的 `失败 N` 文案驱动
+   *  「今日失败」待办行，改一个措辞待办就无声归 0。 */
+  todayFailed?: number
   actions: { text: string; link: string; tone: 'bad' | 'warn'; agentId: string }[]
   /** 教学闭环条（原型 .loop）各环规模：overview/stats 直传，零额外请求。
       教学回合/记忆复习两环另有独立数据源（会话列表 total / memory-review due），由页面侧补齐。 */
@@ -1059,6 +1066,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   const todayCallsAll = Number(agents.todayCallsAll || 0)
   /* 虚拟/测试调用独立口径：后端 overview/stats 已返回（总览不展示，预留供「虚拟学习者」仿真看板使用） */
   // 后端可能返回字符串或非法值（0/0 场景），统一收敛为有限数
+  /* 2026-11-22 审计 P3：字段缺失时原兜底 100 会把「没读到」渲染成「100% 健康」。
+     下游 head 构建保留旧兜底（避免改头部结论语义），但 KPI 卡显「—」+ foot 披露。 */
+  const todaySuccessRateMissing = agents.todaySuccessRate == null || !Number.isFinite(Number(agents.todaySuccessRate))
   const todaySuccessRate = Number.isFinite(Number(agents.todaySuccessRate ?? 100)) ? Number(agents.todaySuccessRate ?? 100) : 100
   /* 今日「失败」= 未成功（含超时），由成功率反推——与总览 usage.failed7d / 失败归因同一口径
      （platform-overview-stats.test.ts 固化了「归因之和 == failed7d，无分叉」这条不变式）。
@@ -1203,8 +1213,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     {
       key: 'todaySuccessRate' as const,
       label: TERMS.healthScore,
-      value: todayCalls > 0 ? `${todaySuccessRate}%` : '—',
-      foot: todayFailed > 0 ? `失败 ${todayFailed}` : todayOnlySimulated ? '今日无真实调用' : '无失败',
+      value: todayCalls > 0 && !todaySuccessRateMissing ? `${todaySuccessRate}%` : '—',
+      foot: todaySuccessRateMissing ? '成功率未取到' : todayFailed > 0 ? `失败 ${todayFailed}` : todayOnlySimulated ? '今日无真实调用' : '无失败',
       hint: '',
     },
     {
@@ -1287,6 +1297,10 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     topSkills: (stats.agents?.topSkills || []).slice(0, 5),
     growth7d: (stats.users?.growth7d || []).slice(0, 7),
     feed: [...feedDeduped.values()].slice(0, 12),
+    feedFailed: !activityRes,
+    /* 统计不可用（成功率缺字段）时不给数字：undefined 让消费方走「没有已发布读数」分支，
+       不冒充 0（2026-11-22 拆雷：Overview「今日失败」待办行改读本字段） */
+    todayFailed: todaySuccessRateMissing ? undefined : todayFailed,
     actions,
     loop: {
       conversationsActive: Number(conv.active || 0),
@@ -1564,6 +1578,8 @@ export interface LearnerEvidenceRaw {
 
 /** 学习者预测校准数据（实证命中率 + 最近预测） */
 export interface PredictionCalibration {
+  /** 读取失败标记（2026-11-22 外部评审 P2.2）：失败不再伪装成 null（零样本隐身），卡片显式报错可重试 */
+  loadError?: string
   stats: {
     total: number
     stallHitRate: number | null
@@ -1585,15 +1601,17 @@ export interface PredictionCalibration {
 }
 
 export async function liveGetLearnerPredictions(userId: string, includeTest?: boolean): Promise<PredictionCalibration | null> {
+  const emptyStats = { total: 0, stallHitRate: null, toneHitRate: null, calibration: [] }
   try {
     const res = await adminLearnerModelsApi.getPredictions(userId, includeTest ? { includeTest: true } : undefined)
     const body = res.data?.data ?? res.data ?? {}
     return {
-      stats: body.stats,
+      stats: body.stats ?? emptyStats,
       recent: Array.isArray(body.recent) ? body.recent : [],
     }
-  } catch {
-    return null
+  } catch (e) {
+    // 失败不再归 null：带 loadError 的对象让卡片走显式报错态，而不是和「零样本」一起隐身
+    return { stats: emptyStats, recent: [], loadError: errMsg(e) }
   }
 }
 

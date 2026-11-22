@@ -165,16 +165,17 @@ function aggregateSelfState(input: MemoryCuratorInput): SelfReportedLearnerState
   }
 }
 
-/** 确定性 fallback：复用 learner-memory 的自述提炼规则（LLM 不可用时记忆不丢） */
+/**
+ * 确定性 fallback（LLM 不可用时兜底）。2026-11-22（外部评审 P1.5）收紧：
+ * mastered 一律为空——自评完成 ≠ 掌握，没有模型判读时宁可无新增记忆，
+ * 绝不按「自评掌握度高」硬造 confidence 0.7 的伪掌握项污染画像；
+ * struggle 仍从自评提炼（低估方向的信息保留是无害的）。
+ */
 export function buildMemoryCuratorFallback(input: MemoryCuratorInput): MemoryCuratorOutput {
   const selfState = aggregateSelfState(input)
   const extracted = selfExtractLearnerMemory(selfState)
   const taskName = input.currentTask?.linkedConcept || input.currentTask?.title || null
-  const masteredConcepts = extracted.mastered.map((name) => ({
-    name,
-    evidence: '自评掌握度高且自认完成（确定性规则）',
-    confidence: 0.7,
-  }))
+  const masteredConcepts: MemoryCuratorOutput['masteredConcepts'] = []
   const struggleConcepts = extracted.struggling.map((name) => ({
     name,
     blocker: selfState?.remainingBlockers?.[0] || '自评掌握度低或仍有卡点',
@@ -235,9 +236,14 @@ export function normalizeMemoryCuratorOutput(
       : item
   })
   const struggle = normalizeStruggle(parsed?.struggleConcepts)
+  // 合法空数组 = 「本课无新增掌握/无新增卡点」的明确判决，原样采信（外部评审 P1.5）：
+  // 旧实现把 length>0 当有效性判断，模型返回空数组会被换成自评伪掌握（0.7 信心），
+  // 直接违背「完成 ≠ 掌握、证据不足宁缺毋滥」的契约。仅字段缺失/类型错才回退 fallback。
+  const masteredGiven = Array.isArray(parsed?.masteredConcepts)
+  const struggleGiven = Array.isArray(parsed?.struggleConcepts)
   return {
-    masteredConcepts: mastered.length > 0 ? mastered : fallback.masteredConcepts,
-    struggleConcepts: struggle.length > 0 ? struggle : fallback.struggleConcepts,
+    masteredConcepts: masteredGiven ? mastered : fallback.masteredConcepts,
+    struggleConcepts: struggleGiven ? struggle : fallback.struggleConcepts,
     transferEvidence,
     selfCalibration: text(parsed?.selfCalibration, 300) || fallback.selfCalibration,
     // 结构化判决优先；模型漏给/给错时回落到 fallback（画像先验或 unknown），不再靠散文猜。

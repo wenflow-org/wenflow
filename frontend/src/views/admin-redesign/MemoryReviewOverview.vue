@@ -129,7 +129,7 @@
               <th scope="col" class="mk-th--sortable mr-c-weak" :aria-sort="userSortState('weak')"
                 v-if="!mrHiddenCols.has('weak')"
                 @click="toggleUserSort('weak')"
-              ><button type="button" class="mk-th__btn" title="需关注：薄弱概念数量大于 0，或存在待人工确认的归并项（与「需关注」筛选同判据，按当前页计算）" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" title="需关注：存在薄弱（FSRS 强度 < 40%）记忆痕迹，或待人工确认的归并项（与「需关注」筛选同判据，按当前页计算）" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--sortable mr-c-traces" :aria-sort="userSortState('traces')"
                 v-if="!mrHiddenCols.has('traces')"
                 @click="toggleUserSort('traces')"
@@ -581,7 +581,8 @@ const dueWarn = computed(() => {
 })
 const dueCardTitle = computed(() => {
   const t = totals.value
-  return `到该复习而未复习 ${fmtCount(t.due)} 条，占全部记忆痕迹 ${duePct.value}%`
+  // 抬警示的阈值一并披露（2026-11-22 审计 P3）：此前只有代码注释知道「占比 ≥20% 或人均 ≥5」
+  return `到该复习而未复习 ${fmtCount(t.due)} 条，占全部记忆痕迹 ${duePct.value}%。占比 ≥${DUE_WARN_PCT}% 或人均 ≥${DUE_WARN_PER_USER} 条时抬警示`
 })
 
 /* 到期时间轴窗口与下钻计算已随分布带退役（2026-10-17）：页面不再额外拉最近 200 条痕迹，

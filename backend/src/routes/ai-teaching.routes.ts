@@ -23,6 +23,7 @@ import { startWrapupRegeneration } from '../services/ai-teaching/teaching-wrapup
 import { projectActiveSession } from '../services/ai-teaching/session-activity';
 import { listSessionEvents, recordSessionEvent, type SessionEventKind } from '../services/ai-teaching/session-events.service';
 import { buildTurnAnalysisView } from '../services/ai-teaching/teaching-session-views';
+import { stripCheckpointAnswerKeys } from '../services/ai-teaching/teaching-checkpoint';
 import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
 import { retentionProbeService } from '../services/learner/retention-probe.service';
@@ -619,6 +620,13 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
     // 提示词调试信封默认不下发（见 promptDebugEnabled 注释）
     promptDebug: promptDebugEnabled() ? (result.promptDebug || null) : null,
     peerDebug: promptDebugEnabled() ? (result.peerDebug || null) : null,
+    // 课堂契约/报告/终检/支线随回合下发（2026-11-22 走查实锤：前端本就读这四个字段更新
+    // 契约卡与完成门，白名单漏列导致实时回合永远收不到，只能靠刷新后 /detail 补回）。
+    // 答案键剥离与 /detail 的 teachingState 出口同一把深剥离，learners 侧不泄露裁决键。
+    lessonContract: result.lessonContract ? stripCheckpointAnswerKeys(result.lessonContract) : null,
+    lessonReport: result.lessonReport ? stripCheckpointAnswerKeys(result.lessonReport) : null,
+    exitTicket: result.exitTicket ? stripCheckpointAnswerKeys(result.exitTicket) : null,
+    branch: result.branch ? stripCheckpointAnswerKeys(result.branch) : null,
     revision: result.revision,
   };
 };
@@ -1076,8 +1084,10 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
       requestHash: teachingOperationRequestHash('message', {
         message,
         revision: expectedRevision,
-        meta: interactionMeta ?? null,
         images,
+        /* interactionMeta 不进幂等身份（2026-11-23 真人测试实锤）：它是 collect 后即 reset 的
+           时变遥测（draftMs/idleMs…），同 key 重试重 collect 必然得到不同值——留在 hash 里
+           会让「丢响应后重试」永远撞 TEACHING_IDEMPOTENCY_KEY_REUSED，重放机制整个失效。 */
       }),
     });
     const synthetic = req.user?.projection?.grantSource === 'synthetic';

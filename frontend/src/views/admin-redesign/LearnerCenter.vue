@@ -58,9 +58,9 @@
         :title="lowConfTitle"
         :tone="loadFailed ? 'muted' : lowConfCount ? 'warn' : ''"
         clickable
-        :class="{ 'lc-kpi--on': pill === 'stale' }"
-        :aria-pressed="pill === 'stale'"
-        @click="togglePill('stale')"
+        :class="{ 'lc-kpi--on': pill === 'lowconf' }"
+        :aria-pressed="pill === 'lowconf'"
+        @click="togglePill('lowconf')"
       />
       <MkKpi
         label="平均置信度"
@@ -536,9 +536,13 @@ function openIntervene(r: Row) {
   interveneTitle.value = r.fatigue === '高' ? '学习状态提醒：疲劳度偏高' : '学习状态提醒'
   interveneBody.value = r.risk
     ? `检测到学习状态需关注：${r.risk}。建议调整学习节奏或补充练习。`
-    : r.fatigue !== '低'
-      ? `检测到疲劳度${r.fatigue}，建议适当休息后继续学习。`
-      : '希望保持当前学习节奏，如有困难可随时反馈。'
+    : r.fatigue === '中'
+      /* 「中」是常态档不是异常（2026-11-22 审计 P3）：原「检测到疲劳度中」既不通顺
+         又把常态说成异常事件，改说节奏建议。 */
+      ? '近期学习节奏偏满，建议适当休息后继续学习。'
+      : r.fatigue !== '低'
+        ? '疲劳度偏高，建议适当休息后继续学习。'
+        : '希望保持当前学习节奏，如有困难可随时反馈。'
 }
 /** 本列只展示一条在学路径：>1 时给出「共 N 条路径」角标（后端 activePathCount） */
 function extraPathCount(r: Row): number {
@@ -649,8 +653,8 @@ const isVirtualRow = (r: Row) => r.isVirtualLearner === true || (r.isVirtualLear
 
 /* 筛选入口 = KPI 卡（2026-10-26）：点中即筛、再点取消。同一数字不再有「不能点的卡」与
    「能点的胶囊」两个版本。 */
-const pill = ref<'all' | 'risk' | 'watch' | 'stale'>('all')
-function togglePill(p: 'risk' | 'watch' | 'stale') {
+const pill = ref<'all' | 'risk' | 'watch' | 'lowconf'>('all')
+function togglePill(p: 'risk' | 'watch' | 'lowconf') {
   pill.value = pill.value === p ? 'all' : p
 }
 
@@ -681,16 +685,16 @@ const CONFIDENCE_TITLE = '置信度＝系统对该学习者评估结果的可信
 const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
 /** 卡头胶囊组（2026-10-26）：与 KPI 三卡同源同值，交互也共用 `pill`。
     计数口径 = 当前范围（含测试账号开关）下的全集，不随搜索词变化——与 KPI 一致。 */
-const lcPills = computed<Array<{ key: 'all' | 'risk' | 'watch' | 'stale'; label: string; n: number | null }>>(() => [
+const lcPills = computed<Array<{ key: 'all' | 'risk' | 'watch' | 'lowconf'; label: string; n: number | null }>>(() => [
   { key: 'all', label: '全部', n: rows.value.length },
   { key: 'risk', label: '需关注', n: riskCount.value },
   { key: 'watch', label: '观察', n: watchCount.value },
-  { key: 'stale', label: '低置信', n: lowConfCount.value }
+  { key: 'lowconf', label: '低置信', n: lowConfCount.value }
 ])
 /** 卡头「风险」下拉的字符串代理（pill 是字面量联合，select 值需先收窄） */
 const lcPillSelect = computed({
   get: () => pill.value,
-  set: (v: string) => { pill.value = (v as 'all' | 'risk' | 'watch' | 'stale') }
+  set: (v: string) => { pill.value = (v as 'all' | 'risk' | 'watch' | 'lowconf') }
 })
 const lcPillOptions = computed(() => [
   { value: 'all', label: '全部' },
@@ -770,7 +774,7 @@ const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
   if (pill.value === 'watch') list = rows.value.filter(isWatch)
-  if (pill.value === 'stale') list = confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
+  if (pill.value === 'lowconf') list = confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
   // 关键词搜索
   const kw = keyword.value.trim().toLowerCase()
   if (kw) {
@@ -831,7 +835,8 @@ useListQueryState({
   keyword,
   page,
   pageSize,
-  allowedPills: ['all', 'risk', 'watch', 'stale']
+  allowedPills: ['all', 'risk', 'watch', 'lowconf'],
+  pillAliases: { stale: 'lowconf' }
 })
 
 const paged = computed(() => {

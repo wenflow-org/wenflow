@@ -14,7 +14,7 @@
  */
 import { logger } from '../../../utils/logger';
 import { executeSkillWithResult } from '../../../skills';
-import { pathReviewerDefinition, PATH_REVIEW_PASS_THRESHOLD } from '../../../skills/path-reviewer';
+import { pathReviewerDefinition, PATH_REVIEW_PASS_THRESHOLD, computePathReviewNeedsReplan } from '../../../skills/path-reviewer';
 import { buildPathReviewerGoalContext } from '../path-reviewer-context';
 import type { GeneratePathData } from '../learning.types';
 
@@ -190,11 +190,17 @@ export async function requestPathReview(
   return requestPathReviewSnapshot(buildPathReviewSnapshot(data, analysis));
 }
 
-/** passed 与 score 同源：有分数时一律按阈值重判，不采信模型自报 passed。 */
+/** passed 与 score/合取闸同源：有分数时按阈值+结构红线复判，不采信模型自报 passed。 */
 function normalizeReviewVerdict(review: PathReviewResult | null): PathReviewResult | null {
   if (!review) return null;
   if (typeof review.score === 'number' && Number.isFinite(review.score)) {
-    return { ...review, passed: review.score >= PATH_REVIEW_PASS_THRESHOLD };
+    // 2026-11-22 合取闸：fail 档信息只在 skill 归一化层可得（此处已是数值形状，failTiers
+    // 恒空集）；severity=high 结构红线在 issues 上复判，防实验/重规划链路绕过。
+    const conjunctionBlocked = computePathReviewNeedsReplan(
+      Array.isArray(review.issues) ? review.issues : [],
+      new Set(),
+    );
+    return { ...review, passed: review.score >= PATH_REVIEW_PASS_THRESHOLD && !conjunctionBlocked };
   }
   return review;
 }

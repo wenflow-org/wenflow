@@ -1,6 +1,6 @@
 ---
 agentId: skill:simulation-scenario-designer
-coreHash: e01a711048116a4c2d3f6f915d048dc74c67e5aa215a3083e693d1f6205d1796
+coreHash: 622b454500c875831998a8a9951905de3822ddeb251f574cdcc2023fe7d2e222
 coreVersion: 1
 temperature: 0.9
 maxTokens: 64000
@@ -22,7 +22,7 @@ failurePolicy: retry
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「preferredDomains（string[]）」`sandbox:simulation.preferredDomains`（编排注入） — 偏好领域（管理端实验配置注入）
 - 「preferredGoalTypes（string[]）」`sandbox:simulation.preferredGoalTypes`（编排注入） — 偏好目标类型
-- 「preferredLevels（string[]）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位
+- 「preferredLevels（string[]）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位（词表 beginner|intermediate|advanced，来自学习者档案 knowledgeLevel；导入卡缺省 beginner）
 - 「preferredMotivations（string[]）」`sandbox:simulation.preferredMotivations`（编排注入） — 偏好动机类型
 - 「avoidDomains（string[]）」`sandbox:simulation.avoidDomains`（编排注入） — 需避开的领域
 - 「candidateDomains（string[]）」`sandbox:simulation.candidateDomains`（编排注入） — 候选领域池

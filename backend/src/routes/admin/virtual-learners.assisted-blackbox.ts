@@ -7,6 +7,7 @@ import type { Router, Request } from 'express';
 import { logger } from '../../utils/logger';
 import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
+import { parseSessionAutopilotOption, startSessionAutopilot } from '../../virtual-lab/session-autopilot';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { findSessionById, findSessionsForTerminate } from '../../services/virtual-lab/virtual-session.repo';
 import { createSessionForProfile, SIMULATION_FRICTION_BUDGETS, parseJson } from '../../virtual-lab/session-factory';
@@ -22,9 +23,14 @@ import {
 export function registerAssistedBlackboxRoutes(router: Router): void {
 router.post('/:id/start-blackbox-session', async (req: Request, res) => {
   try {
-    const { storyId, storyIndex, frictionBudget } = req.body || {};
+    const { storyId, storyIndex, frictionBudget, autopilot: autopilotOption } = req.body || {};
     if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
+    }
+    // 旧脚本创建后会手动 step 或单独启动 stage/final；缺省仍只创建，后台显式传 final。
+    const autopilotChoice = parseSessionAutopilotOption(autopilotOption === undefined ? 'off' : autopilotOption);
+    if (autopilotChoice.error) {
+      return res.status(400).json({ success: false, error: autopilotChoice.error });
     }
     const session = await createSessionForProfile(req.params.id, {
       storyId,
@@ -33,7 +39,8 @@ router.post('/:id/start-blackbox-session', async (req: Request, res) => {
       blackboxOperatorId: req.user.userId
     });
     if (!session) return res.status(404).json({ success: false, error: '虚拟用户不存在' });
-    res.json({ success: true, data: session });
+    const autopilot = await startSessionAutopilot(session.id, autopilotChoice.skip);
+    res.json({ success: true, data: { ...session, autopilot } });
   } catch (error) {
     const status = Number(error?.status) || 500;
     if (status >= 500) logger.error('启动黑盒模拟会话失败:', error);

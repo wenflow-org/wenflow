@@ -40,10 +40,12 @@ ok(){ printf "${c_green}%s${c_reset}\n" "$*"; }
 warn(){ printf "${c_yellow}%s${c_reset}\n" "$*"; }
 die(){ printf "${c_red}%s${c_reset}\n" "$*" >&2; exit 1; }
 
-command -v node >/dev/null 2>&1 || die "未检测到 node，请安装 Node.js >= 20.17"
+command -v node >/dev/null 2>&1 || die "未检测到 node，请安装 Node.js（要求见 package.json engines，当前为 >= 22.23.4）"
 command -v npm  >/dev/null 2>&1 || die "未检测到 npm"
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 20 ] || die "Node.js 版本过低（$(node -v)），需要 >= 20.17"
+# 版本要求从根 package.json 的 engines.node 读取，避免文档/脚本/CI 三处各说各话
+REQUIRED_NODE="$(node -p "require('./package.json').engines.node.replace(/^>=\s*/, '')")"
+NODE_OK="$(node -p "const r=process.argv[1].split('.').map(Number);const c=process.versions.node.split('.').map(Number);(c[0]>r[0]||(c[0]===r[0]&&(c[1]>r[1]||(c[1]===r[1]&&c[2]>=r[2]))))?'ok':'no'" "$REQUIRED_NODE")"
+[ "$NODE_OK" = "ok" ] || die "Node.js 版本过低（$(node -v)），要求 >= ${REQUIRED_NODE}"
 
 if [ ! -f "$BACKEND_ENV" ]; then
   warn "缺少 backend/.env"

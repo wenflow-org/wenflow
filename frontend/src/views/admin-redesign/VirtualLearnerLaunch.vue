@@ -33,6 +33,9 @@
                 aria-label="运行模式"
                 block
               />
+              <span class="mk-field__hint">{{ launchForm.mode === 'assisted'
+                ? '辅助模拟支持按模拟日期推进。独立评审不在启动时自动执行。'
+                : '黑盒模拟经正式用户接口推进，使用真实日期，不支持日期模拟。完成后可到会话审计发起独立评审。' }}</span>
             </label>
             <label class="mk-field">
               <span class="mk-field__label">学习者对抗度</span>
@@ -182,7 +185,8 @@ async function startLaunch() {
   try {
     const payload = {
       storyId: launchForm.value.storyId,
-      frictionBudget: launchForm.value.friction
+      frictionBudget: launchForm.value.friction,
+      autopilot: 'final' as const
     }
     const res =
       launchForm.value.mode === 'blackbox'
@@ -190,14 +194,18 @@ async function startLaunch() {
         : await adminVirtualLearnersApi.startVirtualSession(target.id, payload)
     const session = res.data?.data ?? res.data ?? {}
     const storyTitle = launchStories.value.find((x) => x.id === launchForm.value.storyId)?.title || '故事'
-    const autopilot = String(session.autopilot || '')
+    const autopilotState = String(session.autopilot || '')
     launchTarget.value = null
-    if (autopilot === 'failed') {
-      toast.info(`已创建「${storyTitle}」的会话，但自动驾驶没启动，可在画像页继续`)
-    } else if (autopilot === 'queued') {
-      toast.success(`并发已满，「${storyTitle}」已排队，轮到即自动开跑`)
-    } else {
+    if (autopilotState === 'started') {
       toast.success(`已开始运行「${storyTitle}」`)
+    } else if (autopilotState === 'queued') {
+      toast.success(`并发已满，「${storyTitle}」已排队，轮到即自动开跑`)
+    } else if (autopilotState === 'failed') {
+      toast.warning(`已创建「${storyTitle}」的会话，但自动驾驶启动失败，可在画像页打开座舱重试`)
+    } else if (autopilotState === 'off') {
+      toast.info(`已创建「${storyTitle}」的会话，尚未启动，可在画像页打开座舱开始`)
+    } else {
+      toast.info(`已创建「${storyTitle}」的会话，未确认自动驾驶启动，请在画像页打开座舱查看`)
     }
     emit('started', session)
     void refreshLiveVirtuals()

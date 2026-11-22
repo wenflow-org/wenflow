@@ -29,9 +29,9 @@ inputs:
     ref: skill:teaching-turn.analysis.cognitiveLevel
     desc: 本轮教学回合判定的学生认知层级（同链上一步产物）
   - name: understanding
-    type: number
+    type: number?
     ref: skill:teaching-turn.analysis.understanding
-    desc: 本轮理解度 0-1（同链上一步产物）
+    desc: 本轮理解度 0-1（同链上一步产物）；无证据时上游输出 null——null/缺省按「本轮无理解度信号」处理，不得当作 0 参与低理解（<0.3）分支判定
   - name: peerHistory
     type: "object[]?"
     ref: user:peerHistory

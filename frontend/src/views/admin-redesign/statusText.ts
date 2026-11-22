@@ -463,7 +463,6 @@ export const ACT_AUTOPILOT_STOP = '暂停虚拟会话自动驾驶'
 export const ACT_PROMPT_EVAL_RUN = '运行 Prompt 评估'
 export const ACT_PROMPT_COMPILE_CORE = '编译 Prompt 核心'
 export const ACT_PROMPT_PUBLISH_CORE = '发布 Prompt 核心'
-export const ACT_SKILL_AUTHOR_DRAFT = '生成 Skill 草稿'
 
 /** 操作审计 action → 中文；未知值回退原文 */
 const ACTION_TEXT: Record<string, string> = {
@@ -514,7 +513,6 @@ const ACTION_TEXT: Record<string, string> = {
   'prompt-eval-run': ACT_PROMPT_EVAL_RUN,
   'prompt-compile-core': ACT_PROMPT_COMPILE_CORE,
   'prompt-publish-core': ACT_PROMPT_PUBLISH_CORE,
-  'skill-author-draft': ACT_SKILL_AUTHOR_DRAFT,
   'achievement-grant': '授予成就',
   // 低频虚拟学习者/配置类接口（P2-16 补齐）
   'virtual-card-clone': '卡派生虚拟学习者',
@@ -576,7 +574,6 @@ const PATH_ACTION_RULES: Array<[RegExp, string]> = [
   [/\/prompt-lab\/compile-core$/, ACT_PROMPT_COMPILE_CORE],
   [/\/prompt-lab\/publish-core$/, ACT_PROMPT_PUBLISH_CORE],
   [/\/prompt-workbench\/compile-core$/, ACT_PROMPT_COMPILE_CORE],
-  [/\/skill-author\/draft$/, ACT_SKILL_AUTHOR_DRAFT],
   [/\/achievements\/grant$/, '授予成就'],
   // 投影令牌
   [/\/projection-access-grants\/[^/]+\/projection-token$/, '生成投影访问令牌']

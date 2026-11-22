@@ -102,3 +102,74 @@ describe('path-reviewer 输出契约（2026-11-21）', () => {
     expect(validatePathReviewOutput([])).toEqual({ valid: false, failureReason: 'PATH_REVIEWER_OUTPUT_NOT_OBJECT' });
   });
 });
+
+describe('path-reviewer 档位制 + 合取闸（2026-11-22）', () => {
+  const TIER_DIMENSIONS = {
+    clarity: 'adequate',
+    integrity: 'strong',
+    depth: 'weak',
+    practicality: 'adequate',
+    pertinence: 'strong',
+  };
+
+  it('档位输出：按锚点映射数值并加权（adequate/strong/weak → 0.85/1.0/0.6）', () => {
+    const verdict = validatePathReviewOutput({ dimensions: TIER_DIMENSIONS, issues: [] });
+    expect(verdict.valid).toBe(true);
+    if (verdict.valid === false) return;
+    expect(verdict.dimensions.clarity).toBe(0.85);
+    expect(verdict.dimensions.integrity).toBe(1.0);
+    expect(verdict.dimensions.depth).toBe(0.6);
+    expect(verdict.failTiers.size).toBe(0);
+    // 0.2*0.85 + 0.25*1.0 + 0.2*0.6 + 0.2*0.85 + 0.15*1.0 = 0.8575 ≥ 0.75
+    expect(verdict.score).toBeGreaterThanOrEqual(PATH_REVIEW_PASS_THRESHOLD);
+    expect(verdict.needsReplan).toBe(false);
+  });
+
+  it('合取闸①：任一 issue severity=high → needsReplan，且必须带返工指令', () => {
+    const noInstructions = validatePathReviewOutput({
+      dimensions: { clarity: 'strong', integrity: 'strong', depth: 'strong', practicality: 'strong', pertinence: 'strong' },
+      issues: [{ dimension: 'integrity', severity: 'high', description: 'M1 把终点概念当验收' }],
+    });
+    expect(noInstructions).toEqual({ valid: false, failureReason: 'PATH_REVIEWER_REPLAN_INSTRUCTIONS_REQUIRED' });
+
+    const withInstructions = validatePathReviewOutput({
+      dimensions: { clarity: 'strong', integrity: 'weak', depth: 'strong', practicality: 'strong', pertinence: 'strong' },
+      issues: [{ dimension: 'integrity', severity: 'high', description: 'M1 把终点概念当验收' }],
+      replanInstructions: 'milestone-1 只保留本阶段概念的验收，终点概念移到末阶段',
+    });
+    expect(withInstructions.valid).toBe(true);
+    if (withInstructions.valid === false) return;
+    // 五维全是 strong/weak 加权 ≥0.75，但 severity=high 结构红线一票否决
+    expect(withInstructions.score).toBeGreaterThanOrEqual(PATH_REVIEW_PASS_THRESHOLD);
+    expect(withInstructions.needsReplan).toBe(true);
+  });
+
+  it('合取闸②：任一维度 fail → needsReplan，legacy 数值输出不触发 fail 语义', () => {
+    const tierFail = validatePathReviewOutput({
+      dimensions: { ...TIER_DIMENSIONS, depth: 'fail' },
+      issues: [],
+      replanInstructions: 'milestone-2/3 原地换芯，删除目录式导论',
+    });
+    expect(tierFail.valid).toBe(true);
+    if (tierFail.valid === false) return;
+    expect([...tierFail.failTiers]).toEqual(['depth']);
+    expect(tierFail.needsReplan).toBe(true);
+
+    const legacyNumeric = validatePathReviewOutput({
+      dimensions: { clarity: 0.9, integrity: 0.9, depth: 0.9, practicality: 0.9, pertinence: 0.9 },
+      issues: [],
+    });
+    expect(legacyNumeric.valid).toBe(true);
+    if (legacyNumeric.valid === false) return;
+    expect(legacyNumeric.failTiers.size).toBe(0);
+    expect(legacyNumeric.needsReplan).toBe(false);
+  });
+
+  it('非法档位词 → 无效（挡住模型自由发挥的枚举）', () => {
+    const verdict = validatePathReviewOutput({
+      dimensions: { clarity: 'good', integrity: 'strong', depth: 'weak', practicality: 'adequate', pertinence: 'strong' },
+      issues: [],
+    });
+    expect(verdict).toEqual({ valid: false, failureReason: 'PATH_REVIEWER_DIMENSION_INVALID:clarity' });
+  });
+});

@@ -26,8 +26,8 @@ const { storiesMock } = vi.hoisted(() => ({
 vi.mock('@/api/adminApi', () => ({
   adminVirtualLearnersApi: {
     getVirtualLearnerStories: storiesMock,
-    startVirtualSession: vi.fn(async () => ({ data: { data: { id: 'sess-1', autopilot: 'running' } } })),
-    startBlackboxVirtualSession: vi.fn(async () => ({ data: { data: { id: 'sess-1', autopilot: 'running' } } }))
+    startVirtualSession: vi.fn(async () => ({ data: { data: { id: 'sess-1', autopilot: 'started' } } })),
+    startBlackboxVirtualSession: vi.fn(async () => ({ data: { data: { id: 'sess-1', autopilot: 'started' } } }))
   },
   adminPromptOpsApi: { runEval: vi.fn(async () => ({ data: { data: { results: [] } } })) },
   /* 试跑弹窗会读所选能力的生效提示词（R7：面板里要能看见跑的是哪条） */
@@ -55,7 +55,10 @@ vi.mock('../store', async () => {
 import VirtualLearnerLaunch from '../VirtualLearnerLaunch.vue';
 import PersonaTrial from '../skill-design/persona-trial.vue';
 import { FRICTION_OPTIONS } from '../vlab';
-import { mkSelectLabels } from '@/components/mk/__tests__/mkSelect';
+import { adminVirtualLearnersApi } from '@/api/adminApi';
+import { toast } from '@/utils/toast';
+import { refreshLiveVirtuals } from '../live';
+import { chooseMkSelect, mkSelectLabels } from '@/components/mk/__tests__/mkSelect';
 
 const EXPECTED_LABELS = FRICTION_OPTIONS.map((o) => o.label);
 /* Teleport 打平到组件内（attachTo body）：MkSelect 助手按 aria-label 在 wrapper 里定位 */
@@ -63,7 +66,7 @@ const mountOpts = { attachTo: document.body, global: { stubs: { teleport: true }
 
 beforeEach(() => {
   document.body.innerHTML = '';
-  storiesMock.mockClear();
+  vi.clearAllMocks();
 });
 
 async function openLaunch() {
@@ -98,6 +101,68 @@ describe('启动弹层：故事 + 启动，低频调参折进更多设置', () =
   it('对抗度用与提示词试跑同一套中文词（vlab.FRICTION_OPTIONS）', async () => {
     const w = await openLaunch();
     expect(mkSelectLabels(w as never, '学习者对抗度')).toEqual(EXPECTED_LABELS);
+    w.unmount();
+  });
+});
+
+describe('启动弹层：自动驾驶回执与模式说明', () => {
+  it.each(['assisted', 'blackbox'] as const)('%s 显式请求 final；仅 started 回执报告已开始', async (mode) => {
+    const w = await openLaunch();
+    await chooseMkSelect(w, '选择故事', 's1');
+    await chooseMkSelect(w, '运行模式', mode);
+    await w.get('.mk-modal__foot .mk-btn--primary').trigger('click');
+    await flushPromises();
+    const api = mode === 'blackbox' ? adminVirtualLearnersApi.startBlackboxVirtualSession : adminVirtualLearnersApi.startVirtualSession;
+    expect(api).toHaveBeenCalledWith('p1', { storyId: 's1', frictionBudget: 'normal', autopilot: 'final' });
+    expect(toast.success).toHaveBeenCalledWith('已开始运行「函数补差」');
+    expect(w.emitted('started')?.[0]?.[0]).toMatchObject({ id: 'sess-1', autopilot: 'started' });
+    expect(refreshLiveVirtuals).toHaveBeenCalledTimes(1);
+    expect(w.find('.mk-modal').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it.each([
+    { autopilot: 'queued', channel: 'success', message: '并发已满，「函数补差」已排队，轮到即自动开跑' },
+    { autopilot: 'failed', channel: 'warning', message: '已创建「函数补差」的会话，但自动驾驶启动失败，可在画像页打开座舱重试' },
+    { autopilot: 'off', channel: 'info', message: '已创建「函数补差」的会话，尚未启动，可在画像页打开座舱开始' },
+    { autopilot: undefined, channel: 'info', message: '已创建「函数补差」的会话，未确认自动驾驶启动，请在画像页打开座舱查看' },
+    { autopilot: 'unexpected', channel: 'info', message: '已创建「函数补差」的会话，未确认自动驾驶启动，请在画像页打开座舱查看' },
+  ] as const)('$autopilot 不假报已开始，保留已创建会话供继续/查看', async ({ autopilot, channel, message }) => {
+    vi.mocked(adminVirtualLearnersApi.startBlackboxVirtualSession).mockResolvedValueOnce({
+      data: { data: { id: 'sess-1', status: 'created', ...(autopilot ? { autopilot } : {}) } },
+    } as never);
+    const w = await openLaunch();
+    await chooseMkSelect(w, '选择故事', 's1');
+    await chooseMkSelect(w, '运行模式', 'blackbox');
+    await w.get('.mk-modal__foot .mk-btn--primary').trigger('click');
+    await flushPromises();
+    expect(toast[channel]).toHaveBeenCalledWith(message);
+    expect(toast.success).not.toHaveBeenCalledWith(expect.stringContaining('已开始运行'));
+    expect(w.emitted('started')?.[0]?.[0]).toMatchObject({ id: 'sess-1', status: 'created' });
+    expect(refreshLiveVirtuals).toHaveBeenCalledTimes(1);
+    w.unmount();
+  });
+
+  it('创建请求失败保留启动入口，不发出已创建事件', async () => {
+    vi.mocked(adminVirtualLearnersApi.startVirtualSession).mockRejectedValueOnce(new Error('请求失败'));
+    const w = await openLaunch();
+    await chooseMkSelect(w, '选择故事', 's1');
+    await w.get('.mk-modal__foot .mk-btn--primary').trigger('click');
+    await flushPromises();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('启动失败'));
+    expect(w.emitted('started')).toBeUndefined();
+    expect(refreshLiveVirtuals).not.toHaveBeenCalled();
+    expect(w.get('.mk-modal__foot .mk-btn--primary').attributes('disabled')).toBeUndefined();
+    w.unmount();
+  });
+
+  it('模式选择解释日期差异和独立评审入口，不暗示启动即评审', async () => {
+    const w = await openLaunch();
+    expect(w.get('.mk-field__hint').text()).toContain('辅助模拟支持按模拟日期推进');
+    expect(w.get('.mk-field__hint').text()).toContain('独立评审不在启动时自动执行');
+    await chooseMkSelect(w, '运行模式', 'blackbox');
+    expect(w.get('.mk-field__hint').text()).toContain('真实日期，不支持日期模拟');
+    expect(w.get('.mk-field__hint').text()).toContain('完成后可到会话审计发起独立评审');
     w.unmount();
   });
 });

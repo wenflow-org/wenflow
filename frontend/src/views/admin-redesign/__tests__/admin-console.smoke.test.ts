@@ -43,6 +43,7 @@ vi.mock('@/api/adminApi', () => ({
   adminPromptOpsApi: apiObject(),
   adminHealthCenterApi: apiObject(),
   adminVirtualLearnersApi: apiObject(),
+  adminSessionAuditsApi: apiObject(),
   adminSessionsApi: apiObject(),
   adminSkillWorkbenchApi: apiObject(),
   adminAgentPromptsApi: apiObject(),

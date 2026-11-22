@@ -56,6 +56,7 @@ import {
   resolveActiveTaskMaterialExcerpts,
   resolveEntryStateForTeaching,
   resolvePathMaterialsForTeaching,
+  resolvePathTopologyForTeaching,
   resolveSchoolAnchorForTeaching,
   resolveTaskMaterialPayloadForTeaching,
   resolveTaskMisconceptionHints,
@@ -440,7 +441,10 @@ async function buildTeachingScenarioContextImpl(
       currentTaskOrder,
       totalTasksInMilestone: orderedTasks.length,
     },
-    entryState: resolveEntryStateForTeaching(path.aiPromptTemplate),
+    // 起步段标记（2026-11-22 Phase 4 缝隙修复）：契约下落库模板的 entryState 已退场（恒缺席），
+    // 探索起步段改由持久化拓扑派生——pathTopology==='exploratory' 是课堂唯一的起步段信号。
+    entryState: resolveEntryStateForTeaching(path.aiPromptTemplate)
+      ?? (resolvePathTopologyForTeaching(path.aiPromptTemplate) === 'exploratory' ? 'exploratory' : null),
     schoolAnchor: resolveSchoolAnchorForTeaching(path.aiPromptTemplate) ?? { background: null, baselineEvidence: null },
     learnerPersona,
     learningState: learningState ? {

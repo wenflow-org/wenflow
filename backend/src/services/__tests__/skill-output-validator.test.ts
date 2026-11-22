@@ -129,7 +129,8 @@ describe('validateCoreFieldDeclarations', () => {
 describe('validateSkillOutputFields（P3 运行时入口）', () => {
   it('默认启用的 skill 从 core 文件加载 fields 并校验', async () => {
     expect(isFieldValidatedSkill('skill:teaching-turn')).toBe(true)
-    expect(isFieldValidatedSkill('skill:skill-author')).toBe(false)
+    // 2026-11-22 元技能清理：skill-author 已退役，排除夹具换 simulation-goal-dialogue
+    expect(isFieldValidatedSkill('skill:simulation-goal-dialogue')).toBe(false)
     expect(isFieldValidatedSkill('skill:semantic-freeze-judge')).toBe(false)
     const result = await validateSkillOutputFields('skill:teaching-turn', {
       reply: '讲解一下',
@@ -144,7 +145,7 @@ describe('validateSkillOutputFields（P3 运行时入口）', () => {
   })
 
   it('排除名单内的 skill 返回 null（跳过）', async () => {
-    expect(await validateSkillOutputFields('skill:skill-author', {})).toBeNull()
+    expect(await validateSkillOutputFields('skill:simulation-goal-dialogue', {})).toBeNull()
     expect(await validateSkillOutputFields('skill:simulation-referee', {})).toBeNull()
   })
 

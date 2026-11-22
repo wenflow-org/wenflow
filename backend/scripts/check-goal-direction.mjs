@@ -68,6 +68,9 @@ const EXPECT = {
   'x03-behavioral-economics': { entryState: 'exploratory', starter: true, maxStages: 2, maxHours: 2 },
   'x04-modern-china-history': { entryState: 'exploratory', starter: true, maxStages: 2, maxHours: 2 },
   'x05-labor-contract-control': { entryState: 'focused', starter: false, minStages: 2 },
+  // 2026-11-22 体量唯一真值表回测：完整学科 4-6 段/15-40h；单点概念 ≤2 段/≤1.2h（代码帽同值）
+  'v01-full-subject-grammar': { fullSubject: true, minStages: 4, maxStages: 6, minHours: 15, maxHours: 40, scopeLabel: '[完整学科]' },
+  'v02-single-concept-ppi': { entryState: 'focused', starter: true, maxStages: 2, maxHours: 1.2, scopeLabel: '[单点概念]' },
 };
 
 let cookie = '';
@@ -194,7 +197,9 @@ function evaluate(c, m) {
     if (typeof m.objectiveScopeHours === 'number' && m.objectiveScopeHours > (expect.maxHours ?? 2)) {
       reasons.push(`objectiveScopeHours=${m.objectiveScopeHours}，超过起步上限 ${expect.maxHours ?? 2}`);
     }
-    if (m.hasProposal && m.outOfScope.length === 0) reasons.push('out_of_scope 为空，没有远期留白');
+    // 2026-11-22 口径收窄：远期留白只对 exploratory（泛泛好奇、学科大本轮轻起步）强制——
+    // 窄单点应试目标按 yaml 规则「没有就输出 []」是正确行为，不该扣。
+    if (m.hasProposal && m.outOfScope.length === 0 && m.entryState !== 'focused') reasons.push('out_of_scope 为空，没有远期留白');
     if (m.askedForbidden) reasons.push(`追问了开放态不该问的用途/深度/卡点问题${m.askedForbiddenText ? `：${String(m.askedForbiddenText).slice(0, 80)}` : ''}`);
     if (m.pathMilestones > (expect.maxStages ?? 2)) reasons.push(`路径阶段=${m.pathMilestones}，超过起步上限 ${expect.maxStages ?? 2}`);
   }
@@ -202,6 +207,17 @@ function evaluate(c, m) {
     if (m.entryState === 'exploratory') reasons.push('明确目标被误判为 exploratory');
     if (m.keyStages && m.keyStages < (expect.minStages ?? 3)) reasons.push(`key_stages=${m.keyStages}，低于完整路径下限 ${expect.minStages ?? 3}`);
     if (m.pathMilestones && m.pathMilestones < (expect.minStages ?? 3)) reasons.push(`路径阶段=${m.pathMilestones}，低于完整路径下限`);
+  }
+  if (expect.scopeLabel && !(String(m.scopeSize || '').startsWith(expect.scopeLabel))) {
+    reasons.push(`scope_size="${String(m.scopeSize).slice(0, 24)}"，期望前缀 ${expect.scopeLabel}`);
+  }
+  if (expect.fullSubject) {
+    if (m.keyStages && (m.keyStages < expect.minStages || m.keyStages > expect.maxStages)) {
+      reasons.push(`key_stages=${m.keyStages}，完整学科应在 ${expect.minStages}-${expect.maxStages} 段`);
+    }
+    if (typeof m.objectiveScopeHours === 'number' && (m.objectiveScopeHours < expect.minHours || m.objectiveScopeHours > expect.maxHours)) {
+      reasons.push(`objectiveScopeHours=${m.objectiveScopeHours}，完整学科应在 ${expect.minHours}-${expect.maxHours}h`);
+    }
   }
   if (m.stage === 'understanding' && !m.pathId) reasons.push('goal 仍停在 understanding，没有收敛');
   if (!m.hasProposal && !m.pathId && m.stage !== 'completed') reasons.push('没有方案也没有路径');

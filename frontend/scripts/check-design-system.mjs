@@ -277,7 +277,10 @@ const TOKEN_HOOK_WHITELIST = new Set(['--mk-empty-min-h', '--mk-skel-card-min', 
   // 2026-11-05：--gc-overlay-top 由 V2GoalConversation.vue syncOverlayTop 运行时经
   //   document.documentElement.style.setProperty 写入（吸顶横幅底边 + 顶栏高，同 --nc-panel-top 量法），
   //   CSS 侧只以 var(--gc-overlay-top, 0) 兜底消费，静态没有 `--gc-overlay-top:` 声明，同款运行时钩子。
-  '--gc-overlay-top'])
+  '--gc-overlay-top',
+  // 2026-11-22：--wf-anb-h 由 AnnouncementBanner 运行时把实测横幅高写入 :root（ANB_HEIGHT_VAR），
+  //   V2Nav 以 var(--wf-anb-h, 0px) 作吸顶 top 偏移、横幅关闭后回落 top:0——同一款运行时钩子。
+  '--wf-anb-h'])
 
 /**
  * 【已定位、已排期】的未定义 token —— 报告但不阻断（token → 一句话原因）。

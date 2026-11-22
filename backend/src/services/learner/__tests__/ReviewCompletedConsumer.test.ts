@@ -77,7 +77,7 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
   interface Tx {
     domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
     teaching_sessions: { findUnique: jest.Mock }
-    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    learner_evidence: { findMany: jest.Mock; create: jest.Mock }
     memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
     learner_projections: { upsert: jest.Mock }
   }
@@ -85,13 +85,13 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
   let tx: Tx
 
   // 跨调用持久化的最小状态：模拟真实 DB（第一条事件写入后，第二条事件能查到）
-  let evidenceStore: Array<{ id: string; userId: string; sessionId: string | null; evidenceKey: string }>
+  let evidenceStore: Array<{ id: string; userId: string; sessionId: string | null; evidenceKey: string; payload: string }>
   let inboxStore: Set<string>
 
   interface InboxWhere { consumerId_eventId: { eventId: string } }
   interface InboxCreateData { eventId: string }
-  interface EvidenceWhere { userId: string; sessionId: string | null; evidenceKey: string }
-  interface EvidenceCreateData { id: string; userId: string; sessionId: string | null; evidenceKey: string }
+  interface EvidenceWhere { userId: string; sessionId: string | null; evidenceKey: string; evidenceType?: string }
+  interface EvidenceCreateData { id: string; userId: string; sessionId: string | null; evidenceKey: string; payload: string }
 
   const buildTx = (): Tx => ({
     domain_event_inbox: {
@@ -104,13 +104,16 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
     },
     teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
     learner_evidence: {
-      findFirst: jest.fn(async ({ where }: { where: EvidenceWhere }) =>
-        evidenceStore.find((row) => row.userId === where.userId
+      // 2026-11-22（外部评审 P1.1）：消费者改用 findMany + payload.reviewAttemptId 判定作答身份
+      findMany: jest.fn(async ({ where }: { where: EvidenceWhere }) =>
+        evidenceStore.filter((row) => row.userId === where.userId
           && row.sessionId === where.sessionId
-          && row.evidenceKey === where.evidenceKey) ?? null),
+          && row.evidenceKey === where.evidenceKey
+          && (!where.evidenceType || where.evidenceType === 'review:completed'))),
       create: jest.fn(async ({ data }: { data: EvidenceCreateData }) => {
         evidenceStore.push({
           id: data.id, userId: data.userId, sessionId: data.sessionId, evidenceKey: data.evidenceKey,
+          payload: data.payload,
         })
         return {}
       }),
@@ -146,6 +149,15 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
     tx = buildTx()
     transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
     getActiveForConcepts.mockResolvedValue([])
+  })
+
+  // 2026-11-22 E2E 实证回归（验证批 #2）：applyReview 原来是 `await withTransaction(...)` 无 return，
+  // 生产路径返回值恒为 undefined → retention-probe 的 downgraded = summary.appliedItems > 0 读
+  // undefined 抛错、永远报「未降级」。两套单测桩都没覆盖真实返回路径，GUI 走查抓到——
+  // 本用例锁住返回值契约：事务回调的汇总必须透传出去。
+  it('applyReview 返回 ReviewApplySummary（返回值契约，downgraded 口径依赖它）', async () => {
+    const summary = await new ReviewCompletedConsumer().applyReview(event('evt-summary', 1_700_000_000_000))
+    expect(summary).toEqual({ totalItems: 1, appliedItems: 1, skippedDuplicateItems: 0, skippedNegativeInterval: 0 })
   })
 
   it('首次事件写入证据与 FSRS 痕迹', async () => {
@@ -184,20 +196,19 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
 
     expect(tx.learner_evidence.create).toHaveBeenCalledTimes(1)
     expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(1)
-    expect(tx.learner_evidence.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1', sessionId: 'ts-1', evidenceKey: 'review:result:光合作用' } })
+    expect(tx.learner_evidence.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ userId: 'user-1', sessionId: 'ts-1', evidenceKey: 'review:result:光合作用' }) })
     )
     // 两条事件各自登记收据（事件级幂等仍独立成立）
     expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(2)
   })
 
   /**
-   * 语义收紧钉死（复核意见第 3 条）：稳定键 = (sessionId, conceptKey)，**不含逐次作答 id**。
-   * 因此同一会话内对同一概念的第二次**真实独立作答**会被判重复而只记一次。
-   * 这是幂等的预期代价（当前 payload 无逐次作答标识）；本用例把这个行为固定下来，
-   * 一旦未来 payload 引入逐次稳定 id，本用例必须同步改判据。
+   * 旧口径钉死（2026-11-22 更新）：不带 reviewAttemptId 的事件（课堂温故/重复收束）
+   * 稳定键仍是 (sessionId, conceptKey)——同会话同概念的第二次作答只记一次。
+   * 带 reviewAttemptId 的事件（延迟保持探针）走独立身份，见下方探针回归。
    */
-  it('同一会话内对同一概念的两次独立作答（同 sessionId+conceptKey）只记一次（语义收紧钉死）', async () => {
+  it('同一会话内对同一概念的两次独立作答（同 sessionId+conceptKey）只记一次（旧口径钉死）', async () => {
     const consumer = new ReviewCompletedConsumer()
     // 两次独立作答：不同 eventId、不同 occurredAt、不同结果（learning → mastered）
     await consumer.handle(event('answer-1', 1_700_000_000_000))
@@ -247,9 +258,71 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
     expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(2)
   })
 
+  it('延迟保持探针（带 reviewAttemptId）：同会话同概念已有课堂温故行，探针仍独立应用（外部评审 P1.1）', async () => {
+    const consumer = new ReviewCompletedConsumer()
+    // 课堂温故先落一行（无 reviewAttemptId）
+    await consumer.handle(event('warmup-1', 1_700_000_000_000))
+    expect(tx.learner_evidence.create).toHaveBeenCalledTimes(1)
+    expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(1)
+
+    // 48–72h 后探针作答：同会话同概念，但事件带独立作答身份 → 不得被课堂稳定键吞掉
+    await consumer.handle(createDomainEvent({
+      id: 'probe-evt-1',
+      type: 'review:completed',
+      aggregateType: 'review',
+      aggregateId: 'probe-1',
+      userId: 'user-1',
+      source: 'retention-probe',
+      occurredAt: new Date(1_700_000_000_000 + 48 * 3600 * 1000),
+      data: {
+        sessionId: 'ts-1',
+        mode: 'retention-probe',
+        reviewAttemptId: 'probe-1',
+        reviewItems: [{ conceptKey: '光合作用', label: '光合作用', status: 'mastered', progress: 90, masteryScore: 0.85, rating: 'good' }],
+      },
+    }))
+
+    expect(tx.learner_evidence.create).toHaveBeenCalledTimes(2)
+    expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(2)
+    // 作答身份随证据行留痕（同 evidenceKey 家族内区分课堂温故与探针）
+    const probeCreate = tx.learner_evidence.create.mock.calls[1][0]
+    expect(JSON.parse(probeCreate.data.payload).reviewAttemptId).toBe('probe-1')
+  })
+
+  it('同 reviewAttemptId 的事件重放只应用一次；新探针（新身份）再应用一次', async () => {
+    const consumer = new ReviewCompletedConsumer()
+    const probeEvent = (eventId: string, attemptId: string, occurredAtMs: number) => createDomainEvent({
+      id: eventId,
+      type: 'review:completed',
+      aggregateType: 'review',
+      aggregateId: attemptId,
+      userId: 'user-1',
+      source: 'retention-probe',
+      occurredAt: new Date(occurredAtMs),
+      data: {
+        sessionId: 'ts-1',
+        mode: 'retention-probe',
+        reviewAttemptId: attemptId,
+        reviewItems: [{ conceptKey: '光合作用', label: '光合作用', status: 'mastered', progress: 90, masteryScore: 0.85, rating: 'good' }],
+      },
+    })
+
+    const t0 = 1_700_000_000_000 + 48 * 3600 * 1000
+    await consumer.handle(probeEvent('probe-evt-a', 'probe-a', t0))
+    // 不同 eventId、同一作答身份（模拟同一探针的重复投递）：身份级去重拦下
+    await consumer.handle(probeEvent('probe-evt-a-replay', 'probe-a', t0 + 1_000))
+    expect(tx.learner_evidence.create).toHaveBeenCalledTimes(1)
+    expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(1)
+
+    // 新探针（新身份）：独立作答再次应用
+    await consumer.handle(probeEvent('probe-evt-b', 'probe-b', t0 + 24 * 3600 * 1000))
+    expect(tx.learner_evidence.create).toHaveBeenCalledTimes(2)
+    expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(2)
+  })
+
   it('已应用过（learner_evidence 已有同会话同概念行）的事件直接跳过，不重复写证据/FSRS', async () => {
     // 预置一条已应用证据（等价于另一进程/更早事件已处理该点）
-    evidenceStore.push({ id: 'lev_existing', userId: 'user-1', sessionId: 'ts-1', evidenceKey: 'review:result:光合作用' })
+    evidenceStore.push({ id: 'lev_existing', userId: 'user-1', sessionId: 'ts-1', evidenceKey: 'review:result:光合作用', payload: '{}' })
 
     await new ReviewCompletedConsumer().handle(event('evt-2', 1_700_000_060_000))
 
@@ -312,7 +385,7 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
 
     await new ReviewCompletedConsumer().handle(event('evt-5', 1_700_000_120_000))
 
-    expect(tx.learner_evidence.findFirst).not.toHaveBeenCalled()
+    expect(tx.learner_evidence.findMany).not.toHaveBeenCalled()
     expect(tx.learner_evidence.create).not.toHaveBeenCalled()
     expect(tx.memory_traces.upsert).not.toHaveBeenCalled()
   })
@@ -326,7 +399,7 @@ describe('ReviewCompletedConsumer memory 投影写入（B2）', () => {
   interface Tx {
     domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
     teaching_sessions: { findUnique: jest.Mock }
-    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock }
     memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
     learner_projections: { upsert: jest.Mock }
   }
@@ -337,7 +410,7 @@ describe('ReviewCompletedConsumer memory 投影写入（B2）', () => {
       create: jest.fn().mockResolvedValue({}),
     },
     teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
-    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}) },
     memory_traces: {
       findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockResolvedValue({}),
@@ -423,7 +496,7 @@ describe('ReviewCompletedConsumer kcId 锚定（#94 写入侧稳定键）', () =
   interface Tx {
     domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
     teaching_sessions: { findUnique: jest.Mock }
-    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock }
     memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
     learner_projections: { upsert: jest.Mock }
   }
@@ -434,7 +507,7 @@ describe('ReviewCompletedConsumer kcId 锚定（#94 写入侧稳定键）', () =
       create: jest.fn().mockResolvedValue({}),
     },
     teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
-    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}) },
     memory_traces: {
       findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockResolvedValue({}),
@@ -542,7 +615,7 @@ describe('ReviewCompletedConsumer 模拟钟绑定（M-15）', () => {
   interface Tx {
     domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
     teaching_sessions: { findUnique: jest.Mock }
-    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock }
     memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
     learner_projections: { upsert: jest.Mock }
   }
@@ -553,7 +626,7 @@ describe('ReviewCompletedConsumer 模拟钟绑定（M-15）', () => {
       create: jest.fn().mockResolvedValue({}),
     },
     teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
-    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}) },
     memory_traces: {
       findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockImplementation(async () => {
@@ -642,7 +715,7 @@ describe('ReviewCompletedConsumer · 复习 stability 映射（#158）', () => {
   interface Tx {
     domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
     teaching_sessions: { findUnique: jest.Mock }
-    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock }
     memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
     learner_projections: { upsert: jest.Mock }
   }
@@ -653,7 +726,7 @@ describe('ReviewCompletedConsumer · 复习 stability 映射（#158）', () => {
       create: jest.fn().mockResolvedValue({}),
     },
     teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
-    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}) },
     memory_traces: {
       findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockResolvedValue({}),

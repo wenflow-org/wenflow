@@ -114,13 +114,14 @@ describe('虚拟学习者定位（D1）', () => {
     wrapper.unmount();
   });
 
-  it('manifest 导航中仿真组收敛为两个职责页（实例 + 身份池；批量实验 2026-10-04 下线）', () => {
+  it('manifest 导航中仿真组收敛为三个职责页（实例 + 评审报告 + 身份池；批量实验 2026-10-04 下线）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
     // 2026-10-26 组名与总览状态条同词（「仿真 · 仿真空闲」）
     expect(scene!.group).toBe('仿真');
+    // 2026-11-22 会话评审报告入组（P2.1：双评估 API 面的页面消费端）
     const groupIds = MOCK_SCENES.filter((s) => s.group === '仿真').map((s) => s.id);
-    expect(groupIds).toEqual(['virtual-learners', 'virtual-learner-cards']);
+    expect(groupIds).toEqual(['virtual-learners', 'session-audit', 'virtual-learner-cards']);
     expect(MOCK_SCENES.find((s) => s.id === 'batch-experiments')).toBeUndefined();
   });
 });

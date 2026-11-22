@@ -325,6 +325,12 @@ describe('ai-teaching routes', () => {
         diagrams: [],
         // 教师补充材料卡片（批次 E）——字段恒在，本轮无补充则为 null
         supplementaryMaterial: null,
+        // 课堂契约/报告/终检/支线（2026-11-22）：随回合下发，引擎未产出时为 null；
+        // 出口过 stripCheckpointAnswerKeys，不泄露答案键
+        lessonContract: null,
+        lessonReport: null,
+        exitTicket: null,
+        branch: null,
         // 提示词调试信封默认不下发（见 promptDebugEnabled）
         promptDebug: null,
         peerDebug: null,

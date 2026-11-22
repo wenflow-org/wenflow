@@ -56,12 +56,19 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
     note: '人设锚点/故事/画像为常量或慢变；回合状态后置',
   },
   'simulation-goal-dialogue': {
-    stable: ['personaAnchorHint', 'task', 'learner', 'story'],
-    note: '人设锚点/任务/画像/故事稳定；可见对话与回合状态后置',
+    // 2026-11-22 字段联动审查：删掉零数据键 task（只装 legacy task.requirements，其中
+    // "apply friction.guidance to decide…" 与编排层已采样的 friction.triggered 双权威打架），
+    // 稳定前缀由四键收窄为三键。
+    stable: ['personaAnchorHint', 'learner', 'story'],
+    retiredStable: ['personaAnchorHint', 'task', 'learner', 'story'],
+    note: '人设锚点/画像/故事稳定；可见对话与回合状态后置',
   },
   'simulation-path-evaluate': {
-    stable: ['task', 'personaAnchorHint', 'goalState', 'learner'],
-    note: '任务/锚点/目标态/画像稳定；路径提案与回合状态后置',
+    // 2026-11-22 字段联动审查：删掉零声明键 task（yaml inputs 从未声明，只装 legacy
+    // requirements），稳定前缀由四键收窄为三键。
+    stable: ['personaAnchorHint', 'goalState', 'learner'],
+    retiredStable: ['task', 'personaAnchorHint', 'goalState', 'learner'],
+    note: '锚点/目标态/画像稳定；路径提案与回合状态后置',
   },
   'simulation-persona-designer': {
     stable: ['candidatePersonas', 'preferredLevels', 'recentPersonaHints', 'existingPersonaSeed'],

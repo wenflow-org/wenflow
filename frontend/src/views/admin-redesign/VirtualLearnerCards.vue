@@ -269,7 +269,7 @@ import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import Pagination from './Pagination.vue'
 import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
-import { cardDisplayTitle, shortCardKey, cardTier, compareTier, isWallHiddenTag, tierLabel, TIER_RE } from './cardDisplay'
+import { cardDisplayTitle, shortCardKey, cardTier, compareTier, isWallHiddenTag, tierLabel, TIER_RE, knowledgeLevelText } from './cardDisplay'
 import { isInternalTag, isPlaceholderCardKey } from './cardTags'
 import { openSubPage } from './store'
 import { errMsg, liveRefreshSeq } from './live'
@@ -535,9 +535,9 @@ function sourceTitle(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
   return '来源：后台创建'
 }
+/* 知识水平译名单源化（2026-11-22 审计 P3）：与画像/创建侧同字段同词表 */
 function levelText(level: string): string {
-  const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
-  return map[level] || level || '—'
+  return knowledgeLevelText(level)
 }
 
 /**

@@ -151,5 +151,14 @@ describeLLM('profile golden timelines（LLM 契约层，PROFILE_GOLDEN_LLM=1 才
     for (const assessment of output.conceptAssessments ?? []) {
       expect(assessment.conceptKey).toContain('拷贝');
     }
+    // 正向断言堵死 vacuous pass（外部评审 P2.3）：recentEvidence 明确给了 tk6
+    // （深拷贝与浅拷贝的边界，signal=mastered）→ 误解反转场景必须产出对该概念的
+    // 有效重评估（observed=mastered 且引用 tk6），空数组/空洞察都算失败。
+    const assessments = Array.isArray(output.conceptAssessments) ? output.conceptAssessments : [];
+    expect(assessments.length).toBeGreaterThan(0);
+    const reversal = assessments.find((item: any) => String(item?.conceptKey || '').includes('拷贝'));
+    expect(reversal).toBeDefined();
+    expect(reversal.observed).toBe('mastered');
+    expect(Array.isArray(reversal.evidenceRefs) && reversal.evidenceRefs.includes('tk6')).toBe(true);
   });
 });

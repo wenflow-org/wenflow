@@ -72,7 +72,7 @@ fields:
     type: "object[]"
     desc: |
       反复混淆模式，每项结构：
-      { "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 1 }
+      { "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 本节课内该混淆实际被观察到的次数（≥1；跨课聚合由代码按概念归并取 max，不由模型累加） }
       （conceptKey 由系统按 label 归一，不要输出）
   - name: knowledgeStateSummary
     type: string

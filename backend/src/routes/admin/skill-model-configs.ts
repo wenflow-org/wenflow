@@ -98,16 +98,15 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * 「允许平台默认」白名单（拍板 #9，2026-10-08）：近 30 天调用真 0 的 4 个技能
- * （skill-author/skill-compiler=入口已下线的工作台元技能；simulation-referee/
- * simulation-actor-audit=手动触发的 VL 审计技能），补配置行只会制造
+ * 「允许平台默认」白名单（拍板 #9，2026-10-08）：近 30 天调用真 0 的技能
+ * （simulation-referee/simulation-actor-audit=手动触发的 VL 审计技能），补配置行只会制造
  * 0 调用的新漂移点，故登记在此、不计入 unconfigured——skills 列表仍完整可见（审计可见性保留）。
  * 若未来其中某个进入高频主链，应先补配置行再把它移出本名单（09-28「漏配静默落旧通道」
  * 教训只针对高频主链技能）。
+ * （2026-11-22 清理：skill-author/skill-compiler 两元技能连同 yaml/服务已整体退役移除，
+ * 不在本名单占位——详见 docs/UX_AUDIT_2026-11-22.md 元技能清理批。）
  */
 const PLATFORM_DEFAULT_ALLOWLIST: readonly string[] = [
-  'skill-author',
-  'skill-compiler',
   'simulation-referee',
   'simulation-actor-audit',
 ];

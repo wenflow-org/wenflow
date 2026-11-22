@@ -138,6 +138,25 @@ const completionNote = ref('');
 const sending = ref(false);
 const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>('');
 const resumeErrorStatus = ref<number | null>(null);
+/** 只按服务端明确配置错误或已知传输标记区分原因，未知失败不推断为断网。 */
+const failureKind = ref<'configuration' | 'transport' | 'timeout' | ''>('');
+const startFailureMessage = computed(() => {
+  const receipt = '你的消息已保留，但尚未收到 AI 回复。';
+  if (failureKind.value === 'configuration') return `${receipt}AI 模型尚未配置，请联系管理员配置后重试。`;
+  if (failureKind.value === 'transport') return `${receipt}请求连接中断，请检查连接后重试。`;
+  if (failureKind.value === 'timeout') return `${receipt}等待已超时，可以重试。`;
+  return `${receipt}请重试。`;
+});
+
+function classifyFailure(error: unknown): typeof failureKind.value {
+  const e = error as { serverError?: boolean; transport?: boolean; message?: string; response?: { data?: { error?: { message?: string } | string } } } | null;
+  const body = e?.response?.data?.error;
+  const serverMessage = e?.serverError ? e.message : typeof body === 'string' ? body : body?.message;
+  // 该明确错误文本由现有模型路由透出；HTTP 500 / 普通 message 不足以证明配置缺失。
+  if (serverMessage && /^(?:AI model is not configured|AI 模型尚未配置|未配置 AI 模型)[。.!！]?$/i.test(serverMessage.trim())) return 'configuration';
+  if (!e?.serverError && !e?.response && (e?.transport || e?.message === '网络错误，请检查连接')) return 'transport';
+  return '';
+}
 /** 最近一次「用户主动停止」的动作：与 failed 并行记录。主动中止不是故障，
     视图据此显示「已停止」而非「连接失败」（failed 仍置位以保留重试入口） */
 const stopped = ref<'start' | 'reply' | 'confirm' | 'supplement' | ''>('');
@@ -443,6 +462,7 @@ async function run(
   sending.value = true;
   failed.value = '';
   stopped.value = '';
+  failureKind.value = '';
   lastPayload.value = text;
   // 流式渐进渲染：SSE delta 累积实时上屏；goal skill 为 JSON 输出（无结构化 delta），
   // 展示原始模型文本作为「正在思考」的可见反馈，final 到达后以官方消息为准替换。
@@ -472,6 +492,13 @@ async function run(
     armWatchdog();
   };
   currentAbort = abort;
+  // 非流式回退没有 signal 参数：停止等待时放弃其结果，不宣称取消服务端任务。
+  const waitForFallback = <T>(request: Promise<T>): Promise<T> => new Promise((resolve, reject) => {
+    const onAbort = () => reject(Object.assign(new Error('已停止等待'), { cancelled: true }));
+    abort.signal.addEventListener('abort', onAbort, { once: true });
+    if (abort.signal.aborted) onAbort();
+    request.then(resolve, reject).finally(() => abort.signal.removeEventListener('abort', onAbort));
+  });
   try {
     let env: GoalConversationEnvelope | null = null;
     try {
@@ -486,36 +513,8 @@ async function run(
       }
     } catch (streamError) {
       const e = streamError as { cancelled?: boolean; transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
-      // 看门狗/总闸判死：给「回复超时」失败气泡 + 重试入口。必须先于 cancelled 分支——
-      // abort 触发的错误会被 sse.ts 标成 cancelled，不拦住就会被当「离页中止」静默吞掉。
-      if (timedOut) {
-        if (gen !== generation) return;
-        failed.value = action;
-        const partial = streamingText.value.trim();
-        if (partial) {
-          pushMessage({ role: 'ai', content: partial, time: nowTime(), failed: true });
-        } else if (action !== 'start' && action !== 'supplement') {
-          pushMessage({ role: 'ai', content: '回复超时，已停止等待。可以重试，或直接输入新内容继续。', time: nowTime(), failed: true });
-        }
-        return;
-      }
-      // 用户主动停止：stopped 置位（视图显示「已停止」而非「连接失败」），
-      // failed 仍置位提供重试入口；已收到的流式部分落成消息，
-      // 否则 finally 清空 streamingText 后用户读到一半的答案直接消失
-      if (e.cancelled && userStopped) {
-        stopped.value = action;
-        failed.value = action;
-        const partial = streamingText.value.trim();
-        if (partial) {
-          // 打 failed 标记：重试会先移除该条再重发，避免新旧答案叠在一起
-          pushMessage({ role: 'ai', content: partial, time: nowTime(), failed: true });
-        } else if (action !== 'supplement') {
-          pushMessage({ role: 'ai', content: '已停止生成。可以重试，或直接输入新内容继续。', time: nowTime(), failed: true });
-        }
-        throw streamError;
-      }
-      // 离页中止：不重发也不弹重试
-      if (e.cancelled) throw streamError;
+      // 超时/主动停止交给外层统一收尾，避免落两条错误消息，也绝不自动重发。
+      if (timedOut || userStopped || e.cancelled || gen !== generation) throw streamError;
       if (e.recoveryEnvelope) {
         // 422 恢复信封：模型部分产出可用，先落屏；若信封标记失败（如结构化输出连续校验失败），
         // 同步置 failed 并给消息打 failed 标记，让页面既有「重试」入口可用
@@ -530,24 +529,40 @@ async function run(
       } else {
         // 传输层失败且未收到任何内容：回退非流式重发
         if (action === 'start') {
-          env = await startGoalConversation(text, { meta, materialIds: attachedMaterialIds.value });
+          env = await waitForFallback(startGoalConversation(text, { meta, materialIds: attachedMaterialIds.value }));
         } else if (action === 'confirm') {
           // 传输层失败回退到非流式：probeAnswers 必须与流式路径（上方）同权携带——
           // 回退路径丢题会让「确认前自测」作答静默蒸发，后端确定性判分键缺失
-          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers, materialIds: attachedMaterialIds.value });
+          env = await waitForFallback(replyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers, materialIds: attachedMaterialIds.value }));
         } else if (action === 'supplement') {
-          env = await regenerateGoalConversation(conversationId.value, text);
+          env = await waitForFallback(regenerateGoalConversation(conversationId.value, text));
         } else {
-          env = await replyGoalConversation(conversationId.value, text, { meta, materialIds: attachedMaterialIds.value });
+          env = await waitForFallback(replyGoalConversation(conversationId.value, text, { meta, materialIds: attachedMaterialIds.value }));
         }
       }
     }
+    if (abort.signal.aborted) throw Object.assign(new Error('已停止等待'), { cancelled: true });
     if (env) {
       applyEnvelope(env, { userText: action === 'supplement' ? '' : text }, gen);
     }
   } catch (e) {
     // 会话已被重置：过期失败不写入状态
     if (gen !== generation) return;
+    if (timedOut || userStopped) {
+      failed.value = action;
+      if (userStopped) stopped.value = action;
+      else failureKind.value = 'timeout';
+      const partial = streamingText.value.trim();
+      // 打 failed 标记：重试（重新运行时过滤失败气泡；有会话时改走快照回读整页替换）不残留旧片段
+      if (partial) pushMessage({ role: 'ai', content: partial, time: nowTime(), failed: true });
+      // 主动停止的说明与恢复操作由页面统一呈现，部分回复不伪装为已完成。
+      if (!userStopped && action !== 'start') {
+        pushMessage({ role: 'ai', content: '尚未收到完整回复，等待已超时。后台任务可能仍在继续。', time: nowTime(), failed: true });
+      }
+      return;
+    }
+    if ((e as { cancelled?: boolean })?.cancelled) return;
+    failureKind.value = classifyFailure(e);
     // 非流式回退请求的 422 恢复信封：axios 拦截器把信封放在 error.response.data.data，
     // 与 SSE 路径的 recoveryEnvelope 对齐处理（模型部分产出可用，应用后视为本轮已处理）
     const axiosErr = e as { status?: number; response?: { data?: { error?: string; data?: GoalConversationEnvelope } } };
@@ -593,7 +608,7 @@ function stop() {
 
 async function send(text: string, skipUserPush = false) {
   const t = text.trim();
-  if (!t || sending.value) return;
+  if (!t || sending.value || stopped.value) return;
   // 先上屏，再等 AI（与 supplement 一致）；skipUserPush=true 时调用方已替换消息（内联编辑）
   if (!skipUserPush) pushMessage({ role: 'user', content: t, time: nowTime() });
   started.value = true;
@@ -609,7 +624,7 @@ async function send(text: string, skipUserPush = false) {
 }
 
 async function confirm() {
-  if (!conversationId.value || sending.value) return;
+  if (!conversationId.value || sending.value || stopped.value) return;
   const label = '确认并生成路径';
   pushMessage({ role: 'user', content: label, time: nowTime() });
   setGoalConversationMsgs(JSON.stringify(messages.value.slice(-60)));
@@ -683,14 +698,19 @@ function answerProbe(probe: { probeId: string }, optionId: string) {
 
 async function supplement(text: string) {
   const t = text.trim();
-  if (!conversationId.value || !t || sending.value) return;
+  if (!conversationId.value || !t || sending.value || stopped.value) return;
   pushMessage({ role: 'user', content: t, time: nowTime() });
   await run('supplement', t);
 }
 
 async function retry() {
   const action = failed.value;
-  if (!action) return;
+  if (!action || sending.value) return;
+  // 停止等待后已有会话 id：只回读服务端快照，不自动重放回复/确认。
+  if (stopped.value && conversationId.value) {
+    await resumeById(conversationId.value);
+    return;
+  }
   if (action === 'resume') {
     await resume();
     return;
@@ -722,6 +742,8 @@ async function resumeById(cid: string): Promise<boolean> {
     const env = await getGoalConversation(cid);
     if (gen === generation) {
       resumeErrorStatus.value = null;
+      stopped.value = '';
+      failureKind.value = '';
       // 恢复请求的会话 id 是权威：即使服务端信封暂时缺少 internal.core.conversationId，
       // 也必须沿用 cid。否则恢复后下一条消息会走 start 分支，新建一个 gc_xxx 会话。
       conversationId.value = cid;
@@ -776,6 +798,7 @@ function reset(clearStorage = true) {
   freshKeys.value = [];
   failed.value = '';
   stopped.value = '';
+  failureKind.value = '';
   started.value = false;
   // 挂载口径回到「新对话默认」：显式空列表（干净起步，旧资料不会静默跟到下一次生成）
   attachedMaterialIds.value = [];
@@ -826,6 +849,7 @@ export function useGoalLive() {
     sending,
     streamingText,
     failed,
+    startFailureMessage,
     resumeErrorStatus,
     stopped,
     started,

@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-opening
-coreHash: ff31e6d6308e785f1097c6b5f1004b9d5f94a14635ff2dbb45e2bb64716b9a95
+coreHash: d2839c658412d96f91973f8da0e316ad21cd79d9773decefb2a80e00b8234f1f
 coreVersion: 1
 temperature: 0.4
 maxTokens: 64000
@@ -25,7 +25,7 @@ failurePolicy: propagate
 - 「learnerPersona（object）」`sandbox:teaching.learner.persona`（编排注入） — 学习者画像摘要（surfaceGoal/realProblem/background/currentLevel/motivation/sourceGoal，出自 goal 阶段叙述性理解）；null 或缺省表示无画像数据
 - 「schoolAnchor（object）」`sandbox:teaching.school.anchor`（编排注入） — 学校体系锚（background=教材版本/考试形式背景句，baselineEvidence=现状自评证据句）；两者皆空时缺省
 - 「taskProfile（object）」`sandbox:teaching.task.profile`（编排注入） — 本课任务画像（learningObjectives=本课学习目标/核心概念清单，coreConcept=本课核心概念名）
-- 「learnerPrediction（object）」`sandbox:teaching.learnerPrediction`（编排注入） — 任务前学习表现预测（profile-learning-predict 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；开场节奏的参考信号，非命令；null 或缺省表示未预测
+- 「learnerPrediction（object）」`sandbox:teaching.learnerPrediction`（编排注入） — 任务前学习表现预测（profile-learning-predict 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；evidence（string[]，确定性硬证据来源清单：contract_gaps/checkpoint_evidence/retention_hints/pace_mode）由编排层代码附加装配，不由预测器输出——可靠性双轨口径见下方规则；null 或缺省表示未预测
 - 「lastLessonRecap（object）」`sandbox:teaching.lastLessonRecap`（编排注入） — 上一课摘要（topicSummary/unresolvedPoints/retrievalCue/relation/sameTaskHistory）；缺省表示无可核验的上一课记录，开场不得断言上一课经历
 - 「priorLearningContext（object）」`sandbox:teaching.priorLearningContext`（编排注入） — 结构化前序（adjacent 紧邻前序 / sameTask 同任务重学史 / priorMilestoneMastery 前序掌握汇总）；缺省时按首课处理
 - 「learningSignal（string）」`sandbox:teaching.learningSignal`（编排注入） — 学习者在目标阶段流露的交付形式偏好（自由文本）；缺省时忽略

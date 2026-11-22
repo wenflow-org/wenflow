@@ -163,12 +163,14 @@ describe('学习台今日进度：超过目标要说明（走查 #1）', () => {
     getAdaptiveGuidance.mockReset();
   });
 
-  it('64 / 25 分钟 → 自然语言写明目标与超出量，进度条仍封顶 100%', async () => {
+  it('64 / 25 分钟 → 自然语言写明目标已达成与超出量，进度条仍封顶 100%', async () => {
     const w = await mountDashboard({ copy: guidanceCopy(), sessions: [todaySession()] });
     const today = w.find('.action__today');
     expect(today.text()).toContain('今日已学 64 分钟');
-    expect(today.text()).toContain('今日目标 25 分钟');
-    expect(today.text()).toContain('已超出 39 分钟');
+    expect(today.text()).toContain('今日目标 25 分钟已达成');
+    // 2026-11-22 UI 走查：「已超出 39 分钟」的「超出」带越界负面感，改成达成口径
+    expect(today.text()).toContain('多学 39 分钟');
+    expect(today.text()).not.toContain('已超出');
     expect(today.classes()).toContain('action__today--over');
     expect(w.find('.action__today-bar i').attributes('style')).toContain('width: 100%');
   });

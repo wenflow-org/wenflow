@@ -1,6 +1,6 @@
 ---
 agentId: skill:simulation-persona-designer
-coreHash: a3adb8dd60d70a9ca064977e0159432cf51ca26f55c6a29c9a0113dabf3f9ec4
+coreHash: e650f14a6686379c9fdf7243d73c47c6d9e7ab0c47e550cec782dc9074d6fe57
 coreVersion: 1
 temperature: 0.8
 maxTokens: 64000
@@ -19,7 +19,7 @@ failurePolicy: retry
 - learner：学习者画像投影（长期特征）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「preferredLevels（string[]）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位（管理端实验配置注入）
+- 「preferredLevels（string[]）」`sandbox:simulation.preferredLevels`（编排注入） — 偏好水平档位（管理端实验配置注入；词表 beginner|intermediate|advanced，来自学习者档案 knowledgeLevel，导入卡缺省 beginner）
 - 「candidatePersonas（string[]）」`sandbox:simulation.candidatePersonas`（编排注入） — 候选画像提示（可空）
 - 「recentPersonaHints（string[]）」`sandbox:simulation.recentPersonaHints`（编排注入） — 最近一次画像提示（连续性参考）
 - 「existingPersonaSeed（object）」`sandbox:simulation.existingPersonaSeed`（编排注入） — 已存在画像种子（可空，用于增量生成）

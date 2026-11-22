@@ -91,7 +91,39 @@ export interface ReviewCompletedPayload {
    * 旧事件（引入前入队）无此字段 → 消费侧回落 global 作用域。
    */
   pathId?: string | null;
+  /**
+   * 独立作答身份（外部评审 P1.1，2026-11-22）：延迟保持探针的事件仍带原课堂 sessionId，
+   * 但 48–72h 后的真实新作答不能被「同一会话同一概念只记一次」的课堂稳定键吞掉。
+   * 带 reviewAttemptId 的事件只与**同一身份**的既有证据行去重（防重放）；
+   * 旧事件（无该字段）保持原口径。行身份（evidenceKey=`review:result:<conceptKey>`）不变，
+   * attemptId 写进 payload——概念归并/复习计划等按 evidenceKey 家族读取的下游不受影响。
+   */
+  reviewAttemptId?: string | null;
   reviewItems: ReviewCompletedItem[];
+}
+
+/** applyReview 的应用结果：让生产方（如延迟保持探针）能区分「真应用」与「被去重/为空」。 */
+export interface ReviewApplySummary {
+  totalItems: number;
+  appliedItems: number;
+  skippedDuplicateItems: number;
+  skippedNegativeInterval: number;
+}
+
+const EMPTY_APPLY_SUMMARY: ReviewApplySummary = {
+  totalItems: 0,
+  appliedItems: 0,
+  skippedDuplicateItems: 0,
+  skippedNegativeInterval: 0,
+};
+
+function parseEvidenceAttemptId(payload: string | null | undefined): string {
+  try {
+    const parsed = payload ? JSON.parse(payload) : null;
+    return typeof parsed?.reviewAttemptId === 'string' ? parsed.reviewAttemptId : '';
+  } catch {
+    return '';
+  }
 }
 
 /** knowledgeState status → rating（与 SessionFinalizationService.applyReviewExtraction 语义对齐） */
@@ -127,18 +159,18 @@ export class ReviewCompletedConsumer {
    * 新增写入点与链上 helper）与实例的模拟口径一致。未启用日期模拟的实例解析为 null
    * → 原样直调，真实用户/未开启日期模拟行为零变化；已在模拟钟上下文内不覆盖。
    */
-  async handle(event: DurableDomainEvent): Promise<void> {
-    if (!event.userId) return;
+  async handle(event: DurableDomainEvent): Promise<ReviewApplySummary> {
+    if (!event.userId) return EMPTY_APPLY_SUMMARY;
     if (getSimulatedAsOf()) return this.applyReview(event);
     const asOf = await resolveUserSimulatedNow(event.userId);
     if (!asOf) return this.applyReview(event);
-    await runWithSimulatedClock(asOf, () => this.applyReview(event));
+    return await runWithSimulatedClock(asOf, () => this.applyReview(event));
   }
 
-  async applyReview(event: DurableDomainEvent): Promise<void> {
+  async applyReview(event: DurableDomainEvent): Promise<ReviewApplySummary> {
     const data = (event.data || {}) as ReviewCompletedPayload;
     const items = Array.isArray(data.reviewItems) ? data.reviewItems : [];
-    if (items.length === 0) return;
+    if (items.length === 0) return { ...EMPTY_APPLY_SUMMARY, totalItems: 0 };
 
     // #94 写入侧稳定键：概念锚定解析必须在**事务外**做（注册表用独立连接写 concepts/
     // concept_aliases；SQLite 写事务期间再写库会争锁）。best-effort：读不到路径/解析失败
@@ -148,11 +180,16 @@ export class ReviewCompletedConsumer {
       ? await this.resolveConceptAnchors(event.userId, items, anchorPath.pathId)
       : new Map<string, string | null>();
 
-    await withTransaction(async (tx) => {
+    /* 2026-11-22 E2E 实证修复：这里原来是 `await`（无 return）——withTransaction 的回调
+       返回值被整段丢弃，applyReview 恒为 undefined，retention-probe 的
+       downgraded = summary.appliedItems > 0 读 undefined 抛错、永远报「未降级」，
+       P1.1 的诚实口径在生产路径上是断的（单测两套桩都没覆盖真实返回路径，GUI 走查抓到）。
+       withTransaction<R> 本就透传回调结果（utils/with-transaction.ts:192），补 return 即可。 */
+    return await withTransaction(async (tx) => {
       const consumed = await tx.domain_event_inbox.findUnique({
         where: { consumerId_eventId: { consumerId: CONSUMER_ID, eventId: event.id } }
       });
-      if (consumed) return;
+      if (consumed) return { ...EMPTY_APPLY_SUMMARY, totalItems: items.length };
 
       // 本次复习发生的路径（会话 → 路径）：只在**首次创建**痕迹时写入，
       // 已有痕迹保留最早来源（originPathTitle = "最早出现的路径"）
@@ -168,6 +205,9 @@ export class ReviewCompletedConsumer {
       let skippedNegativeInterval = 0;
       // 稳定键幂等：同一会话同一概念只应用一次（重复收束/重投的第二个事件在这里被拦下）
       let skippedDuplicateItems = 0;
+      let appliedItems = 0;
+      // 独立作答身份（外部评审 P1.1）：探针事件带原课堂 sessionId 但必须独立于课堂温故应用。
+      const attemptId = typeof data.reviewAttemptId === 'string' ? data.reviewAttemptId.trim() : '';
       const seenInEvent = new Set<string>();
       for (const item of items) {
         const conceptKey = String(item.conceptKey || '').trim();
@@ -184,14 +224,24 @@ export class ReviewCompletedConsumer {
         }
         seenInEvent.add(evidenceKey);
 
-        // 跨事件重复（同会话被收束两次 → 两条 review:completed）：learner_evidence 里已有
-        // (sessionId, evidenceKey) 行则说明该点已应用过，跳过证据写入与 FSRS 重排。
-        // 仅在事件带 sessionId 时启用（无会话无法界定稳定身份，退回事件级幂等）。
+        // 跨事件重复：learner_evidence 里已有的 (sessionId, evidenceKey) 行决定是否跳过。
+        // 带 reviewAttemptId 的事件只与**同一作答身份**的行去重（防重放）——否则 48–72h 后
+        // 的真实探针作答会被课堂温故的稳定键吞掉；旧事件（无该字段）保持原口径：
+        // 该会话该概念已有任何复习证据行即跳过。行身份不变（见 ReviewCompletedPayload 注释）。
         if (data.sessionId) {
-          const alreadyApplied = await tx.learner_evidence.findFirst({
-            where: { userId: event.userId, sessionId: data.sessionId, evidenceKey },
-            select: { id: true },
+          const priorRows = await tx.learner_evidence.findMany({
+            where: {
+              userId: event.userId,
+              sessionId: data.sessionId,
+              evidenceKey,
+              evidenceType: 'review:completed',
+            },
+            select: { payload: true },
+            take: 20,
           });
+          const alreadyApplied = attemptId
+            ? priorRows.some((row) => parseEvidenceAttemptId(row.payload) === attemptId)
+            : priorRows.length > 0;
           if (alreadyApplied) {
             skippedDuplicateItems += 1;
             continue;
@@ -255,6 +305,8 @@ export class ReviewCompletedConsumer {
               conceptKey,
               // #94：稳定键随证据留痕（可回溯"这条复习是按哪个 KC 锚定的"）
               ...(typeof item.kcId === 'string' && item.kcId.trim() ? { kcId: item.kcId.trim() } : {}),
+              // 独立作答身份随行（外部评审 P1.1）：同一 evidenceKey 家族里区分课堂温故与探针作答
+              ...(attemptId ? { reviewAttemptId: attemptId } : {}),
               rating: item.rating,
               status: item.status,
               progress: item.progress,
@@ -334,10 +386,11 @@ export class ReviewCompletedConsumer {
             dueAt,
             fsrsStability: adjustedStability,
             fsrsDifficulty: result.state.difficulty,
-            fsrsLapses: result.state.lapses,
             fsrsReps: result.state.reps,
+            fsrsLapses: result.state.lapses,
           }
         });
+        appliedItems += 1;
       }
 
       // B2 memory scope 投影写入器（拍板 #14，2026-10-08）：learner_projections 的 memory scope
@@ -428,7 +481,14 @@ export class ReviewCompletedConsumer {
         ...(degradedItems > 0 ? { degradedItems } : {}),
         ...(skippedNegativeInterval > 0 ? { skippedNegativeInterval } : {}),
         ...(skippedDuplicateItems > 0 ? { skippedDuplicateItems } : {}),
+        ...(attemptId ? { reviewAttemptId: attemptId } : {}),
       });
+      return {
+        totalItems: items.length,
+        appliedItems,
+        skippedDuplicateItems,
+        skippedNegativeInterval,
+      };
     }, { label: 'learner.review-completed-consumer' });
   }
 

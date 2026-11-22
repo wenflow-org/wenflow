@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-peer-reinforcement
-coreHash: eff1eca2166322e51347a7be9f81a4a29a6ab4d0be362757b39af3d636a02272
+coreHash: ac8cb6d3f8ab6cb20f175911788a8c38789ce889c8fdb87de9fe752182835b25
 coreVersion: 1
 temperature: 0.7
 maxTokens: 64000
@@ -23,7 +23,7 @@ failurePolicy: propagate
 - 「tutorLatestReply（string）」`skill:teaching-turn.reply` — 老师最近一条回复原文
 - 「tutorContext（object[]）」`sandbox:teaching.session.messages`（编排注入） — 最近对话上下文（供伴学引用）
 - 「cognitiveLevel（string）」`skill:teaching-turn.analysis.cognitiveLevel` — 本轮教学回合判定的学生认知层级（同链上一步产物）
-- 「understanding（number）」`skill:teaching-turn.analysis.understanding` — 本轮理解度 0-1（同链上一步产物）
+- 「understanding（number?）」`skill:teaching-turn.analysis.understanding` — 本轮理解度 0-1（同链上一步产物）；无证据时上游输出 null——null/缺省按「本轮无理解度信号」处理，不得当作 0 参与低理解（<0.3）分支判定
 - 「peerHistory（object[]?）」`user:peerHistory`（用户/平台） — 此前伴学对话历史（可选；运行时从会话消息里装配 peer 标记消息/伴学插话后随执行信封送入；规则 11 的 3 问预算依赖它）
 
 ## 执行规则

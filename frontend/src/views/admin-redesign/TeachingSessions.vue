@@ -12,6 +12,12 @@
          · 缺总结 → 落到「总结」下拉；有建议（服务端开关）→ 点卡筛选，卡头出现可移除胶囊；
          · 完结率只读。 -->
     <p v-if="!embedded && rows.length && loadFailed" class="ts-stale-note">以下 KPI 与列表均为上次结果</p>
+    <!-- 2026-11-22 审计 P2：「有建议」是服务端过滤（onlyWithAdvisory），生效时 rows 被
+         整体替换为子集，页头 KPI（需关注/异常/缺总结/完结率）分母随之悄悄换掉——
+         加一行口径标注，防止「有建议的课异常率 X%」这类误读 -->
+    <p v-if="!embedded && rows.length && onlyAdvisory" class="ts-stale-note">
+      当前 KPI 与列表只统计「有建议」的会话，再点「有建议」卡回到全部
+    </p>
     <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="教学会话运维关注量">
       <MkKpi
         clickable
@@ -800,7 +806,8 @@ const statusSelectOptions = computed(() => {
   const withCount = (label: string, count: number) => (rows.value.length ? `${label}（${fmtCount(count)}）` : label)
   return [
     { value: '', label: '全部' },
-    { value: 'abnormal', label: withCount('异常（失败 · 超时）', abnormalSessionCount.value) },
+    // 档名与 ABNORMAL_STATUSES 三态对齐（2026-11-22 审计 P3：漏「收尾失败」，筛出的行像「档名对不上」）
+    { value: 'abnormal', label: withCount('异常（失败 · 收尾失败 · 超时）', abnormalSessionCount.value) },
     ...statusOptions.map((o) => ({ value: o.value, label: withCount(o.label, statusOptionCounts.value[o.value] || 0) }))
   ]
 })
@@ -824,8 +831,10 @@ const modeSelectOptions = [
 ]
 const dateSelectOptions = [
   { value: '', label: '全部' },
-  { value: '7d', label: '近 7 天' },
-  { value: '30d', label: '近 30 天' },
+  // 档位窗口按课堂「开始时间」判断；没有开始时间戳的行（行内时间列显「—」）不参与该筛选，
+  // 展开时随档位直接披露（2026-11-22 审计 P3：此前这一口径决定不可见）
+  { value: '7d', label: '近 7 天', hint: '按课堂开始时间，缺开始时间的课堂不计入' },
+  { value: '30d', label: '近 30 天', hint: '按课堂开始时间，缺开始时间的课堂不计入' },
 ]
 
 /* 异常读数：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致）。
@@ -883,7 +892,9 @@ const filtered = computed(() => {
   if (dateFilter.value === '7d' || dateFilter.value === '30d') {
     const cutoff = Date.now() - (dateFilter.value === '7d' ? 7 : 30) * 86400000
     list = list.filter((r) => {
-      if (!r.startTime) return true // 无时间戳的行不拦截
+      // 无时间戳的行不拦截（行内时间列显「—」可辨认）；但这是不可见的口径决定，
+      // 档名承诺「近 7 天」却在混入任意老的行——KPI title 处已同步披露（2026-11-22 审计 P3）
+      if (!r.startTime) return true
       const t = new Date(r.startTime).getTime()
       return Number.isFinite(t) && t >= cutoff
     })

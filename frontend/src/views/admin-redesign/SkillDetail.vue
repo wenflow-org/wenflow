@@ -135,8 +135,12 @@
                 <span v-if="s.ts" class="mono skd-call__time" :title="absDateTime(s.ts)">{{ callTimeLabel(s.ts) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
-              <MkLoading v-if="!recent.length && recentServer === null" inline text="最近调用加载中…" />
-              <p v-if="!recent.length && recentServer !== null" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录（与指标卡同窗口）。</p>
+              <MkLoading v-if="!recent.length && recentServer === null && !recentServerError" inline text="最近调用加载中…" />
+              <div v-if="!recent.length && recentServerError" class="mk-empty--line" role="alert">
+                最近调用查询失败，可能不是「没有调用」。
+                <button type="button" class="mk-btn mk-btn--ghost" @click="loadRecentServer">重试</button>
+              </div>
+              <p v-else-if="!recent.length && recentServer !== null" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录（与指标卡同窗口）。</p>
             </div>
           </section>
         </div>
@@ -1060,10 +1064,13 @@ function openSkillLogs() {
    调用、列表却空，排障链路断在第一跳。现按 skillId 直查日志服务端（近 7 天 5 条），
    与 KPI 同窗口；查询失败或为空再回落采样。agentId 兼容带/不带 skill: 前缀两种落库形态。 */
 const recentServer = ref<TraceSpan[] | null>(null)
+/** 查询失败标记（外部评审 P2.2）：失败不再与「暂无记录」同文案（报错归空） */
+const recentServerError = ref(false)
 async function loadRecentServer() {
   const id = skillId.value
-  if (!id) { recentServer.value = null; return }
+  if (!id) { recentServer.value = null; recentServerError.value = false; return }
   recentServer.value = null
+  recentServerError.value = false
   const itemsOf = (res: { data?: unknown }) => {
     const body = (res as { data?: { data?: unknown } })?.data?.data ?? (res as { data?: unknown })?.data ?? {}
     const b = body as { items?: RawLog[]; logs?: RawLog[] }
@@ -1079,7 +1086,10 @@ async function loadRecentServer() {
     if (id !== skillId.value) return
     recentServer.value = mapLogsToSpans(items)
   } catch {
-    if (id === skillId.value) recentServer.value = []
+    if (id === skillId.value) {
+      recentServer.value = null
+      recentServerError.value = true
+    }
   }
 }
 watch(skillId, loadRecentServer, { immediate: true })

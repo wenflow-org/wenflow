@@ -401,20 +401,27 @@ const ocStatusPills = computed<Array<{ key: string; name: string; n: number | nu
     ...pathBand.value.map((e) => ({ key: e.key, name: e.name, n: ready ? e.n : null }))
   ]
 })
-/** 卡头「状态」下拉：计数与分布带同源（byStatus 全平台）；未就绪时不显计数 */
-const ocStatusOptions = computed(() => [
-  /* 「全部状态」→「全部」：触发器已带「状态」label，选项不再复述（2026-11-09 走查）。 */
-  { value: 'all', label: '全部' },
-  ...ocStatusPills.value
-    .filter((p) => p.key !== 'all')
-    .map((p) => ({
-      value: p.key,
-      label: p.n != null ? `${p.name}（${p.n}）` : p.name,
-      /* 2026-11-11（困惑测试 #21）：路径域「已完成」= 全部任务学完；目标对话页的
-         「已完成」= 澄清对话谈成，两页撞词不同主体。 */
-      hint: p.key === 'completed' ? '已完成 = 学完整条路径的全部任务；目标对话页的「已完成」= 目标对话谈成，两处主体不同' : undefined
-    }))
-])
+/** 卡头「状态」下拉：计数与分布带同源（byStatus 全平台）；未就绪时不显计数。
+ *  计数是全平台口径、筛选只在「最近 1000 条」窗口内进行（2026-11-22 审计 P2，与
+ *  目标对话页同款）——截断时随档位披露，防止「选了计数为 0 的档 → 凭空没有」误读。 */
+const ocStatusOptions = computed(() => {
+  const windowHint = total.value > rows.value.length ? '计数按全部记录统计，筛选只在最近 1000 条内进行' : undefined
+  return [
+    /* 「全部状态」→「全部」：触发器已带「状态」label，选项不再复述（2026-11-09 走查）。 */
+    { value: 'all', label: '全部' },
+    ...ocStatusPills.value
+      .filter((p) => p.key !== 'all')
+      .map((p) => ({
+        value: p.key,
+        label: p.n != null ? `${p.name}（${p.n}）` : p.name,
+        /* 2026-11-11（困惑测试 #21）：路径域「已完成」= 全部任务学完；目标对话页的
+           「已完成」= 澄清对话谈成，两页撞词不同主体。 */
+        hint: p.key === 'completed'
+          ? '已完成 = 学完整条路径的全部任务；目标对话页的「已完成」= 目标对话谈成，两处主体不同'
+          : windowHint
+      }))
+  ]
+})
 /** KPI 卡 / 旧 pill 入口 = 单状态筛选；再点已选中的取消回「全部」 */
 function selectStatus(key: string) {
   statusFilter.value = statusFilter.value === key ? 'all' : key
@@ -474,11 +481,13 @@ const emptyStateTitle = computed(() => {
   }
   return '当前筛选无匹配'
 })
-/** 空态第二行（2026-11-11 P0）：标题只说「没有」，这里补为什么空 + 下一步去哪。 */
+/** 空态第二行（2026-11-11 P0）：标题只说「没有」，这里补为什么空 + 下一步去哪。
+ *  2026-11-22 审计 P3：原「先去目标对话发起一次」是平台侧做不到的动作——目标对话由
+ *  学习者在端内发起，管理台只能查看链路。 */
 const emptyStateDescription = computed(() =>
   isFiltered.value
     ? '当前状态或搜索条件下没有路径，可清除筛选查看全部。'
-    : '还没有从目标对话生成的学习路径。先去目标对话发起一次，路径规划会自动生成。'
+    : '路径由学习者的目标对话生成。可以去目标对话页查看生成链路。'
 )
 function clearFilters() {
   keyword.value = ''

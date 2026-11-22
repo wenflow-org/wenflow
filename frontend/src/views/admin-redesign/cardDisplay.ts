@@ -160,6 +160,18 @@ export function compareTier(a: string, b: string): number {
   return rank(a) - rank(b)
 }
 
+/* ===== 知识水平四级枚举（卡库与虚拟画像共用同一个 knowledgeLevel 字段）=====
+   2026-11-22 审计 P3：卡库侧三档译名（入门/进阶/高阶）与画像/创建侧四级译名
+   （零基础/入门/中级/进阶）此前各写一份、elementary 档还会裸出英文——抽单源。
+   词表与 VirtualProfile 的 aiProfile 映射逐字对齐（同一字段同一名字）。 */
+const KNOWLEDGE_LEVEL_WORDS: Record<string, string> = {
+  beginner: '零基础', elementary: '入门', intermediate: '中级', advanced: '进阶'
+}
+export function knowledgeLevelText(level?: string | null): string {
+  if (!level) return '—'
+  return KNOWLEDGE_LEVEL_WORDS[String(level).trim().toLowerCase()] || String(level)
+}
+
 /**
  * 成规模出现的「批次 / 样本设计」标签（不区分任何两张卡的都按内部标记处理）：
  * - `frontier-100` / `golden-100`：整批卡共用，卡号 `frontier-F100` 已带同一信息；

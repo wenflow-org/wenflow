@@ -75,4 +75,31 @@ describe('总览 KPI 数值落定门（A1-2）', () => {
     expect(after.some((t) => !t.includes('—'))).toBe(true);
     w.unmount();
   });
+
+  it('快照结构化下发 todayFailed；成功率缺字段时为 undefined 不冒充 0（2026-11-22 拆雷：待办行弃正则解析 KPI foot 文案）', async () => {
+    /* apiObject 是按访问即时建 fn 的 Proxy（每次 get 返回新实例），mockResolvedValueOnce
+       必须落在显式赋值的同一个 fn 上才生效 */
+    const { adminDashboardApi } = await import('@/api/adminApi') as { adminDashboardApi: Record<string, unknown> };
+    // 成功率在场：todayFailed = 10 × (1 − 80%) = 2
+    const statsFn1 = vi.fn(async () => ({ data: { data: { agents: { todayCalls: 10, todaySuccessRate: 80 } } } }));
+    adminDashboardApi.getStats = statsFn1;
+    liveOverviewFull.value = null;
+    const probe = mount(Overview);
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+    expect((liveOverviewFull.value as { todayFailed?: number } | null)?.todayFailed).toBe(2);
+    probe.unmount();
+
+    // 成功率缺失（统计不可用）：结构化字段 undefined，消费方走「无已发布读数」分支
+    const statsFn2 = vi.fn(async () => ({ data: { data: { agents: { todayCalls: 10 } } } }));
+    adminDashboardApi.getStats = statsFn2;
+    liveOverviewFull.value = null;
+    const probe2 = mount(Overview);
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+    expect((liveOverviewFull.value as { todayFailed?: number } | null)?.todayFailed).toBeUndefined();
+    probe2.unmount();
+  });
 });

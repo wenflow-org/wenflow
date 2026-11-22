@@ -1578,11 +1578,13 @@ export function buildFramedNormalizedInput(input: any): any {
   const rawSkillNature = learnerProfile.skillNature ?? input.skillNature;
   const rawPlatformJudgment = learnerProfile.platformJudgment ?? input.platformJudgment;
   const rawSensorReadouts = learnerProfile.sensorReadouts ?? input.sensorReadouts;
-  // 有 contract 时 skill_nature 也退场（平台可判定性改由 stopping.evidence 承担）。
-  const skillNature = hasClarification ? null : normalizeSkillNature(rawSkillNature);
-  const skillNatureEvidence = hasClarification
-    ? null
-    : normalizeString(learnerProfile.skillNatureEvidence ?? input.skillNatureEvidence) || null;
+  // skill_nature / platform_judgment 是「能力物理属性」（AI 能否代跑核心动作、平台能否判对错），
+  // 不是 entryState/intentType 那类身份分型——2026-11-22 起契约下照常透传：
+  // 若在契约下置空，path-task-design 会按「字段缺失 → cognitive_internalized」兜底，
+  // 工具操作型目标（Excel/SQL/批量处理）的「AI 代跑三段式」对所有新会话静默失效（实害已复现）。
+  // 退场名单只收身份标签：entryState / intentType（上方已置 null）。
+  const skillNature = normalizeSkillNature(rawSkillNature);
+  const skillNatureEvidence = normalizeString(learnerProfile.skillNatureEvidence ?? input.skillNatureEvidence) || null;
   // 平台可判定性（2026-10-26 二拆）：not_judgeable 时任务形态只能是「训练计划 + 复盘归因」，不得编自查卡假装可判定。
   const platformJudgment = normalizePlatformJudgment(rawPlatformJudgment);
   const platformJudgmentEvidence = normalizeString(learnerProfile.platformJudgmentEvidence ?? input.platformJudgmentEvidence) || null;

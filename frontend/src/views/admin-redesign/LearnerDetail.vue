@@ -101,6 +101,11 @@
         </div>
         <!-- 路径选项加载态走共享原语，转圈挂在选择器之后：选择器不被挤位 -->
         <MkLoading v-if="pathOptionsLoading" inline min />
+        <!-- 取数失败不复用「暂无」占位（2026-11-22 审计）：就地报错 + 重试 -->
+        <span v-else-if="pathOptionsError" class="ld-scope__error" role="alert">
+          路径清单读取失败
+          <button type="button" class="mk-link" @click="retryPathOptions">重试</button>
+        </span>
       </div>
     </div>
 
@@ -688,8 +693,20 @@
           </div>
         </section>
         <div class="ld-ev-top__side">
-        <!-- 预测校准：实证命中率 + 校准分布 + 最近预测 vs 实际 -->
-        <section v-if="predictionCalib && (predictionCalib.stats.total > 0 || predictionCalib.recent.length)" class="mk-card">
+        <!-- 预测校准：实证命中率 + 校准分布 + 最近预测 vs 实际。
+             读取失败显式报错可重试；零样本显式说「尚未产生预测记录」，不再整卡隐身
+             （2026-11-22 外部评审 P2.2：失败/空样本此前与 null 一起被 v-if 吞掉） -->
+        <section v-if="predictionCalib && predictionCalib.loadError" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">预测校准</h3>
+          </div>
+          <div class="ld-none" role="alert">
+            预测校准数据读取失败
+            <span class="ld-none__hint">{{ predictionCalib.loadError }}</span>
+            <button type="button" class="mk-btn mk-btn--ghost" @click="reloadPredictionCalib">重试</button>
+          </div>
+        </section>
+        <section v-else-if="predictionCalib && (predictionCalib.stats.total > 0 || predictionCalib.recent.length)" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">预测校准</h3>
             <!-- 结论常驻：卡头给结论（就地派生），原「非自报置信度」说明降级到 title -->
@@ -740,6 +757,15 @@
               </div>
             </div>
             </details>
+          </div>
+        </section>
+        <section v-else-if="predictionCalib && !predictionCalib.loadError" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">预测校准</h3>
+          </div>
+          <div class="ld-none">
+            尚未产生预测记录
+            <span class="ld-none__hint">完成包含学习预测的课程后，这里会校准预测与实际结果的差距。</span>
           </div>
         </section>
         <section v-if="dynamicState" class="mk-card">
@@ -1099,10 +1125,14 @@
             </tbody>
           </table>
         </div>
+        <!-- ◌ 在字体缺 U+25CC 时只剩两笔短线、读作「图标没加载」（OpsContent 同判例），
+             换共享 lucide Inbox（2026-11-22 审计 P3） -->
         <MkEmptyState
-          v-else-if="!ldSessLoading && !ldSessError" icon="◌"
+          v-else-if="!ldSessLoading && !ldSessError"
           :title="ldSessEmptyTitle" :description="ldSessEmptyDesc"
-        />
+        >
+          <template #icon><Inbox :size="22" :stroke-width="1.7" /></template>
+        </MkEmptyState>
       </section>
     </div>
 
@@ -1229,6 +1259,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Inbox } from 'lucide-vue-next'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { isDegradedWrapup } from './cockpitWrapup'
 import { liveLearners, liveUsers, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow, type CalibrationDetailItem } from './live'
@@ -1376,6 +1407,16 @@ const memoryTraces = ref<MemoryTraceRow[]>([])
 const loadCurveRaw = ref<LoadCurvePoint[]>([])
 /** 预测校准（实证命中率 + 最近预测），异步加载失败为 null */
 const predictionCalib = ref<PredictionCalibration | null>(null)
+/** 预测校准的加载序号：loadDetail 与手动重试共用，迟响应不写穿新数据 */
+const predictionCalibSeq = ref(0)
+async function reloadPredictionCalib() {
+  const a = ldRecentArgs.value
+  if (!a) return
+  const seq = ++predictionCalibSeq.value
+  const calib = await liveGetLearnerPredictions(a.id, a.includeTest)
+  if (seq !== predictionCalibSeq.value) return
+  predictionCalib.value = calib
+}
 /** 建议归因可靠性（2026-10-21）：insight-calibration 的命中率，n<5 时 hitRate=null */
 const insightReliability = ref<{ n: number; hits: number; misses: number; hitRate: number | null } | null>(null)
 const recomputing = ref(false)
@@ -1477,10 +1518,19 @@ interface LdPathOption {
 }
 const pathOptions = ref<LdPathOption[]>([])
 const pathOptionsLoading = ref(false)
+/** 路径清单取数失败：不复用「暂无」占位（2026-11-22 审计 P2——失败渲染成「该学习者
+ *  暂无学习路径」会把接口故障读成没配置），选择器旁给错误提示 + 重试 */
+const pathOptionsError = ref(false)
 /** 学习者名下的路径清单（选择器选项）。
  *  includeTest 恒开：这里已按 userId 收窄，「真实/测试」闸门只会把虚拟学习者的路径整批滤空。 */
+/** 路径清单失败重试：重发当前实体的清单请求 */
+function retryPathOptions() {
+  const id = subPage.value?.id || ''
+  if (id) void loadPathOptions(String(id))
+}
 async function loadPathOptions(userId: string) {
   pathOptionsLoading.value = true
+  pathOptionsError.value = false
   try {
     const res = await adminLearningContentApi.listPaths({ userId, limit: 100, includeTest: true })
     const rows = res?.data?.data?.paths || []
@@ -1497,6 +1547,7 @@ async function loadPathOptions(userId: string) {
     }))
   } catch {
     pathOptions.value = []
+    pathOptionsError.value = true
   } finally {
     pathOptionsLoading.value = false
   }
@@ -1788,7 +1839,9 @@ const discardedHiddenCount = computed(() => ldSessionRows.value.length - activeS
 const sessionPreviewMeta = computed(() => {
   const shown = recentSessionRows.value.length
   if (discardedHiddenCount.value) return `最近 ${shown} 节有效 · 已隐藏废弃 ${discardedHiddenCount.value}`
-  return ldSessionRows.value.length > shown ? `最近 ${shown} 节 · 共 ${ldSessionRows.value.length}` : `最近 ${shown} 节`
+  /* 「窗口 N」不是总数：预览只有最近 20 节的加载窗（LD_SESSION_WINDOW），写成「共」
+     会被读成该账号课堂总量（2026-11-22 审计 P3） */
+  return ldSessionRows.value.length > shown ? `最近 ${shown} 节 · 窗口 ${ldSessionRows.value.length}` : `最近 ${shown} 节`
 })
 /** statstrip「最近会话」格已随定位条撤除（2026-10-11）；有效/总数口径仍由预览 meta 承载 */
 /** 教学会话窗口上限（loadLdSessions 请求 limit 与此同源）：达上限时 meta 可见文案改
@@ -2301,8 +2354,10 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
     calibrationDetails.value = evidenceRes.calibrationDetails || []
     loadCurveRaw.value = evidenceRes.loadCurve || []
     // 校准/记忆痕迹：fire-and-forget 但必须带序号守卫，否则旧 id 的迟响应会写穿新详情
+    // predictionCalibSeq 同时供手动「重试」与加载器互斥（外部评审 P2.2）
+    const calibSeq = ++predictionCalibSeq.value
     void liveGetLearnerPredictions(id, includeTest).then((calib) => {
-      if (stale()) return
+      if (stale() || calibSeq !== predictionCalibSeq.value) return
       predictionCalib.value = calib
     })
     void adminOpsApi.insightReliability(id, currentPathId.value || undefined)
@@ -2480,7 +2535,12 @@ async function recompute() {
   recomputing.value = true
   try {
     const base = liveLearners.value.find((l) => l.userId === id)
-    await liveRecomputeLearner(id, base?.pathId)
+    // 2026-11-22 审计 P2：重算目标要与页面读数同口径——本页读的是 path 作用域快照，
+    // 原来传名单行的 base?.pathId（虚拟学习者/不在名单窗口内时 undefined）会静默落
+    // global 作用域：toast「快照已重算」但页面数据不变（LearnerCenter 已修过同款病灶）。
+    // 优先用页面当前路径作用域，名单行的 active 路径仅作兜底。
+    const targetPathId = scopePathId.value || base?.pathId || ''
+    await liveRecomputeLearner(id, targetPathId || undefined)
     toast.success('快照已重算')
     const prevTab = tab.value
     await loadDetail(id)
@@ -4341,6 +4401,12 @@ const snapshotHint = computed(() => {
   /* 只定宽：触发器视觉由 MkSelect 承担；360 上限避免长路径名把页签行挤折 */
   max-width: min(360px, 100%);
 }
+/* 路径清单取数失败（2026-11-22 审计）：就地报错 + 重试，不复用「暂无」占位 */
+.ld-scope__error {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--mk-fs-micro); color: var(--mk-red); white-space: nowrap;
+}
+.ld-scope__error .mk-link { font-size: var(--mk-fs-micro); }
 /* 表格不做全出血：末行底边此前贴死卡底（实测仅剩 1px 边框），补 12px 收尾（同卡头下节奏） */
 #ld-panel-sessions .mk-table-scroll,
 #ld-panel-memory .mk-table-scroll { padding-bottom: 12px; }

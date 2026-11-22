@@ -47,6 +47,12 @@ export interface VirtualLearnerPersona {
   priorAttempts?: string;
 
   // 稳定人格
+  // WARNING：元认知/执行块与两个生成器存在命名分叉（2026-11-22 字段联动审查，历史「三套
+  // 不一致」收敛后又漂出的第四套）：canonical 源 scenario-designer（prompts/core/
+  // simulation-scenario-designer.yaml）产出 metacognitiveProfile / selfRegulationStyle /
+  // overloadReaction；persona-designer 则产出 selfAwarenessPattern / planningFollowThrough
+  //（其 fields 表按必填列），而本接口三者都没声明。读画像元认知字段时先确认数据来源用哪套
+  // 名字，不要只按本接口的键名取值；收敛两套生成器的命名前，新增消费方请同时容忍两套键。
   corePersonality?: string;
   personalityDrivers?: string[];
   communicationStyle?: string;
@@ -55,6 +61,8 @@ export interface VirtualLearnerPersona {
   emotionalTriggers?: string[];
   resiliencePattern?: string;
   metacognitiveProfile?: string;
+  /** 机器判定约定枚举 low|normal|high（persona/scenario-designer 同约束）；卡导入可带自由文本，
+   *  读点（detectTeacherOverload / isLowLoadToleranceSignal）对非法值一律收敛 normal，不枚举匹配。 */
   cognitiveLoadTolerance?: string;
   selfRegulationStyle?: string;
   digitalLiteracy?: string;
@@ -68,6 +76,12 @@ export interface VirtualLearnerPersona {
   personalityTraits?: VirtualLearnerPersonalityTraits;
   /** 声纹样本：2 句本人原话，锁年龄/职业用词与口语节奏 */
   voiceSamples?: string[];
+  /** 信息过载时的典型可观察反应（persona/scenario-designer 均产出；等级判据见 cognitiveLoadTolerance） */
+  overloadReaction?: string;
+  /** 通常怎么意识到自己没懂（persona-designer 产出；canonical 对应 metacognitiveProfile） */
+  selfAwarenessPattern?: string;
+  /** 通常怎么做计划、掉队后怎么反应（persona-designer 产出；canonical 对应 selfRegulationStyle） */
+  planningFollowThrough?: string;
 }
 
 /* ============ Story ============ */
@@ -95,6 +109,13 @@ export interface VirtualLearnerStory {
   problemKnowledge?: VirtualLearnerStoryProblemKnowledge;
   goalSeed?: any;
   disclosurePlan?: any;
+  /**
+   * WARNING：本声明已失真（2026-11-22 字段联动审查）。运行时 story.sourceType 的实际词表是
+   * scenario-designer 产出的**问题来源**枚举 'work | life | study | self_management'（见
+   * prompts/core/simulation-scenario-designer.yaml fields.story），不是这里的 'generated |
+   * manual | import'（那是卡导入的 source.kind 渠道语义，落在 LearnerCard.source.kind，
+   * 不落 story.sourceType）。按本声明写 switch 会跑偏——以 scenario-designer 词表为准。
+   */
   sourceType?: 'generated' | 'manual' | 'imported' | string;
 }
 

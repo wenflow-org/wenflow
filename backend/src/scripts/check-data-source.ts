@@ -130,12 +130,6 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   'profile-progress-report': [
     // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
-  'skill-author': [
-    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
-  ],
-  'skill-compiler': [
-    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
-  ],
   'profile-learner-model': [
     // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],

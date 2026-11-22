@@ -455,18 +455,27 @@ const gcStatusPills = computed<Array<{ key: string; label: string; n: number | n
     { key: 'active', label: '进行中', n: s ? s.active : null },
     { key: 'completed', label: '已完成', n: s ? s.completed : null },
     { key: 'cancelled', label: '已取消', n: s ? s.cancelled : null },
-    { key: 'failed', label: '失败', n: s ? s.failed : null }
+    { key: 'failed', label: '失败', n: s ? s.failed : null },
+    /* 「已废弃」此前没有档位：DB 有 discarded 状态（后端 stats 注释明言 total 含它但
+       四档不含），只能混在「全部」里筛不出来（2026-11-22 审计 P3）。计数 = 全量
+       total 减四档（后端分桶如此定义），无需改后端。 */
+    { key: 'discarded', label: '已废弃', n: s ? Math.max(0, s.total - s.active - s.completed - s.cancelled - s.failed) : null }
   ]
 })
-/** 卡头「状态」下拉：每档带服务端全量计数（stats 未取到时不显，不把未知写成 0） */
-const gcStatusOptions = computed(() => [
-  /* 「全部状态」→「全部」：MkPillSelect 的触发器把 label（状态）与选中项并排渲染，
-     选项再写「全部状态」就是「状态 全部状态」——同一句话说了两遍（2026-11-09 走查）。 */
-  { value: '', label: '全部' },
-  ...gcStatusPills.value
-    .filter((p) => p.key !== 'all')
-    .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${fmtCount(p.n)}）` : p.label }))
-])
+/** 卡头「状态」下拉：每档带服务端全量计数（stats 未取到时不显，不把未知写成 0）。
+ *  计数是全量口径、筛选只作用于「最近 1000 条」窗口（2026-11-22 审计 P2：截断时选
+ *  全量计数为 0 的档会凭空「没有」）——截断时在下拉档位上直接披露该差异。 */
+const gcStatusOptions = computed(() => {
+  const windowHint = truncated.value ? '计数按全部记录统计，筛选只在最近 1000 条内进行' : undefined
+  return [
+    /* 「全部状态」→「全部」：MkPillSelect 的触发器把 label（状态）与选中项并排渲染，
+       选项再写「全部状态」就是「状态 全部状态」——同一句话说了两遍（2026-11-09 走查）。 */
+    { value: '', label: '全部' },
+    ...gcStatusPills.value
+      .filter((p) => p.key !== 'all')
+      .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${fmtCount(p.n)}）` : p.label, hint: windowHint }))
+  ]
+})
 /** 默认 '' 与显式「全部」（'all'）是同一档：高亮与筛选都按这个归一键判断 */
 const gcStatusKey = computed(() => (statusFilter.value === 'all' ? 'all' : statusFilter.value || 'all'))
 /** 完结率 KPI（旧分布带副文的读数）：后端给两位小数字符串，四舍五入到整数避免 70.00% 的假精度 */
@@ -632,7 +641,7 @@ const ONGOING_STAGE_HINT: Record<string, string> = {
  *  列表绿「已完成」只指目标澄清对话结束，读者在详情页会看到路径仍是「学习中 0/21」。
  *  徽章词不动（2026-10-22 拍板「状态列只回答完成没有」），只把主语放进悬停。 */
 function statusCellTitle(r: Row): string | undefined {
-  if (r.status === 'completed') return '目标澄清对话已结束（主语＝目标对话，不代表学习路径学完。路径进度见详情）'
+  if (r.status === 'completed') return '目标澄清对话已谈成，不代表学习路径学完。路径进度见详情'
   if (!isOngoingStatus(r.status)) return undefined
   const hint = ONGOING_STAGE_HINT[String(r.stage || '').toLowerCase()] || '进行中'
   return `${hint} · 第 ${r.stageIndex + 1}/${GOAL_STAGE_TOTAL} 步`
@@ -756,6 +765,9 @@ const emptyTitle = computed(() => {
   const pill = key && key !== 'all' ? gcStatusPills.value.find((p) => p.key === key) : undefined
   if (!pill) return '当前筛选无匹配'
   const onlyStatus = !keyword.value.trim() && !noPathOnly.value && !stalledOnly.value
+  // 截断时筛选只作用在「最近 1000 条」窗口：目标可能真的存在但在窗口外（2026-11-22 审计 P2），
+  // 空态不再断言「没有」，改为指向窗口边界
+  if (truncated.value) return `最近 1000 条里没有「${pill.label}」，可能不在窗口内`
   return onlyStatus ? `没有「${pill.label}」的目标对话` : `当前筛选里没有「${pill.label}」的目标对话`
 })
 function clearFilters() {
@@ -787,7 +799,7 @@ useListQueryState(
     keyword,
     page,
     pageSize,
-    allowedPills: ['all', 'active', 'completed', 'cancelled', 'failed'],
+    allowedPills: ['all', 'active', 'completed', 'cancelled', 'failed', 'discarded'],
     extra: [{
       key: 'noPath',
       get: () => (noPathOnly.value ? '1' : ''),
@@ -961,6 +973,8 @@ async function remove(r: Row) {
   try {
     await adminGoalConversationsApi.remove(r.id)
     rows.value = rows.value.filter((x) => x.id !== r.id)
+    // 同步回写总数：不减会出现「共 N 条 · 当前显示最近 N-1 条」的假截断（2026-11-22 审计 P3）
+    if (listTotal.value > 0) listTotal.value -= 1
     toast.success('目标对话已删除')
     doneConfirm()
   } catch (e) {

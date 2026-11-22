@@ -203,10 +203,11 @@ describe('CardDetailPage（卡详情二级页）', () => {
     expect(w.find('a[href="Frontier-100 F100"]').exists()).toBe(false);
     expect(w.find('a[href^="http"]').exists()).toBe(false);
     expect(w.text()).toContain('Frontier-100 F100');
-    // #46：档位码带中文释义；「入门」标明是知识水平而非档位
+    // #46：档位码带中文释义；「零基础」标明是知识水平而非档位（2026-11-22 审计：
+    // 与画像/创建侧同字段同四级词表，beginner=零基础 而非旧「入门」）
     const pills = w.find('.mk-hero__pills');
     expect(pills.text()).toContain('F5B · 分诊负样本');
-    const level = pills.findAll('.mk-badge').find((b) => b.text() === '入门')!;
+    const level = pills.findAll('.mk-badge').find((b) => b.text() === '零基础')!;
     expect(level.attributes('title')).toContain('知识水平');
     // #50：程序字段整句剔除，人物描述保留
     expect(w.text()).not.toContain('primary_block_type');

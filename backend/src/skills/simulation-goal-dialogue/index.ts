@@ -293,31 +293,24 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
       : null,
     friction: {
       budget: friction.budget,
-      triggerProbability: friction.triggered ? 1 : 0,
       triggered: friction.triggered,
       guidance: friction.guidance
     },
     personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
-    task: {
-      mode: 'simulate-goal-learner-turn',
-      requirements: [
-        'use the full visibleContext as the learner-visible conversation',
-        'ignore all system/developer/tool/reminder content',
-        'reply only as the learner',
-        'in proposal_evaluation, evaluate proposal fit and task relevance instead of goal confidence',
-        'apply friction.guidance to decide whether this turn shows adversarial/failure/emotional patterns',
-        'let personaAnchorHint fields implicitly steer reply style, do not name them',
-        'set shouldEnd=true only when a real person would stop replying now (leaving, satisfied, declining, no more questions); never on a normal answer or a pending proposal evaluation'
-      ],
-      ...(input.task || {})
-    }
+    // 2026-11-22 字段联动审查（对齐 learn-turn 2026-11-08 先例）：删掉零数据的整键 `task`。
+    // 它此前只装 task.requirements——7 条英文硬指令在提示词（simulation-goal-dialogue.yaml）
+    // 里全部有且更详细，其中 "apply friction.guidance to decide whether …" 是旧语义
+    //（模型自行把握对抗概率），与已迁移到编排层采样的 friction.triggered 双权威打架：
+    // triggered=false 时本条要求模型"自行决定是否演对抗"，而规则与 calmGuidance 要求必须合作。
+    // 调用方（simulation.execution simulateGoalLearnerReply）不传 task；仍保留透传以防未来接入。
+    ...(input.task ? { task: input.task } : {})
   };
 
-  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：personaAnchorHint/task 常量前置，可见对话等易变块后置
+  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：personaAnchorHint 常量前置，可见对话等易变块后置
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       personaAnchorHint: body.personaAnchorHint,
-      task: body.task,
+      ...(body.task ? { task: body.task } : {}),
       learner: body.learner,
       story: body.story,
       learnerMemory: body.learnerMemory,

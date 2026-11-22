@@ -157,7 +157,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('快照按当前 Run 的 Teaching Session 返回脱敏双源状态时间线', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({ teachingSessionId: 'teach-1', taskId: 'task-1' })
     const state = JSON.parse(session.stageResults)
     state.blackbox.publicTrace = [{
@@ -226,7 +226,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('快照拒绝读取与虚拟画像绑定不一致的用户状态', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(sessionWith({ teachingSessionId: 'teach-1' }))
     ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({ userId: 'other-user' })
 
@@ -238,7 +238,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('平台状态查询失败时保留 Actor 快照并标记该数据轨不可用', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({ teachingSessionId: 'teach-1' })
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(session)
     ;(learningStateService.getSessionStateTimeline as jest.Mock).mockRejectedValue(new Error('metrics database unavailable'))
@@ -254,7 +254,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('创建实验时固化有效 Prompt、模型路由和配置且不持久化密钥', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     ;(agentConfigService.getActivePrompt as jest.Mock)
       .mockReset()
       .mockResolvedValueOnce({ version: 7, systemPrompt: 'frozen goal', temperature: 0.25, maxTokens: 1400 })
@@ -296,7 +296,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('拒绝将 Endpoint 中的凭据写入实验快照', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     ;(getAPIGateway as jest.Mock).mockReturnValue({
       resolveRoute: jest.fn().mockResolvedValue({
         providerType: 'openai-compatible',
@@ -319,7 +319,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('Simulator 缺少 ACTIVE Prompt 时拒绝创建不可复现实验', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     ;(agentConfigService.getActivePrompt as jest.Mock).mockReset().mockResolvedValue(null)
 
     await expect(runner.createExperimentState({
@@ -332,7 +332,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('按快照创建新 Run 时复用完整运行配置并保留 lineage', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const frozenSnapshot = {
       capturedAt: '2026-07-14T10:00:00.000Z',
       routingUserId: 'admin-original',
@@ -457,7 +457,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('相同 commandId 重试直接复用结果，不重复执行平台副作用', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({})
     const work = jest.fn().mockResolvedValue({ observation: { stage: 'goal' } })
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(session)
@@ -598,7 +598,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('普通失败命令仍拒绝使用相同 commandId 重试', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({})
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(session)
     ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockResolvedValue({
@@ -717,7 +717,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('数据库 lease 被其他实例持有时拒绝执行命令', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({})
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(session)
     ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockResolvedValue(null)
@@ -799,7 +799,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('release DB 错误不覆盖业务失败，但成功工作会返回稳定 DB_BUSY', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const workError = new Error('business failed')
     ;(prisma.virtual_experiment_leases.deleteMany as jest.Mock)
       .mockRejectedValue(Object.assign(new Error('database is locked'), { code: 'P1008' }))
@@ -819,7 +819,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('客户端基于过期轨迹执行时拒绝推进下一轮', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({})
     addObservation(session, { stage: 'goal', visibleMessages: [], availableActions: ['chat', 'abandon'] })
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(session)
@@ -839,7 +839,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   it('长任务每两分钟按 owner 续租且工作完成前不释放 lease', async () => {
     jest.useFakeTimers()
     try {
-      const runner = new BlackboxVirtualLearnerRunner()
+      const runner = new BlackboxVirtualLearnerRunner() as any
       let releaseWork!: () => void
       const blocked = new Promise<void>(resolve => { releaseWork = resolve })
       ;(prisma.virtual_experiment_leases.updateMany as jest.Mock).mockImplementation(async ({ where }: any) => ({
@@ -871,7 +871,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('lease 丢失后即使受保护工作完成也不返回成功', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     ;(prisma.virtual_experiment_leases.updateMany as jest.Mock).mockImplementation(async ({ where }: any) => ({
       count: where.ownerId ? 0 : 0
     }))
@@ -883,7 +883,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('runCommand 最终断言发现 lease 丢失时不提交成功结果', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({})
     let command: any = null
     let renewalCount = 0
@@ -1135,7 +1135,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('命令完成写已提交但客户端报错时重读并返回成功且不标记 failed', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({})
     let command: any = null
     const result = { observation: { stage: 'goal' } }
@@ -2059,7 +2059,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('同一 session 的工作严格串行', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const order: string[] = []
     let releaseFirst!: () => void
     const firstBlocked = new Promise<void>(resolve => { releaseFirst = resolve })
@@ -2604,7 +2604,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
   })
 
   it('终态会话拒绝新命令且不获取租约，但同 key 已完成命令仍可复用结果', async () => {
-    const runner = new BlackboxVirtualLearnerRunner()
+    const runner = new BlackboxVirtualLearnerRunner() as any
     const session = { ...sessionWith({}), status: 'failed', currentStage: 'error' }
     ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(session)
     ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockResolvedValue({
@@ -3066,5 +3066,131 @@ describe('延伸课开启永久失败降级（修复批 24-①）', () => {
     }))
     expect(persisted.blackbox.publicTrace.at(-1)?.observation).toBeDefined()
     expect(result.action).toEqual({ type: 'request_extension', text: '老师，我还想就这节课再深入一点' })
+  })
+})
+
+describe('Blackbox Goal 支线消费模拟器离场信号（外部评审 P1.3）', () => {
+  function goalExitSession(availableActions: string[]) {
+    const session = sessionWith({ conversationId: 'goal-1', platformStage: 'goal' })
+    addObservation(session, {
+      stage: 'goal',
+      visibleMessages: [{ role: 'platform', content: '你想解决什么？' }],
+      availableActions
+    })
+    return session
+  }
+
+  function stubGoalSimulator(output: Record<string, unknown>) {
+    ;(executeSkill as jest.Mock).mockResolvedValueOnce(output)
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    // autoStep 会取实验快照，要求 goal/teaching 两个模拟器都有 ACTIVE Prompt（3249-3251 行门禁）
+    ;(agentConfigService.getActivePrompt as jest.Mock).mockImplementation(async (agentId: string) =>
+      String(agentId).includes('goal-dialogue')
+        ? { version: 1, systemPrompt: 'goal prompt', temperature: 0.8, maxTokens: 1200 }
+        : { version: 1, systemPrompt: 'learn prompt', temperature: 0.7, maxTokens: 800 })
+    ;(prisma.virtual_sessions.findUnique as jest.Mock).mockResolvedValue(null)
+    ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockResolvedValue(null)
+    ;(prisma.virtual_experiment_commands.findFirst as jest.Mock).mockResolvedValue(null)
+    ;(prisma.virtual_experiment_leases.updateMany as jest.Mock).mockResolvedValue({ count: 1 })
+  })
+
+  it('shouldEnd=true 且可 abandon：不再确认/继续对话，直接以 learner-exited 收束并透传离场原因', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = goalExitSession(['chat', 'abandon'])
+    runner.context = jest.fn().mockResolvedValue({ session, state: JSON.parse(session.stageResults) })
+    runner.persistPrivateState = jest.fn()
+    runner.act = jest.fn().mockResolvedValue({
+      observation: { stage: 'completed', visibleMessages: [], availableActions: [] },
+      control: { platformStage: 'goal', terminalReason: 'abandoned' }
+    })
+    stubGoalSimulator({
+      reply: '我先去忙了，之后再说',
+      shouldEnd: true,
+      endReason: 'leaving',
+      learnerState: { readyToAdvance: false }
+    })
+
+    const result = await runner.autoStep('vs1', 'admin-1')
+
+    expect(runner.act).toHaveBeenCalledTimes(1)
+    const action = (runner.act as jest.Mock).mock.calls[0][2]
+    expect(action.type).toBe('abandon')
+    expect(action.reason).toContain('learner-exited:leaving:')
+    expect(action.exitReason).toBe('leaving')
+    expect(runner.persistPrivateState).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'goal', expect.anything(), expect.anything())
+    expect(result.action?.type).toBe('abandon')
+  })
+
+  it('离场且 readyToAdvance 同真：按离场走，不把告别误当方案确认', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = goalExitSession(['chat', 'confirm_proposal', 'abandon'])
+    runner.context = jest.fn().mockResolvedValue({ session, state: JSON.parse(session.stageResults) })
+    runner.persistPrivateState = jest.fn()
+    runner.act = jest.fn().mockResolvedValue({
+      observation: { stage: 'completed', visibleMessages: [], availableActions: [] },
+      control: { platformStage: 'goal', terminalReason: 'abandoned' }
+    })
+    stubGoalSimulator({
+      reply: '方案很好，但我这阵子没空，先到这里',
+      shouldEnd: true,
+      endReason: 'declining',
+      learnerState: { readyToAdvance: true }
+    })
+
+    await runner.autoStep('vs1', 'admin-1')
+
+    const action = (runner.act as jest.Mock).mock.calls[0][2]
+    expect(action.type).toBe('abandon')
+    expect(action.exitReason).toBe('declining')
+    expect(action.reason).not.toContain('confirm')
+  })
+
+  it('endReason=satisfied（目标已满足的合法收口）同样透传，供裁判 R1 口径区分', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = goalExitSession(['chat', 'abandon'])
+    runner.context = jest.fn().mockResolvedValue({ session, state: JSON.parse(session.stageResults) })
+    runner.persistPrivateState = jest.fn()
+    runner.act = jest.fn().mockResolvedValue({
+      observation: { stage: 'completed', visibleMessages: [], availableActions: [] },
+      control: { platformStage: 'goal', terminalReason: 'abandoned' }
+    })
+    stubGoalSimulator({
+      reply: '答案拿到了，谢谢',
+      shouldEnd: true,
+      endReason: 'satisfied',
+      learnerState: { readyToAdvance: false }
+    })
+
+    await runner.autoStep('vs1', 'admin-1')
+
+    const action = (runner.act as jest.Mock).mock.calls[0][2]
+    expect(action.type).toBe('abandon')
+    expect(action.exitReason).toBe('satisfied')
+  })
+
+  it('shouldEnd=false（正常回复）：行为不变，继续 chat/确认', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = goalExitSession(['chat', 'abandon'])
+    runner.context = jest.fn().mockResolvedValue({ session, state: JSON.parse(session.stageResults) })
+    runner.persistPrivateState = jest.fn()
+    runner.act = jest.fn().mockResolvedValue({
+      observation: { stage: 'goal', visibleMessages: [], availableActions: ['chat', 'abandon'] },
+      control: { platformStage: 'goal' }
+    })
+    stubGoalSimulator({
+      reply: '我想学合并表格',
+      shouldEnd: false,
+      endReason: '',
+      learnerState: { readyToAdvance: false }
+    })
+
+    const result = await runner.autoStep('vs1', 'admin-1')
+
+    const action = (runner.act as jest.Mock).mock.calls[0][2]
+    expect(action.type).toBe('chat')
+    expect(result.action?.type).toBe('chat')
   })
 })

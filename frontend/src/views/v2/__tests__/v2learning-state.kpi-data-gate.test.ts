@@ -124,13 +124,46 @@ describe('学习状态页数据门（#41）', () => {
 
     const text = w.text();
     expect(w.find('.state__hero').exists()).toBe(true);
-    expect(text).toContain('学习状态正在积累中');
-    expect(text).toContain('完成第一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。');
+    expect(text).toContain('还没有可分析的学习记录');
+    expect(text).toContain('完成一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。');
     expect(text).toContain('去开始学习');
     /* 碎片空卡退场：AI 建议卡 / 趋势图空壳 / 三张 0 值 KPI */
     expect(w.find('.advisory').exists()).toBe(false);
     expect(w.find('.chart__empty--first').exists()).toBe(false);
     expect(w.find('.kpis').exists()).toBe(false);
+  });
+
+  it('读取中（请求未返回）：显示读取中占位，不用空态冒充「没学过」', async () => {
+    // sessions 永不 resolve：stateLoading 依赖 kpiLoading（!sessionsLoaded）
+    getMock.mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.includes('/users/me/sessions')) return new Promise(() => {});
+      if (u.includes('/state/trends')) return Promise.resolve({ success: true, data: { trends: [], range: 'recent' } });
+      return Promise.resolve({ success: true, data: {} });
+    });
+    const w = mount(V2LearningState);
+    await flushPromises();
+
+    expect(w.find('.state__hero').text()).toContain('正在读取你的学习记录');
+    expect(w.find('.kpis').exists()).toBe(false);
+  });
+
+  it('读取失败（各数据源拒绝）：不出「正在积累中」空态，给可重试的失败提示', async () => {
+    getMock.mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.includes('/state/trends')) return Promise.reject(new Error('boom'));
+      if (u.includes('/users/me/sessions')) return Promise.reject(new Error('boom'));
+      if (u.includes('/learning/concept-graph')) return Promise.reject(new Error('boom'));
+      if (u.includes('/ai-teaching/review/due')) return Promise.reject(new Error('boom'));
+      return Promise.resolve({ success: true, data: {} });
+    });
+    const w = mount(V2LearningState);
+    await flushPromises();
+
+    expect(w.find('.state__hero').exists()).toBe(false);
+    expect(w.text()).toContain('学习时长与连续天数暂时无法读取');
+    expect(w.text()).toContain('重新读取');
+    expect(w.find('.chart__empty').exists()).toBe(true);
   });
 
   it('本周有真实分钟：正常渲染 skill 文案与自动处理块', async () => {

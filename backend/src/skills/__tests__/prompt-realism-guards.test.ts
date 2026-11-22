@@ -32,7 +32,9 @@ describe('goal/path/stage prompt realism guards', () => {
   it('goal-conversation：scope_size 颗粒度标签必须与 key_stages 自洽', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('标签必须与你自己给的关键阶段数自洽')
-    expect(md).toContain('3 段以上仍写 [单点概念] 会被忽略')
+    // 2026-11-22 唯一真值表：技能模块帽 3 段、4 段以上归完整学科（代码钳制同口径）
+    expect(md).toContain('标 [技能模块] 时 key_stages ≤3')
+    expect(md).toContain('已拆 4 个以上阶段必须标 [完整学科]')
   })
 
   it('goal-conversation：不在对话里报总账（总学时/总坐学数交给路径卡片）', () => {
@@ -100,12 +102,14 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('不得当场逐条解释机制、归因、结论或判断答案')
   })
 
-  it('goal-conversation：时间口径按单次节奏，不拿 2h 上限当默认值', () => {
+  it('goal-conversation：时间口径按单次节奏，不拿上限当默认值', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('时间口径一致')
     expect(md).toContain('不得把 objectiveScopeHours 说成「两小时以内」')
     expect(md).toContain('不得用来推算总时长')
-    expect(md).toContain('轻起步 objectiveScopeHours 硬上限 2h；完整路径不套此上限')
+    // 2026-11-22 唯一真值表：单点帽 1.2h（代码帽同值），不再有「轻起步 2h」旧带
+    expect(md).toContain('单点概念 objectiveScopeHours 硬上限 1.2h（代码帽同值）；技能模块帽 12h；完整学科不钳')
+    expect(md).not.toContain('轻起步 objectiveScopeHours 硬上限 2h')
   })
 
   it('goal-conversation：默认假设不逐轮播报，不写「你没说」', () => {
@@ -386,9 +390,10 @@ describe('虚拟学习者管线与 Meno/三摞改造对齐', () => {
     expect(md).toContain('不要写 once')
   })
 
-  it('referee：认识 R1 豁免与 R2/R4 扣分', () => {
+  it('referee：认识 R1 合理收口口径与 R2/R4 扣分（2026-11-22：编译稿改写措辞，锁新口径）', () => {
     const md = read('prompts/skill.simulation-referee.md')
-    expect(md).toContain('R1 豁免')
+    expect(md).toContain('R1 无路径收口')
+    expect(md).toContain('无路径可以是合理结果')
     expect(md).toContain('R2 Path 体验扣分')
     expect(md).toContain('R4 Teaching 体验扣分')
   })

@@ -25,7 +25,7 @@ import type { LessonReport } from '../ai-teaching/lesson-contract';
 import { parseExitTicketSubmission } from '../ai-teaching/lesson-contract';
 import { isDuplicateCheckpointQuestion, judgeCheckpointAnswer } from '../ai-teaching/teaching-checkpoint';
 import { parseAssessmentQuestion, type AssessmentQuestion } from '../../utils/assessment-question';
-import { reviewCompletedConsumer } from './ReviewCompletedConsumer';
+import { reviewCompletedConsumer, type ReviewApplySummary } from './ReviewCompletedConsumer';
 import type { DurableDomainEvent } from '../../events/contracts';
 
 export const RETENTION_PROBE_MIN_HOURS = 24;
@@ -130,9 +130,10 @@ export interface RetentionProbeDeps {
     detail: string;
     occurredAt: Date;
   }) => Promise<void>;
-  applyFailedProbe: (probe: RetentionProbeRecord, occurredAt: Date) => Promise<void>;
+  /** 探针作答走 review:completed 事件驱动记忆台账；返回应用摘要供状态口径区分「真应用」与「被去重」 */
+  applyFailedProbe: (probe: RetentionProbeRecord, occurredAt: Date) => Promise<ReviewApplySummary>;
   /** 通过时也推进 FSRS（成功提取应延长间隔、更新 lastSeenAt），但不额外抬高掌握度 */
-  applyPassedProbe: (probe: RetentionProbeRecord, occurredAt: Date) => Promise<void>;
+  applyPassedProbe: (probe: RetentionProbeRecord, occurredAt: Date) => Promise<ReviewApplySummary>;
   now: () => Date;
 }
 
@@ -405,6 +406,9 @@ const defaultDeps: RetentionProbeDeps = {
         sessionId: probe.sessionId,
         mode: 'retention-probe',
         pathId: probe.pathId ?? null,
+        // 独立作答身份（外部评审 P1.1）：探针事件仍带原课堂 sessionId，但必须凭此字段
+        // 绕开「同会话同概念只记一次」的课堂温故稳定键，独立驱动 FSRS/记忆台账。
+        reviewAttemptId: probe.id,
         reviewItems: [{
           conceptKey: probe.conceptKey,
           label: probe.label,
@@ -415,7 +419,7 @@ const defaultDeps: RetentionProbeDeps = {
         }],
       },
     };
-    await reviewCompletedConsumer.applyReview(event);
+    return await reviewCompletedConsumer.applyReview(event);
   },
   applyFailedProbe: async (probe, occurredAt) => {
     const event: DurableDomainEvent = {
@@ -431,6 +435,8 @@ const defaultDeps: RetentionProbeDeps = {
         sessionId: probe.sessionId,
         mode: 'retention-probe',
         pathId: probe.pathId ?? null,
+        // 同 applyPassedProbe：独立作答身份，绕开课堂温故稳定键（外部评审 P1.1）
+        reviewAttemptId: probe.id,
         reviewItems: [{
           conceptKey: probe.conceptKey,
           label: probe.label,
@@ -441,7 +447,7 @@ const defaultDeps: RetentionProbeDeps = {
         }],
       },
     };
-    await reviewCompletedConsumer.applyReview(event);
+    return await reviewCompletedConsumer.applyReview(event);
   },
   now: () => simulatedNowOr(),
 };
@@ -667,8 +673,20 @@ export class RetentionProbeService {
     let downgraded = false;
     if (!judgement.passed) {
       try {
-        await this.deps.applyFailedProbe(answered, now);
-        downgraded = true;
+        const summary = await this.deps.applyFailedProbe(answered, now);
+        // 状态口径（外部评审 P1.1）：事件被课堂稳定键去重或无条目 ≠ 已降级。
+        // 只有真的驱动了记忆台账（appliedItems>0）才报 downgraded=true；
+        // 证据行总是已留痕（writeEvidence），这里只如实反映记忆侧是否被改写。
+        downgraded = summary.appliedItems > 0;
+        if (!downgraded) {
+          logger.warn('[retention-probe] 未通过但降级未应用任何记忆条目（被去重或为空）', {
+            probeId: answered.id,
+            conceptKey: answered.conceptKey,
+            appliedItems: summary.appliedItems,
+            skippedDuplicateItems: summary.skippedDuplicateItems,
+            skippedNegativeInterval: summary.skippedNegativeInterval,
+          });
+        }
       } catch (error) {
         logger.warn('[retention-probe] 未通过但降级写回失败（证据已留痕）', {
           probeId: answered.id,
@@ -678,13 +696,21 @@ export class RetentionProbeService {
       }
     } else {
       // 通过同样要推进记忆调度，否则探针到期状态会一直挂着、反复被取出来问。
-      await this.deps.applyPassedProbe(answered, now).catch((error: unknown) => {
+      const summary = await this.deps.applyPassedProbe(answered, now).catch((error: unknown) => {
         logger.warn('[retention-probe] 通过后推进 FSRS 失败（证据已留痕）', {
           probeId: answered.id,
           conceptKey: answered.conceptKey,
           error: error instanceof Error ? error.message : String(error),
         });
+        return null;
       });
+      if (summary && summary.appliedItems === 0) {
+        logger.warn('[retention-probe] 通过但 FSRS 推进未应用任何条目（被去重或为空）', {
+          probeId: answered.id,
+          conceptKey: answered.conceptKey,
+          skippedDuplicateItems: summary.skippedDuplicateItems,
+        });
+      }
     }
     await this.deps.updateProjection(projectionKey, JSON.stringify(answered));
     logger.info('[retention-probe] 探针已作答', {

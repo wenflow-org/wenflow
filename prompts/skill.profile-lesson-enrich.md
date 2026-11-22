@@ -1,6 +1,6 @@
 ---
 agentId: skill:profile-lesson-enrich
-coreHash: b6832b4a4e1ff09929d836559000f3292b617f1262fabf053bea3809e8ad328c
+coreHash: 8563c6613fbba03cf3fc2cc5b46e7409ae99c1dfde57b649868865acf59e7281
 coreVersion: 1
 temperature: 0.4
 maxTokens: 64000
@@ -55,7 +55,7 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 { "label": 概念白话标签, "readiness": "low|medium|high", "confidence": 0-1 }
 （conceptKey 由系统按 label 归一，不要输出）
 - recurringConfusions · object[] — 反复混淆模式，每项结构：
-{ "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 1 }
+{ "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 本节课内该混淆实际被观察到的次数（≥1；跨课聚合由代码按概念归并取 max，不由模型累加） }
 （conceptKey 由系统按 label 归一，不要输出）
 - knowledgeStateSummary · string — 本节课后学习者的知识状态摘要（2-4 句中文自然语言），供后续教学决策与预测器直接读取。必须涵盖：
 ① 已掌握/半掌握/未掌握的关键概念（引用本节课概念名）

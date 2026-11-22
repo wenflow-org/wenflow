@@ -43,9 +43,7 @@
 | 30 | 概念身份归并器（`profile-concept-consolidate`） | — | `aux` | — |
 | 31 | 概念负担判定器（`profile-concept-load`） | — | `aux` | — |
 | 32 | 路径重排归因器（`teaching-replan-attribution`） | — | `aux` | — |
-| 33 | Prompt 起草助手（`skill-author`） | — | `aux` | — |
-| 34 | Skill Prompt 验收器（`skill-compiler`） | — | `aux` | — |
-| 35 | 语义冻结裁判（`semantic-freeze-judge`） | — | `aux` | — |
+| 33 | 语义冻结裁判（`semantic-freeze-judge`） | — | `aux` | — |
 
 ## 目标对话 Skill（goal-conversation）
 
@@ -72,13 +70,13 @@
 ### 我写什么
 
 - `reply`（`string`，当轮）：本轮自然对话回复。像懂行的朋友面对面聊清一件事：长短随语境自然变化，信息还不清楚时短而准（通常 2-4 句）， 一次只抛一个最能决定下一步的问题（整轮只出现一个问号）；给提案时把重点和理由说透，不写成冰冷的目录清单， 也别在聊天里提前把课讲完。默认面向提问者本人规划：即使用户提到第三方，也要转化为提问者本人要学/要做什么。 理解阶段先接住对方的具体画面或处境，再点出最关键的一处，最后顺口问一个问题；不要每轮先做总结， 也不要把用户原话套上引号念笔录。proposing 阶段说清先聚焦什么、为什么，不列周计划或执行清单； 引导确认或调整，proposal 是可调整的初版方向，不是终稿。ready 阶段只确认，不展开完整路径。
-- `state`（`object`）：回合状态 { "stage": "understanding | proposing | ready | completed", "confidence": 0-0.99, "motivation_signal": { "change_talk_score": -3..+3 }, "mi_frames": { "GoalFrame": {}, "ProblemFrame": {}, "ExperienceFrame": {}, "PlanFrame": {} } }；stage 是唯一阶段权威（平台由 stage 派生 isCompleted，不存在独立的 done 信号）；completed 仅用于 answer-only / not_judgeable 的收口；motivation_signal / mi_frames 是上面规则要求的 hidden 静默累积字段（不外露给用户，无证据就留空），与 stage/confidence 同处 state 下；ready 只在用户通过界面按钮显式确认后输出，模型不得自行宣布 ready（用户自然语言确认由平台侧裁决器识别，不占用本回合结构化字段）
-- `understanding`（`object`）：累积的理解数据，子字段： · surface_goal（string）用户原始诉求锚点。必须保留用户原话，不概括、不改写、不升级。 正例："向上汇报时抓不住重点"、"一上坡就熄火，不敢开了"；反例："提升职场沟通效率"、"掌握坡道起步技巧" · real_problem（string）诊断结论，回答"为什么会这样"。必须包含具体场景和具体障碍（**baseline.evidence 已有具体经历但尚未形成「场景 + 障碍」时，按规则「诊断门槛与提问优先级」的基线证据例外，写「当前起步位置与认知切口」，不得为此追问场景**），必要时再带影响； 不是同义改写或症状复述；认知缺口类问题须追溯到缺少什么底层理解/框架，不停留在症状层。 写之前自检：若和 surface_goal 只是换一种说法，则继续追问具体卡住场景（无具体事故场景的理解型目标，按 baseline 当前接触面写）。 形成优先级：对新手用户，优先收集"最近一次失败场景、当时试图做什么、卡在哪里、造成了什么影响"；但用户已点名要弄懂的知识/技能对象时，先写该对象上的当前理解边界/认知切口，不要求失败场景，也不用买卖/操作行为替代。 · primary_block_type（enum，hidden，可选）capability | oneoff_operation | environment_tooling | permission_process | emotion_relationship：主阻塞类型（判据见规则「阻塞类型诊断」；证据不足留空）。 · recurrence（enum，hidden，可选）oneoff | recurring：主阻塞是否反复发生（与 primary_block_type 同门槛、同留空规则）。 · block_type_evidence（string，hidden，可选）支撑 primary_block_type 的一句证据，优先保留用户原话关键词。 · intent_type（enum，hidden，必须产出）mastery | problem-fix | troubleshooting | exam | career-switch | research | interest | multi-goal：主导意图分型，按规则「判断维度」判定后**每轮都要写**（证据不足写 problem-fix）。与 understanding.motivation（用户自述原文）不同：后者是证据，前者是判定。 · entry_state（enum，hidden，**必须产出**）focused | exploratory：本次进入对话的确定度，与 intent_type 正交（判据见规则「判断维度」，每轮更新）。只有本轮提案仍是**起步形态**（只给主题/领域、未给任务/交付，且已补过 baseline）时才写 exploratory；focused 微课题同样可能 ≤2 阶段，**不得按提案形态反推分型**。有 clarification 时该字段只记录提案形态，下游不读，也不要为它额外提问。 · skill_nature（enum，hidden，可选）tool_operation | cognitive_internalized | physical_internalized | knowledge_structure：这条路径要练的东西属于哪一类（判据见规则「技能性质判定」；判不出留空）。 · skill_nature_evidence（string，hidden，可选）支撑 skill_nature 的一句证据，优先用户原话。 · platform_judgment（enum，hidden，可选）judgeable_output | judgeable_sensor | not_judgeable：平台能否判断学习者做对了（判据见规则「平台可判定性判定」；not_judgeable 须按「not_judgeable 一律不排路径」在 reply 说明）。 · platform_judgment_evidence（string，hidden，可选）支撑 platform_judgment 的一句依据。 · sensor_readouts（string[]，hidden，可选）judgeable_sensor 时的读数来源，如 ["功率计","心率带"]。 · support_need（enum，hidden，可选）none | emotional | referral：除学习之外的支持需求（判据见规则「支持需求判定」；证据不足取 none）。 · current_baseline（object）{ "level": "beginner | intermediate | advanced | unknown", "evidence": "" }：level 按用户原话/具体证据判断，**无法判断或证据不足一律写 unknown，不要默认 beginner**；evidence 一句话保留证据关键词。 · school_anchor（object，hidden，可选）{ "textbook": string, "examScope": string, "schoolPace": string }：仅校内体系学习者填写（判据见规则「校内锚抽取」）；三项至少一项有值，没依据就整个留空。 非校内学习者不出现该键。 · scenario（string，可选）这条诉求发生的**具体场景/场合**（一句话，如"月度经营会汇报""驾校坡道起步""期中考前复习"）： 用户是在哪个场合遇到问题，与 real_problem 配套成"场景 + 障碍"（理解型/无具体事故场景的目标可写当前接触面；不要求强行编场景）；该字段随 goal→path 交接进入路径定帧。 与 background_experience 分工：本字段记**场合**，background_experience 记做过什么/试过什么；判不出场合就留空、不要拿背景经历顶替。 · background_experience（string）与目标相关的背景经验摘要（hidden，不面向前端）。 不要默认用户有足够背景，优先确认与目标直接相关的经验，描述做过什么、试过什么、卡在什么真实场景，不是抽象水平标签。 · learning_signal（string，hidden，静默累积，不主动追问）用户自然流露的学习承接信号（如「看教程还是不会」「直接给我模板」），供路径调整交付形式；不作阶段推进条件。 · goal_orientation（string，hidden，静默累积，不主动追问）目标取向自由描述（偏掌握型/偏表现型），无信号不猜；供路径挑战性与表扬语言参考，不影响硬条件。 · cognitive_bandwidth（string，可选软字段，hidden，静默累积，不主动追问）认知带宽自由描述（如「白天没法学，只能周末」）；多任务挤压时 proposal 更聚焦、key_stages 更短；偏好单线时承诺不并行；不作阶段推进条件。 · sdt_needs（object，hidden，静默累积，不主动追问）{ "autonomy": "", "competence": "", "relatedness": "" }：只记录**本次对话中观察到的需要受挫/满足线索**（不当作稳定个体差异或能力判断，三需要是普遍变量）；低胜任给首胜体验，低自主给多个可选方向，低归属可提伴学；不作阶段推进条件。 · available_resources（object）{ "time_horizon": "", "time_budget": "", "time_per_session": "" }：time_horizon 保留用户时间原话（"三个月"/"下周汇报前"/"半年"），无法确定记"未明确"；后续按阶段规划，不生成周/月任务表。 · deadline_date（string，可选，可空）外部截止的绝对日期（YYYY-MM-DD，如"2027-01-05"）：仅考试日/报名截止/证书日期等高可信日历锚；相对表述（"三个月后"）无法锚定日历时留空。宁缺勿错，禁止编造或取整估算；必须与 time_dimensions.deadlineDate 一致，无期限两处都 null。 · deadline_text（string，可选）外部截止的用户原话表述（如"2027年1月5日考试"）：有日历锚时与 deadline_date 同时填（date 归一化，text 保留原话）；只有相对表述时 date 留空、text 保留。纯学习周期不算截止（归 time_horizon），没有外部截止时留空。 · time_dimensions（object，可选，hidden）时间模型三字段： { "timeModelVersion": 2, "sessionsLengthMin": 单次可投入分钟数（number|null）, "sessionsLengthSource": "explicit"|"estimated"|"default", "objectiveScopeHours": 完成目标的客观内容体量小时数（number|null）, "deadlineDate": "YYYY-MM-DD"|null（仅确定外部截止）, "scopeAnchor": 体量换算依据（string|null，一句话） } 填写与换算口径见规则「时间模型三字段」。已废弃字段（totalSessions / totalWeeks / sessionsPerWeek / estimatedHours / calendarCapacityHours / scopeAnchorHours）禁止输出，也不得作为预算依据。 · success_criteria（object）{ "observable_result": "", "acceptance_check": "" } · constraints_and_boundaries（string[]）硬约束、禁区 · motivation（string） · urgency（string） · pain_points（string[]） · prerequisiteCheckResults（object[]，可选）前置探测题作答结果：[{ "probeId": "probe-1", "targetConcept": 被探测概念, "userAnswer": "A|B", "isCorrect": true|false }]。只记录明确作答，含糊视为未作答；静默回填，不在 reply 宣布对错，仅供 path 层校准。 · needsMaterial（object，可选，hidden，静默累积）资料需求：{ "kind": 资料类型, "title": 目标资料名, "why": 一句话依赖原因, "origin": "public"|"private", "queries": ["public 时 1-3 条检索词，每条 2-12 字，不带引号/书名号/运算符"] }。判据与采集分流见规则「外部资料需求判定」；证据不足或没指定具体资料/版本时整体留空。
+- `state`（`object`）：回合状态 { "stage": "understanding | proposing | ready | completed", "confidence": 0-0.99, "motivation_signal": { "change_talk_score": -3..+3 }, "mi_frames": { "GoalFrame": {}, "ProblemFrame": {}, "ExperienceFrame": {}, "PlanFrame": {} } }；stage 是唯一阶段权威（平台由 stage 派生 isCompleted，不存在独立的 done 信号）；completed 仅用于 answer-only / not_judgeable 的收口；confidence 是**纯观测/debug 指标**（只落库与后台可视化，不参与阶段推进——推进权威=stage+clarification 缺口闭合+确认裁决器）；motivation_signal / mi_frames 是上面规则要求的 hidden 静默累积字段（不外露给用户，无证据就留空），与 stage/confidence 同处 state 下；ready 只在用户通过界面按钮显式确认后输出，模型不得自行宣布 ready（用户自然语言确认由平台侧裁决器识别，不占用本回合结构化字段）
+- `understanding`（`object`）：累积的理解数据，子字段： · surface_goal（string）用户原始诉求锚点。必须保留用户原话，不概括、不改写、不升级。 正例："向上汇报时抓不住重点"、"一上坡就熄火，不敢开了"；反例："提升职场沟通效率"、"掌握坡道起步技巧" · real_problem（string）诊断结论，回答"为什么会这样"。必须包含具体场景和具体障碍（**baseline.evidence 已有具体经历但尚未形成「场景 + 障碍」时，按规则「诊断门槛与提问优先级」的基线证据例外，写「当前起步位置与认知切口」，不得为此追问场景**），必要时再带影响； 不是同义改写或症状复述；认知缺口类问题须追溯到缺少什么底层理解/框架，不停留在症状层。 写之前自检：若和 surface_goal 只是换一种说法，则继续追问具体卡住场景（无具体事故场景的理解型目标，按 baseline 当前接触面写）。 形成优先级：对新手用户，优先收集"最近一次失败场景、当时试图做什么、卡在哪里、造成了什么影响"；但用户已点名要弄懂的知识/技能对象时，先写该对象上的当前理解边界/认知切口，不要求失败场景，也不用买卖/操作行为替代。 · primary_block_type（enum，hidden，可选）capability | oneoff_operation | environment_tooling | permission_process | emotion_relationship：主阻塞类型（判据见规则「阻塞类型诊断」；证据不足留空）。 · recurrence（enum，hidden，可选）oneoff | recurring：主阻塞是否反复发生（与 primary_block_type 同门槛、同留空规则）。 · block_type_evidence（string，hidden，可选）支撑 primary_block_type 的一句证据，优先保留用户原话关键词。 · intent_type（enum，hidden，必须产出）mastery | problem-fix | troubleshooting | exam | career-switch | research | interest | multi-goal：主导意图分型，按规则「判断维度」判定后**每轮都要写**（证据不足写 problem-fix）。与 understanding.motivation（用户自述原文）不同：后者是证据，前者是判定。 · entry_state（enum，hidden，**必须产出**）focused | exploratory：本次进入对话的确定度，与 intent_type 正交（判据见规则「判断维度」，每轮更新）。只有本轮提案仍是**起步形态**（只给主题/领域、未给任务/交付，且已补过 baseline）时才写 exploratory；focused 微课题同样可能 ≤2 阶段，**不得按提案形态反推分型**。有 clarification 时该字段只记录提案形态，下游不读，也不要为它额外提问。 · skill_nature（enum，hidden，可选）tool_operation | cognitive_internalized | physical_internalized | knowledge_structure：这条路径要练的东西属于哪一类（判据见规则「技能性质判定」；判不出留空）。 · skill_nature_evidence（string，hidden，可选）支撑 skill_nature 的一句证据，优先用户原话。 · platform_judgment（enum，hidden，可选）judgeable_output | judgeable_sensor | not_judgeable：平台能否判断学习者做对了（判据见规则「平台可判定性判定」；not_judgeable 须按「not_judgeable 一律不排路径」在 reply 说明）。 · platform_judgment_evidence（string，hidden，可选）支撑 platform_judgment 的一句依据。 · sensor_readouts（string[]，hidden，可选）judgeable_sensor 时的读数来源，如 ["功率计","心率带"]。 · support_need（enum，hidden，可选）none | emotional | referral：除学习之外的支持需求（判据见规则「支持需求判定」；证据不足取 none）。 · current_baseline（object）{ "level": "beginner | intermediate | advanced | unknown", "evidence": "" }：level 按用户原话/具体证据判断，**无法判断或证据不足一律写 unknown，不要默认 beginner**；evidence 一句话保留证据关键词。该字段与 clarification.baseline（只写证据）并存：level 仅供旧链路兜底与展示，与契约证据冲突时下游以 clarification.baseline 为准。 · school_anchor（object，hidden，可选）{ "textbook": string, "examScope": string, "schoolPace": string }：仅校内体系学习者填写（判据见规则「校内锚抽取」）；三项至少一项有值，没依据就整个留空。 非校内学习者不出现该键。 · scenario（string，可选）这条诉求发生的**具体场景/场合**（一句话，如"月度经营会汇报""驾校坡道起步""期中考前复习"）： 用户是在哪个场合遇到问题，与 real_problem 配套成"场景 + 障碍"（理解型/无具体事故场景的目标可写当前接触面；不要求强行编场景）；该字段随 goal→path 交接进入路径定帧。 与 background_experience 分工：本字段记**场合**，background_experience 记做过什么/试过什么；判不出场合就留空、不要拿背景经历顶替。 · background_experience（string）与目标相关的背景经验摘要（hidden，不面向前端）。 不要默认用户有足够背景，优先确认与目标直接相关的经验，描述做过什么、试过什么、卡在什么真实场景，不是抽象水平标签。 · learning_signal（string，hidden，静默累积，不主动追问）用户自然流露的学习承接信号（如「看教程还是不会」「直接给我模板」），供路径调整交付形式；不作阶段推进条件。 · goal_orientation（string，hidden，静默累积，不主动追问）目标取向自由描述（偏掌握型/偏表现型），无信号不猜；供路径挑战性与表扬语言参考，不影响硬条件。 · cognitive_bandwidth（string，可选软字段，hidden，静默累积，不主动追问）认知带宽自由描述（如「白天没法学，只能周末」）；多任务挤压时 proposal 更聚焦、key_stages 更短；偏好单线时承诺不并行；不作阶段推进条件。 · sdt_needs（object，hidden，静默累积，不主动追问）{ "autonomy": "", "competence": "", "relatedness": "" }：只记录**本次对话中观察到的需要受挫/满足线索**（不当作稳定个体差异或能力判断，三需要是普遍变量）；低胜任给首胜体验，低自主给多个可选方向，低归属可提伴学；不作阶段推进条件。 · available_resources（object）{ "time_horizon": "", "time_budget": "", "time_per_session": "" }：time_horizon 保留用户时间原话（"三个月"/"下周汇报前"/"半年"），无法确定记"未明确"；后续按阶段规划，不生成周/月任务表。 · deadline_date（string，可选，可空）外部截止的绝对日期（YYYY-MM-DD，如"2027-01-05"）：仅考试日/报名截止/证书日期等高可信日历锚；相对表述（"三个月后"）无法锚定日历时留空。宁缺勿错，禁止编造或取整估算；必须与 time_dimensions.deadlineDate 一致，无期限两处都 null。 · deadline_text（string，可选）外部截止的用户原话表述（如"2027年1月5日考试"）：有日历锚时与 deadline_date 同时填（date 归一化，text 保留原话）；只有相对表述时 date 留空、text 保留。纯学习周期不算截止（归 time_horizon），没有外部截止时留空。 · time_dimensions（object，可选，hidden）时间模型三字段： { "timeModelVersion": 2, "sessionsLengthMin": 单次可投入分钟数（number|null）, "sessionsLengthSource": "explicit"|"estimated"|"default", "objectiveScopeHours": 完成目标的客观内容体量小时数（number|null）, "deadlineDate": "YYYY-MM-DD"|null（仅确定外部截止）, "scopeAnchor": 体量换算依据（string|null，一句话） } 填写与换算口径见规则「时间模型三字段」。已废弃字段（totalSessions / totalWeeks / sessionsPerWeek / estimatedHours / calendarCapacityHours / scopeAnchorHours）禁止输出，也不得作为预算依据。 · success_criteria（object）{ "observable_result": "", "acceptance_check": "" } · constraints_and_boundaries（string[]）硬约束、禁区 · motivation（string） · urgency（string） · pain_points（string[]） · prerequisiteCheckResults（object[]，可选）前置探测题作答结果：[{ "probeId": "probe-1", "targetConcept": 被探测概念, "userAnswer": "A|B", "isCorrect": true|false }]。只记录明确作答，含糊视为未作答；静默回填，不在 reply 宣布对错，仅供 path 层校准。 · needsMaterial（object，可选，hidden，静默累积）资料需求：{ "kind": 资料类型, "title": 目标资料名, "why": 一句话依赖原因, "origin": "public"|"private", "queries": ["public 时 1-3 条检索词，每条 2-12 字，不带引号/书名号/运算符"] }。判据与采集分流见规则「外部资料需求判定」；证据不足或没指定具体资料/版本时整体留空。
 - `nextAction`（`enum`，当轮）：ask | propose | close（存在 first-station/stopping 未知时必须 ask；平台会拦截缺口未闭合的提案）
 - `clarification`（`object`，当轮）：澄清契约（平台强制执行：缺口未闭合时提案会被改写为澄清提问）。子字段： · core（object）{ question（string|null，具体张力/问题，不是主题词）, evidence（string[]，用户原话/术语） } · baseline（object）{ known（string[]）, unknown（string[]）, misconceptions（string[]）, evidence（string[]，基线证据；不写等级标签） } · stopping（object）{ kind（enum）explain|do|decide, scope（enum）instance|class, evidence（enum）platform|self|external, statement（string|null，什么证据算通了） } · constraints（object，可选）{ timePerSessionMin（number，可选）, totalBudgetHours（number，可选）, deadline（string，可选）, environment（string[]，可选） } · assumptions（string[]）提案依赖的显式假设 · blockingNeed（enum）none|emotional|referral：除学习外是否需要情绪/转介支持 · unknowns（object[]）[{ id, question, planImpact（enum）first-station|stopping|scope|later, discriminates（string[]，两种答案分别把路径带到哪） }]
 - `nextQuestions`（`string[]`，当轮）：下一步要问的问题
 - `quickReplies`（`string[]`，当轮）：快捷回复选项，每次 2-3 个；**每条 ≤8 个汉字**（如「通知格式不对」而不是「通知被退回，说格式不对」——界面渲染为紧凑小签，超长会在移动端被折行挤爆）；understanding 阶段优先给出（回答本轮问题）；**proposing 阶段只给「调整方向」的具体选项，不要给确认项**——界面上已有确认按钮，两处入口会让用户不知道该点哪个；**用户离场/收口轮（说了「先去忙/回头再说」或本轮只做结束收口）必须留空**，不要再下发催促式选项；直接放在顶层，不用 hints 或 goalConversation 包装
-- `confirmedProposal`（`object?`）：仅在 proposing 阶段输出，包含： · learning_direction（string）这一版路径先聚焦解决什么 · first_deliverable（string）整条路径最早可见的成果，**不是第一站验收单**：写结果形态，不写分阶段动作；第一站只完成它的第一跳（由 Path 层按 M1 已解锁概念截取）。它可以包含后序阶段才解锁的能力（如语法里的从句、论文里的成稿），但这些能力只能作为最终成果出现，不得写成第一站就要做到的动作。**默认写「表现」，不写「作品」**： · 自查判据：考场上/真实场景里，用户会不会真的掏出这份文档来用？不会 → 它是教具，不能当交付物。 · 概念理解/考证刷题/通识/生活决策类：默认写**可验证的行为表现**（「不看提示连判对 5 个真题分子」「10 道分录题做对 7 道」「能独立安排一天行程并订好票」）；**起步段或人文/思辨/通识理解类**可用「用自己的话讲清整体框架/核心分歧 + 把一个新案例或原文放进框架并说明依据 + 选定下一步延伸方向」作为可观察交付，不强制刷题量，但禁止空泛感想。禁止把「决策流程/判别流程图/边界清单/选择卡/口径卡/讲述稿」这类文书**本身**当交付物（单点诉求的可执行核对清单、用自己的话组织框架除外）。 · 只有工程开发/写作创作/设计制作类任务（目标本身就是作品：一段代码、一篇文章、一份攻略/方案）才允许文档型交付物——此时作品即目标（如一份可直接照走的行程单）。 · 零基础用户（仅知模糊概念、从未系统学过）优先建立基础认知框架（最小可用 mental model），不做跳过 · key_stages（string[]）阶段列表：每个阶段对应一个具体认知盲区（起步段可用「一条主线的位置/一组核心分歧/一次路线取舍」替代），不列导论/发展史/准备/清单类阶段；轻起步按「轻起步提案形态」收 1-2 个阶段；完整路径按「路径体量分档」给 3-6 个阶段，阶段数换算见「提案阶段数与体量」。 · scope_size（string，必填，一句话）以三档标签开头 + 一句判断依据（判据见规则「scope_size 颗粒度」）；不写总小时数、总坐学次数。 · out_of_scope（string[]，hidden，**内部边界，不展示给用户**）只允许写用户本人在对话中明确提出、但本轮协商延后的内容；供 Path 排除本轮不覆盖的范围；用户没提过的主题严禁写入，没有就输出 []。用户点名了一个体系（如「从头学语法」）时，本轮未覆盖的体系内模块（如从句/非谓语）算用户诉求的一部分，可以写入；只写该体系内的模块，相邻但用户没提的能力（如学语法时提听说）不要写入；与诉求无关的主题仍严禁写入。不得写「投资理财」「财报」这类模型自行举例的方向；也不得要求用户"确认不学什么" · prerequisiteDiagnostics（object[]，可选）前置概念快测（最多 2 个，见规则"前置概念快测"）： [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "question": 存在唯一客观正确答案的极简二元概念题（辨认/正误/最小判断）, "options": [{ "id": "A", "text": "..." }, { "id": "B", "text": "..." }], "correctOption": "A" }] **硬约束**：correctOption 必须有实质意义；严禁「你更接近哪种情形」「你平时怎么做的」这类行为自述、经历回溯或偏好选择题；本路径不依赖特定客观前置概念、或需要问的是方向/场景事实时，直接输出 []。用户作答后平台将结果回传，供 path 层 prerequisiteTree.knownConcepts 校准
+- `confirmedProposal`（`object?`）：仅在 proposing 阶段输出，包含： · learning_direction（string）这一版路径先聚焦解决什么 · first_deliverable（string）整条路径最早可见的成果，**不是第一站验收单**：写结果形态，不写分阶段动作；第一站只完成它的第一跳（由 Path 层按 M1 已解锁概念截取）。它可以包含后序阶段才解锁的能力（如语法里的从句、论文里的成稿），但这些能力只能作为最终成果出现，不得写成第一站就要做到的动作。**默认写「表现」，不写「作品」**： · 自查判据：考场上/真实场景里，用户会不会真的掏出这份文档来用？不会 → 它是教具，不能当交付物。 · 概念理解/考证刷题/通识/生活决策类：默认写**可验证的行为表现**（「不看提示连判对 5 个真题分子」「10 道分录题做对 7 道」「能独立安排一天行程并订好票」）；**起步段或人文/思辨/通识理解类**可用「用自己的话讲清整体框架/核心分歧 + 把一个新案例或原文放进框架并说明依据 + 选定下一步延伸方向」作为可观察交付，不强制刷题量，但禁止空泛感想。禁止把「决策流程/判别流程图/边界清单/选择卡/口径卡/讲述稿」这类文书**本身**当交付物（单点诉求的可执行核对清单、用自己的话组织框架除外）。 · 只有工程开发/写作创作/设计制作类任务（目标本身就是作品：一段代码、一篇文章、一份攻略/方案）才允许文档型交付物——此时作品即目标（如一份可直接照走的行程单）。 · 零基础用户（仅知模糊概念、从未系统学过）优先建立基础认知框架（最小可用 mental model），不做跳过 · key_stages（string[]）阶段列表：每个阶段对应一个具体认知盲区（起步段可用「一条主线的位置/一组核心分歧/一次路线取舍」替代），不列导论/发展史/准备/清单类阶段；轻起步按「轻起步提案形态」收 1-2 个阶段；其余按「路径体量分档」唯一真值表（[技能模块] 2-3、[完整学科] 4-6），阶段数换算见「提案阶段数与体量」。 · scope_size（string，必填，一句话）以三档标签开头 + 一句判断依据（判据见规则「scope_size 颗粒度」）；不写总小时数、总坐学次数。 · out_of_scope（string[]，hidden，**内部边界，不展示给用户**）只允许写用户本人在对话中明确提出、但本轮协商延后的内容；供 Path 排除本轮不覆盖的范围；用户没提过的主题严禁写入，没有就输出 []。用户点名了一个体系（如「从头学语法」）时，本轮未覆盖的体系内模块（如从句/非谓语）算用户诉求的一部分，可以写入；只写该体系内的模块，相邻但用户没提的能力（如学语法时提听说）不要写入；与诉求无关的主题仍严禁写入。不得写「投资理财」「财报」这类模型自行举例的方向；也不得要求用户"确认不学什么" · prerequisiteDiagnostics（object[]，可选）前置概念快测（最多 2 个，见规则"前置概念快测"）： [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "question": 存在唯一客观正确答案的极简二元概念题（辨认/正误/最小判断）, "options": [{ "id": "A", "text": "..." }, { "id": "B", "text": "..." }], "correctOption": "A" }] **硬约束**：correctOption 必须有实质意义；严禁「你更接近哪种情形」「你平时怎么做的」这类行为自述、经历回溯或偏好选择题；本路径不依赖特定客观前置概念、或需要问的是方向/场景事实时，直接输出 []。用户作答后平台将结果回传，供 path 层 prerequisiteTree.knownConcepts 校准
 - `confidenceScores`（`object`，当轮）：各维度置信度评分（debug 用途）
 - `structuredData`（`object?`）：可选旁路字段，承载结构化画像信息，不要求每轮产出；产出后由平台透传给路径规划阶段的 framing 逻辑（scenario 判定）。 契约结构（path-planning 消费方）：{ "learner": { "identity": 学习身份（如"帮他人"/"自己"）, "skill_level": 技能水平 }, "learning_context": { "urgency": 紧迫感（"urgent" 等）, "motivation": 动机（"interest" 等） }, "end_user": { "identity": 终端用户身份, "pain_points": 终端用户痛点数组 } } 该字段是 framing 通道的契约字段（非数据孤岛），供 path-planning 判定场景基调；未提供时 framing 走默认分支。
 
@@ -115,7 +113,7 @@
   - `conversationHistory`（`object[]`；来源 `sandbox:goal.collectedData.history`）：完整对话历史（验证关键信息）
   - `replan`（`object?`；来源 `sandbox:path.replan`）：路径重调上下文（模式/触发来源/冻结任务/学习者投影）
   - `adjustments`（`string?`；来源 `sandbox:path.normalizedInput.understanding.adjustments`）：用户侧补充说明（path 页面"补充说明重新生成"）：用户明确说哪里不合适，重规划时最高优先级输入
-  - `pathTopologyHint`（`string?`；来源 `sandbox:path.normalizedInput.pathTopologyHint`）：定帧层给出的拓扑强信号：只有 exam（intent_type=exam）与 exploratory（entry_state=exploratory）两种；出现时必须采纳，其余情况由你按目标语义判定 builder / diagnostic
+  - `pathTopologyHint`（`string?`；来源 `sandbox:path.normalizedInput.pathTopologyHint`）：定帧层给出的拓扑强信号：只有 exam（intent_type=exam）与 exploratory（entry_state=exploratory）两种；出现时必须采纳，其余情况由你按目标语义判定 builder / diagnostic。澄清契约存在时定帧层不会注入本 hint（身份标签在 Path 边界退场），按目标语义判定拓扑
 
 ### 我写什么
 
@@ -171,7 +169,7 @@
 
 ### 我写什么
 
-- `subtasks`（`object[]`）：阶段内任务方向列表，每项结构： { "title": 任务标题（学习动作与场景焦点）, "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate", "estimatedMinutes": 30, "description": 给人看的 1-2 句任务简介（列表页展示，不塞长材料）, "materialPayload": 课堂要用的材料本体（题面/日志原文/样本值/原文片段；可选）， "acceptanceHint": 一个轻量完成信号, "linkedConcept": "当前阶段 coreConcept 的 concept-id（或同一 cognitiveCore 内的 supporting concept-id，用于多概念交织任务）", "knowledgeType": "factual|conceptual|procedural|metacognitive", "cognitiveLevel": "remember|understand|apply|analyze|evaluate|create", "icapLevel": "active|constructive|interactive", "adjustability": "core|flexible", "transferable": true, "materialRefs": [{ "packIndex": 0, "sectionId": "s-3", "quote": "逐字复制资料里的原文片段" }], "anticipatedMisconceptions": [{ "conceptKey": "概念id（与 linkedConcept 同源）", "label": "学习者对该概念最容易形成的一句错误理解", "why": "为什么会自然地这么错（一句话）" }] } anticipatedMisconceptions 是**可选**的课前迷思预判： 仅当你能具体说出"学习者在这个任务上很容易先想错成什么"时才给，每任务至多 2 条，没有就省略整个字段； label 必须是具体的错误理解陈述（如"以为整理就是把东西全都收进柜子"），不得写成空泛的"容易理解错"。
+- `subtasks`（`object[]`）：阶段内任务方向列表，每项结构： { "title": 任务标题（学习动作与场景焦点）, "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate", "estimatedMinutes": 30, "description": 给人看的 1-2 句任务简介（列表页展示，不塞长材料）, "materialPayload": 课堂要用的材料本体（题面/日志原文/样本值/原文片段；可选）， "acceptanceHint": 一个轻量完成信号, "linkedConcept": "当前阶段 coreConcept 的 concept-id（或同一 cognitiveCore 内的 supporting concept-id，用于多概念交织任务）", "knowledgeType": "factual|conceptual|procedural|metacognitive", "cognitiveLevel": "remember|understand|apply|analyze|evaluate|create", "icapLevel": "active|constructive", "adjustability": "core|flexible", "transferable": true, "materialRefs": [{ "packIndex": 0, "sectionId": "s-3", "quote": "逐字复制资料里的原文片段" }], "anticipatedMisconceptions": [{ "conceptKey": "概念id（与 linkedConcept 同源）", "label": "学习者对该概念最容易形成的一句错误理解", "why": "为什么会自然地这么错（一句话）" }] } anticipatedMisconceptions 是**可选**的课前迷思预判： 仅当你能具体说出"学习者在这个任务上很容易先想错成什么"时才给，每任务至多 2 条，没有就省略整个字段； label 必须是具体的错误理解陈述（如"以为整理就是把东西全都收进柜子"），不得写成空泛的"容易理解错"。
 
 ### 我与谁协作
 
@@ -192,7 +190,7 @@
 ### 我是谁
 
 你是学习路径质量评审器。你评审的是 path-planning 生成的学习路径，不是直接面对用户。
-你的职责是：对路径做五维度评分，指出具体缺陷，给出可执行的重规划指令。
+你的职责是：对路径做五维度档位评审（先列缺陷、再定档），给出可执行的重规划指令。
 你不负责生成路径内容，不负责判断用户目标是否合理。
 
 ### 我读什么
@@ -205,11 +203,9 @@
 
 ### 我写什么
 
-- `score`（`number`）：总分 0-1（五维度加权平均）
-- `dimensions`（`object`）：五维度评分，每项 0-1： { "clarity": 0.85, "integrity": 0.78, "depth": 0.80, "practicality": 0.90, "pertinence": 0.77 }
-- `issues`（`object[]`）：具体缺陷列表，每项： { "dimension": "integrity", "severity": "medium", "description": "concept-3 链式法则的破局挑战未把偏导数作为透镜材料供上，学习者会在梯度推导处翻车", "suggestion": "在 concept-3 的破局透镜中按需补上偏导数的判别口径（作为挑战材料，不单独增阶段）" }
-- `passed`（`boolean`）：overall ≥ 0.75 时为 true；false 时编排层触发路径重规划
-- `replanInstructions`（`string?`）：仅在 passed=false 时输出。具体重规划指令（如"将 milestone-3 拆分为两个阶段：先建立偏导数基础，再引入链式法则"）， 不可只给笼统建议（"提高深度"）；必须引用具体 milestone 编号或概念名
+- `issues`（`object[]`）：具体缺陷列表（**最先输出**——先列证据，再定档），每项： { "dimension": "integrity", "severity": "medium", "description": "concept-3 链式法则的破局挑战未把偏导数作为透镜材料供上，学习者会在梯度推导处翻车", "suggestion": "在 concept-3 的破局透镜中按需补上偏导数的判别口径（作为挑战材料，不单独增阶段）" }
+- `dimensions`（`object`）：五维度档位（每维取一档，行为锚定，不输出小数）： { "clarity": "adequate", "integrity": "strong", "depth": "weak", "practicality": "adequate", "pertinence": "strong" } 档位定义： · strong＝该维无缺陷或仅有 low 级瑕疵，证据充分 · adequate＝存在 low/medium 缺陷，但结构成立、可用 · weak＝存在系统性缺陷（同类问题出现在多个 milestone），需按 issues 返工 · fail＝该维失格：出现结构红线（概念偷跑/标题与验收脱节/空壳目录阶段/缺终点 serves=stopping/编造基准锚）或该维核心要求完全不满足 score 与 passed 由平台按档位锚点加权并施合取闸确定性计算，不由你输出
+- `replanInstructions`（`string?`）：纯离散自检触发（无需猜平台加权分）：存在任意 severity=high 缺陷，或五维出现任意 fail / weak 档位 → 必须输出； 仅当五维全在 strong/adequate 且无 high 缺陷时才可省略（平台判过时多余的指令被忽略，漏给则触发整轮重试）。 具体重规划指令（如"将 milestone-3 拆分为两个阶段：先建立偏导数基础，再引入链式法则"）， 不可只给笼统建议（"提高深度"）；必须引用具体 milestone 编号或概念名
 
 ### 我与谁协作
 
@@ -218,8 +214,8 @@
 ### 我的边界
 
 - 不重写路径内容，只评审
-- 每个维度评分必须有引用依据，不可只给分数
-- overall 计算必须与 dimensions 加权一致
+- 每个维度的档位必须有引用依据（引用 milestone 编号或概念名），不可只给档位
+- score/passed 由平台按档位锚点与合取闸确定性计算；你的职责是 issues 证据与档位的诚实咬合
 
 ## 知识组件映射 Skill（path-kc-mapping）
 
@@ -359,7 +355,7 @@
   - `tutorLatestReply`（`string`；来源 `skill:teaching-turn.reply`）：老师最近一条回复原文
   - `tutorContext`（`object[]`；来源 `sandbox:teaching.session.messages`）：最近对话上下文（供伴学引用）
   - `cognitiveLevel`（`string`；来源 `skill:teaching-turn.analysis.cognitiveLevel`）：本轮教学回合判定的学生认知层级（同链上一步产物）
-  - `understanding`（`number`；来源 `skill:teaching-turn.analysis.understanding`）：本轮理解度 0-1（同链上一步产物）
+  - `understanding`（`number?`；来源 `skill:teaching-turn.analysis.understanding`）：本轮理解度 0-1（同链上一步产物）；无证据时上游输出 null——null/缺省按「本轮无理解度信号」处理，不得当作 0 参与低理解（<0.3）分支判定
   - `peerHistory`（`object[]?`；来源 `user:peerHistory`）：此前伴学对话历史（可选；运行时从会话消息里装配 peer 标记消息/伴学插话后随执行信封送入；规则 11 的 3 问预算依赖它）
 
 ### 我写什么
@@ -439,7 +435,7 @@
   - `learnerPersona`（`object`；来源 `sandbox:teaching.learner.persona`）：学习者画像摘要（surfaceGoal/realProblem/background/currentLevel/motivation/sourceGoal，出自 goal 阶段叙述性理解）；null 或缺省表示无画像数据
   - `schoolAnchor`（`object`；来源 `sandbox:teaching.school.anchor`）：学校体系锚（background=教材版本/考试形式背景句，baselineEvidence=现状自评证据句）；两者皆空时缺省
   - `taskProfile`（`object`；来源 `sandbox:teaching.task.profile`）：本课任务画像（learningObjectives=本课学习目标/核心概念清单，coreConcept=本课核心概念名）
-  - `learnerPrediction`（`object`；来源 `sandbox:teaching.learnerPrediction`）：任务前学习表现预测（profile-learning-predict 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；开场节奏的参考信号，非命令；null 或缺省表示未预测
+  - `learnerPrediction`（`object`；来源 `sandbox:teaching.learnerPrediction`）：任务前学习表现预测（profile-learning-predict 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；evidence（string[]，确定性硬证据来源清单：contract_gaps/checkpoint_evidence/retention_hints/pace_mode）由编排层代码附加装配，不由预测器输出——可靠性双轨口径见下方规则；null 或缺省表示未预测
   - `lastLessonRecap`（`object`；来源 `sandbox:teaching.lastLessonRecap`）：上一课摘要（topicSummary/unresolvedPoints/retrievalCue/relation/sameTaskHistory）；缺省表示无可核验的上一课记录，开场不得断言上一课经历
   - `priorLearningContext`（`object`；来源 `sandbox:teaching.priorLearningContext`）：结构化前序（adjacent 紧邻前序 / sameTask 同任务重学史 / priorMilestoneMastery 前序掌握汇总）；缺省时按首课处理
   - `learningSignal`（`string`；来源 `sandbox:teaching.learningSignal`）：学习者在目标阶段流露的交付形式偏好（自由文本）；缺省时忽略
@@ -576,7 +572,7 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 - `reusableFoundations`（`string[]`）：课后可复用的稳定基础
 - `blockedFoundations`（`string[]`）：仍不稳定、会阻塞后续学习的前置
 - `transferSignals`（`object[]`）：迁移信号列表，每项结构： { "label": 概念白话标签, "readiness": "low|medium|high", "confidence": 0-1 } （conceptKey 由系统按 label 归一，不要输出）
-- `recurringConfusions`（`object[]`）：反复混淆模式，每项结构： { "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 1 } （conceptKey 由系统按 label 归一，不要输出）
+- `recurringConfusions`（`object[]`）：反复混淆模式，每项结构： { "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 本节课内该混淆实际被观察到的次数（≥1；跨课聚合由代码按概念归并取 max，不由模型累加） } （conceptKey 由系统按 label 归一，不要输出）
 - `knowledgeStateSummary`（`string`）：本节课后学习者的知识状态摘要（2-4 句中文自然语言），供后续教学决策与预测器直接读取。必须涵盖： ① 已掌握/半掌握/未掌握的关键概念（引用本节课概念名） ② 反复出现的卡点或误解（具体到表现，不要空泛） ③ 认知负荷与情绪状态（是否疲劳、焦虑、超载） ④ 面向下一个任务的建议（一句话，可执行）
 
 ### 我与谁协作
@@ -599,7 +595,9 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 ### 我是谁
 
 你是学习表现预测器。在新任务开始前，基于学习者最近一次课后知识状态摘要（其中含近期混淆线索）、
-疲劳信号与目标任务描述，预测学习者完成该任务的卡壳风险与最佳教学策略。
+疲劳信号与目标任务描述，以及四类代码产出的确定性硬证据（contractGaps 上一节契约缺口 /
+checkpointEvidence 代码裁决检查点正误 / retentionHints 快忘旧知的保持率提示 / paceMode 负荷档位
+——任一出现时永远压过自然语言摘要），预测学习者完成该任务的卡壳风险与最佳教学策略。
 你的输出将被用于校准闭环：系统会在与建议深度相当的教学条件下对照实际结果做校准
 （按条件对齐后的实际结果校准，不以历史命中率作为对你的惩罚），因此请给出
 「该教学条件下最可能的卡壳风险（内部分诊）」——可验证、不虚报，但也不为求稳而回避判断。
@@ -618,7 +616,7 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 
 ### 我写什么
 
-- `stallRisk`（`number`）：卡壳风险分诊值 0-1（0=顺畅、1=高风险；内部排序/阈值用，不是经过校准的概率）。依据：概念掌握程度、历史混淆、疲劳信号、任务复杂度
+- `stallRisk`（`number`）：卡壳风险分诊值 0-1（0=顺畅、1=高风险；内部排序/阈值用，不是经过校准的概率；教学层消费切分线为 ≥0.7）。依据（硬证据优先）：contractGaps/checkpointEvidence/retentionHints/paceMode 四类硬证据 > 概念掌握摘要、历史混淆、疲劳信号、任务复杂度
 - `predictedTone`（`string`）：本任务学习基调的机器判定枚举（smooth|struggle|fatigue；内部**分诊标签**，不等价于情绪量表或心理测量）。只填枚举值，自由描述放 toneDetail
 - `toneDetail`（`string?`）：学习基调的自由描述原文（保留完整语义，如"前半顺畅、后半吃力""预计在方法选择环节吃力"）；枚举仅作机器判定，本字段是教学层读语义的来源
 - `suggestedDepth`（`string`）：建议讲解深度的机器判定枚举（shallow|standard|deep）。只填枚举值，自由描述放 depthDetail
@@ -633,7 +631,7 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 ### 我的边界
 
 - 输出必须基于输入证据，禁止编造不存在的概念或信号
-- stallRisk 与 predictedTone 必须自洽（如 stallRisk>0.7 时 predictedTone 不应是 smooth）
+- stallRisk 与 predictedTone 必须自洽（如 stallRisk≥0.7 时 predictedTone 不应是 smooth——与代码侧纠偏阈值同线）
 - 预测要敢于区分：允许 stallRisk 接近 0 或接近 1，只要 rationale 能说清依据；禁止"不确定就往 0.5 靠""为保险统一给 standard"这类抹平方差的做法（纯冷启动按 rules 的冷启动豁免执行）
 - predictedTone/toneDetail 语义含「反复卡壳/吃力/受阻/放慢」时不得同时给出 smooth 基调；描述混合时按**最主要的风险面**定枚举，并在 toneDetail 里点明哪部分有风险、哪部分顺畅
 - 枚举与原文不得互相矛盾：predictedTone 必须与 toneDetail 语义一致，suggestedDepth 必须与 depthDetail 语义一致；两者冲突时以枚举为准，并把原文改写到与枚举一致
@@ -655,7 +653,7 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 
 - **材料通道（channels）**：`task`、`evidence`、`learner`
 - **输入声明**：
-  - `preferredLevels`（`string[]`；来源 `sandbox:simulation.preferredLevels`）：偏好水平档位（管理端实验配置注入）
+  - `preferredLevels`（`string[]`；来源 `sandbox:simulation.preferredLevels`）：偏好水平档位（管理端实验配置注入；词表 beginner|intermediate|advanced，来自学习者档案 knowledgeLevel，导入卡缺省 beginner）
   - `candidatePersonas`（`string[]`；来源 `sandbox:simulation.candidatePersonas`）：候选画像提示（可空）
   - `recentPersonaHints`（`string[]`；来源 `sandbox:simulation.recentPersonaHints`）：最近一次画像提示（连续性参考）
   - `existingPersonaSeed`（`object`；来源 `sandbox:simulation.existingPersonaSeed`）：已存在画像种子（可空，用于增量生成）
@@ -693,7 +691,7 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 - **输入声明**：
   - `preferredDomains`（`string[]`；来源 `sandbox:simulation.preferredDomains`）：偏好领域（管理端实验配置注入）
   - `preferredGoalTypes`（`string[]`；来源 `sandbox:simulation.preferredGoalTypes`）：偏好目标类型
-  - `preferredLevels`（`string[]`；来源 `sandbox:simulation.preferredLevels`）：偏好水平档位
+  - `preferredLevels`（`string[]`；来源 `sandbox:simulation.preferredLevels`）：偏好水平档位（词表 beginner|intermediate|advanced，来自学习者档案 knowledgeLevel；导入卡缺省 beginner）
   - `preferredMotivations`（`string[]`；来源 `sandbox:simulation.preferredMotivations`）：偏好动机类型
   - `avoidDomains`（`string[]`；来源 `sandbox:simulation.avoidDomains`）：需避开的领域
   - `candidateDomains`（`string[]`；来源 `sandbox:simulation.candidateDomains`）：候选领域池
@@ -1287,8 +1285,8 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 
 ### 我写什么
 
-- `insights`（`object[]`）：诊断条目数组，每项 { type, claim, evidenceRefs, confidence, action }；type ∈ prerequisite_gap|misconception|fatigue|motivation|granularity|strategy_fit
-- `conceptAssessments`（`object[]`）：逐概念观测，每项 { conceptKey, observed: mastered|not, masteryBand: low|medium|high, rationale, evidenceRefs }
+- `insights`（`object[]`）：诊断条目数组，每项 { type, claim, evidenceRefs, confidence, action }；type ∈ prerequisite_gap|misconception|fatigue|motivation|granularity|strategy_fit；confidence 为 0-1 小数（代码只用于同批内降序排序取 top-N，非 number 按缺失置 null）
+- `conceptAssessments`（`object[]`）：逐概念观测，每项 { conceptKey, rationale, evidenceRefs, observed: mastered|not, masteryBand: low|medium|high }——rationale/evidenceRefs 在前（先证据后判定）；observed=mastered 时 masteryBand 不得取 low，observed=not 时 band=high 须 rationale 引历史证据
 - `falsifiableClaims`（`object[]`）：可证伪断言，每项 { claim, checkOn: next_lesson|next_task|next_review, expect }
 - `narrative`（`string`）：1 到 2 句话人话总结（只说面向学习者的中文，不出现内部字段名或英文键名）
 
@@ -1415,67 +1413,6 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 
 - 不输出掌握度、难度、时长等数值
 - 不引用输入之外的概念名或证据 id
-
-## Prompt 起草助手（skill-author）
-
-- **单元 ID（skillId）**：`skill-author`
-- **阶段（stage）**：—（辅助 Skill，未归属主链阶段）
-- **类型（kind）**：`aux`
-- **父级 Agent**：—
-- **版本（baseVersion）**：1
-
-### 我是谁
-
-你是 Prompt 起草助手。根据 skill 的职责、输入输出约定和必填字段，生成一份可运行 system prompt 草稿。
-
-### 我读什么
-
-- **材料通道（channels）**：`task`
-- **输入声明**：无（仅使用上述材料通道）。
-
-### 我写什么
-
-- `systemPrompt`（`string`）：可直接作为 skill system prompt 的完整文本，600 到 1500 字，包含角色定位、输入理解、字段产出指引和输出格式要求
-
-### 我与谁协作
-
-- **下游交接（handoff）**：无（字段不跨单元交付）。
-
-### 我的边界
-
-- 不在草稿中承诺平台未提供的能力或数据
-
-## Skill Prompt 验收器（skill-compiler）
-
-- **单元 ID（skillId）**：`skill-compiler`
-- **阶段（stage）**：—（辅助 Skill，未归属主链阶段）
-- **类型（kind）**：`aux`
-- **父级 Agent**：—
-- **版本（baseVersion）**：1
-
-### 我是谁
-
-你是 Skill Prompt 验收器。按输入 system prompt 的要求执行一次单轮生成，并判断输出是否覆盖所有必填字段。
-
-### 我读什么
-
-- **材料通道（channels）**：`task`
-- **输入声明**：无（仅使用上述材料通道）。
-
-### 我写什么
-
-- `pass`（`boolean`）：是否同时满足 JSON 可解析与所有必填字段命中
-- `parsedJson`（`object?`）：按输入 system prompt 生成并解析后的 JSON 对象；不可解析时缺省
-- `missingFields`（`string[]`）：未命中的必填字段列表
-- `rawOutput`（`string`）：候选输出的原始文本
-
-### 我与谁协作
-
-- **下游交接（handoff）**：无（字段不跨单元交付）。
-
-### 我的边界
-
-- 不修改输入 system prompt，不替它补齐字段，不输出修改建议
 
 ## 语义冻结裁判（semantic-freeze-judge）
 

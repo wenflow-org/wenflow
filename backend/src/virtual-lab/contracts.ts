@@ -21,7 +21,17 @@ export type LearnerAction =
   | { type: 'start_learning'; taskId?: string }
   | { type: 'confirm_complete' }
   | { type: 'skip'; reason: string }
-  | { type: 'abandon'; reason: string }
+  | {
+      type: 'abandon'
+      reason: string
+      /**
+       * 独立离场原因（外部评审 P1.3，2026-11-22）：模拟学习者主动离开时的模拟器判定
+       * （leaving|satisfied|declining|no_more_questions）。透传进 control.learnerExitReason，
+       * 让裁判/运营能区分「目标已满足/无话可问的合法收口」与「中途流失」——
+       * 平台侧终态都只有 abandoned，差异只记录在 control。
+       */
+      exitReason?: string
+    }
 
 export type LearnerObservation = {
   stage: 'goal' | 'path' | 'teaching' | 'completed' | 'error'
@@ -96,6 +106,8 @@ export type PlatformControlReceipt = {
    */
   hardBlocked?: boolean
   goalTerminalKind?: 'answer_only' | 'no_path' | 'hard_blocked' | 'path_bound'
+  /** 模拟学习者主动离场的原因（leaving|satisfied|declining|no_more_questions|other），见 LearnerAction.abandon.exitReason */
+  learnerExitReason?: string
   taskCompleted?: boolean
   completedTasks?: number
   totalTasks?: number
@@ -217,6 +229,11 @@ export type EvaluationIntegrity = {
   danglingEvidenceRefs: string[]
   danglingFindingCodes: string[]
   missingEvidence?: boolean
+  /**
+   * 已计分的体验/理解主维度里，缺少对应阶段**实质证据**的维度清单（外部评审 P1.4）。
+   * 纯元数据路径（observation.stage 等）只证明"跑过该阶段"，不足以支撑该维度的分数。
+   */
+  missingDimensionEvidence?: string[]
 }
 
 export type VirtualLearnerRefereeOutput = {

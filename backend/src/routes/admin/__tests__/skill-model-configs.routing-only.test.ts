@@ -302,13 +302,11 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
     mockScanPromptFiles.mockReturnValue({
       files: [
         { agentId: 'skill:goal-conversation' },
-        { agentId: 'skill:skill-author' },
-        { agentId: 'skill:skill-compiler' },
         { agentId: 'skill:simulation-referee' },
         { agentId: 'skill:simulation-actor-audit' },
       ],
     })
-    // 只有 goal-conversation 有配置行；白名单 4 技能全部 platform-default
+    // 只有 goal-conversation 有配置行；白名单 2 技能全部 platform-default
     mockGetAll.mockResolvedValue([
       { skillId: 'goal-conversation', endpoint: 'http://127.0.0.1:3000/v1', model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null },
     ])
@@ -321,26 +319,26 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
     expect(payload.success).toBe(true)
     expect(payload.data.unconfigured).toEqual([])
     expect(payload.data.allowlisted).toEqual([
-      'simulation-actor-audit', 'simulation-referee', 'skill-author', 'skill-compiler',
+      'simulation-actor-audit', 'simulation-referee',
     ])
     // skills 列表仍含全部 5 个（白名单成员可见，source 仍如实标 platform-default）
     const byId = new Map<string, any>(payload.data.skills.map((s: any) => [s.skillId, s]))
-    expect(byId.get('skill-author').source).toBe('platform-default')
+    expect(byId.get('simulation-referee').source).toBe('platform-default')
     expect(byId.get('goal-conversation').source).toBe('skill-channel')
     /* 2026-11-10 用户「模型配置是什么，就是什么」：未配模型的 Skill 也报出实际生效的模型，
        不再让前端显示「平台默认」占位。inherited 只用于说明「未单独配置」。 */
-    expect(byId.get('skill-author').effectiveModel).toBe('platform-default-model')
-    expect(byId.get('skill-author').inherited).toBe(true)
+    expect(byId.get('simulation-referee').effectiveModel).toBe('platform-default-model')
+    expect(byId.get('simulation-referee').inherited).toBe(true)
     expect(byId.get('goal-conversation').effectiveModel).toBe('deepseek-v4.1-flash')
     expect(byId.get('goal-conversation').inherited).toBe(false)
   })
 
   it('白名单技能一旦补了配置行即移出 allowlisted（名单只登记「确实走平台默认」的成员）', async () => {
     mockScanPromptFiles.mockReturnValue({
-      files: [{ agentId: 'skill:skill-author' }],
+      files: [{ agentId: 'skill:simulation-referee' }],
     })
     mockGetAll.mockResolvedValue([
-      { skillId: 'skill-author', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null },
+      { skillId: 'simulation-referee', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null },
     ])
 
     const handler = getHandler('get', '/coverage')

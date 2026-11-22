@@ -1,5 +1,11 @@
 {
-  "generatedAt": "2026-11-02T12:20:20.603Z",
-  "rules": {},
-  "files": {}
+  "generatedAt": "2026-11-22T07:33:52.736Z",
+  "rules": {
+    "R2": 1
+  },
+  "files": {
+    "components/learning/MaterialUploadArea.vue": {
+      "R2": 1
+    }
+  }
 }

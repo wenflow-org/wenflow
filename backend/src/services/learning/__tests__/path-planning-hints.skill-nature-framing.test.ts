@@ -39,7 +39,7 @@ describe('#242 定帧层：内层 learnerProfile 的 skillNature / platformJudgm
     expect(Object.prototype.hasOwnProperty.call(out, 'platformJudgment')).toBe(true);
   });
 
-  it('Phase 4：有 clarification 时 skillNature / entryState / intentType 退场（platformJudgment 保留）', () => {
+  it('Phase 4 + 2026-11-22 名单收窄：有 clarification 时身份标签退场，skillNature 照常透传', () => {
     const out = framedLearnerProfile({
       version: '1.0',
       learnerProfile: {
@@ -58,10 +58,35 @@ describe('#242 定帧层：内层 learnerProfile 的 skillNature / platformJudgm
         unknowns: [],
       },
     });
+    // 身份标签（entryState / intentType）退场
     expect(out.entryState).toBeNull();
     expect(out.intentType).toBeNull();
-    expect(out.skillNature).toBeUndefined();
+    // 能力物理属性（skillNature / platformJudgment）不退场：置空会让 task-design 按
+    // 「字段缺失 → cognitive_internalized」兜底，工具操作型目标的 AI 代跑三段式静默失效
+    expect(out.skillNature).toBe('physical_internalized');
     expect(out.platformJudgment).toBe('not_judgeable');
+  });
+
+  it('契约会话的 tool_operation 目标：skillNature 透传到定帧输出（AI 代跑边界活口）', () => {
+    const out = framedLearnerProfile({
+      version: '1.0',
+      learnerProfile: {
+        surfaceGoal: '把十几份门店周报合并成月报',
+        skillNature: 'tool_operation',
+        platformJudgment: 'judgeable_output',
+      },
+      clarification: {
+        core: { question: '合并链路怎么搭', evidence: ['每周手工合并'] },
+        baseline: { known: ['Excel 基础'], unknown: [], misconceptions: [], evidence: ['用函数拼过'] },
+        stopping: { kind: 'do', scope: 'class', evidence: 'platform', statement: '一键合并出月报' },
+        assumptions: [],
+        blockingNeed: 'none',
+        unknowns: [],
+      },
+    });
+    expect(out.skillNature).toBe('tool_operation');
+    expect(out.platformJudgment).toBe('judgeable_output');
+    expect(out.intentType).toBeNull();
   });
 
   it('二次定帧幂等（生成链会再定帧一次）', () => {

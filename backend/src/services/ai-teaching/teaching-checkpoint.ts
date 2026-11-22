@@ -97,6 +97,18 @@ export interface CheckpointSubmitResult {
   feedback: string;
   hint?: string;
   revision: number;
+  /**
+   * 答错重答时引擎就地换题面（#50，同 cpId）后的最新待答检查点（答案键已剥离）。
+   * 提交响应必须带回它：否则前端收掉旧卡后新题只有正文文本、渲染不出作答卡，
+   * 学员要么刷新页面（/detail 恢复路径）要么把答案当普通消息发（绕开代码裁决）。
+   * 答对/跳过/到顶强消时为 null（检查点已消费，无卡可挂）。
+   */
+  checkpoint?: TeachingCheckpoint | null;
+  /** 契约四件套随提交回合下发（小测是拿证据的主通道；出站已剥离答案键） */
+  lessonContract?: Record<string, any> | null;
+  lessonReport?: Record<string, any> | null;
+  exitTicket?: Record<string, any> | null;
+  branch?: Record<string, any> | null;
 }
 
 export function shouldEmitCheckpoint(

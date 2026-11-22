@@ -1635,6 +1635,7 @@ export const adminVirtualLearnersApi = {
     storyId?: string;
     storyIndex?: number;
     frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+    autopilot?: 'off' | 'final';
   }) => {
     return adminAxios.post(`/admin/virtual-learners/${profileId}/start-session`, data || {});
   },
@@ -1643,6 +1644,7 @@ export const adminVirtualLearnersApi = {
     storyId?: string;
     storyIndex?: number;
     frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+    autopilot?: 'off' | 'final';
   }) => {
     return adminAxios.post(`/admin/virtual-learners/${profileId}/start-blackbox-session`, data || {});
   },
@@ -2288,9 +2290,13 @@ export const restoreUser = async (userId: string) => {
  * VL 页面不再有评审入口/徽章；此命名空间供独立评审工具/脚本与将来的独立面板使用。
  */
 export const adminSessionAuditsApi = {
-  /** 双评估：referee 终局评审 + actor 角色保真审计（报告按 fingerprint 幂等复用） */
+  /** 双评估：referee 终局评审 + actor 角色保真审计（报告按 fingerprint 幂等复用）。
+   *  2026-11-22 审计：后端同步跑两次 LLM 评估，30s 默认超时会让首跑前端必断、后端却继续
+   *  落报告（用户重试才读得到「复用已有报告」）——与 generatePersona 同判例改 5min。
+   *  2026-11-22 隔离环境实测首跑 3m58s，贴着 300s 一线：给专属余量 480s，慢网首跑
+   *  不再吃超时丢整批报告；服务端幂等，超时重试不重复计费。 */
   generateEvaluations: async (sessionId: string) => {
-    return adminAxios.post(`/admin/session-audits/sessions/${sessionId}/evaluations`);
+    return adminAxios.post(`/admin/session-audits/sessions/${sessionId}/evaluations`, undefined, { timeout: 480000 });
   }
 };
 

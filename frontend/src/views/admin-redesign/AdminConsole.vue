@@ -166,6 +166,9 @@ const SkillDetail = asyncPage(() => import('./SkillDetail.vue'));
 const CardDetailPage = asyncPage(() => import('./CardDetailPage.vue'));
 const CardImportPage = asyncPage(() => import('./CardImportPage.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
+// 会话评审报告（2026-11-22 UX 走查 P2.1）：裁判/角色审计 2026-09-27 拆独立 API 面后无页面
+// 消费，本场景补上只读报告页（?session= 深链 + 画像页运行记录「评审报告」入口）
+const SessionAudit = asyncPage(() => import('./SessionAudit.vue'));
 /* 记忆与复习（2026-10-12 两段拍板）：独立页先退役并入学习者详情页签，同日恢复**跨用户总览**
  * （MemoryReviewOverview：按待复习量排序的用户列表 + 到期时间轴）；单用户明细留在
  * 学习者详情「记忆与复习 / 记忆调度」页签，?userId= 旧深链由总览页转发过去 */
@@ -188,6 +191,8 @@ const components: Record<string, unknown> = {
   'goal-conversations': GoalConversations,
   'learning-paths': LearningPaths,
   'virtual-learners': VirtualLearners,
+  // 会话评审报告（2026-11-22）：黑盒运行双评估（裁判终局评审 + 角色保真审计）的唯一查看面
+  'session-audit': SessionAudit,
   // 学习者卡库（2026-10-01，2026-10-29 修正）：角色卡结构化导入/导出，卡=纯档案+故事池（不建账号），不经编译链
   'virtual-learner-cards': VirtualLearnerCards,
   // 「批量实验」2026-10-04 下线（运行态并入 virtual-learners、资产输入归卡库；
