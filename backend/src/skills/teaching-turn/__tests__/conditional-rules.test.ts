@@ -215,6 +215,25 @@ describe('条件规则接线（真实编译产物）', () => {
     expect(payload.conditionalRules).toContain('不得因为简介短就自行编造材料');
   });
 
+  it('scenario.supplementStatus 存在时，诚实回执规则进入载荷且键落尾部（不进 scenario 稳定体）', async () => {
+    // 2026-11-22 切口 C：补充槽诚实回执——pending=在途承接、expired=坦白没查到。
+    // 键是逐回合变化项，必须与 supplementaryMaterial 同纪律提取到载荷尾部，
+    // 否则会打断 scenario 首键的 KV 前缀缓存。
+    const { payload } = await capture({
+      ...INPUT,
+      scenario: {
+        ...INPUT.scenario,
+        supplementStatus: { status: 'expired', topic: 'CPA 各科分值构成' },
+      },
+    } as never);
+    // 回执键落在载荷顶层（尾部），scenario 稳定体内不再携带
+    expect(payload.supplementStatus).toEqual({ status: 'expired', topic: 'CPA 各科分值构成' });
+    expect((payload.scenario as Record<string, unknown>).supplementStatus).toBeUndefined();
+    // 真实编译产物里的条件规则随输入注入（过期→必须诚实交代，不再复诺）
+    expect(payload.conditionalRules).toContain('scenario.supplementStatus');
+    expect(payload.conditionalRules).toContain('不得再次承诺');
+  });
+
   it('scenario.lessonContract 存在时，契约/支线规则进入本轮载荷', async () => {
     // 2026-11-19 全面改造：契约与支线规则的条件键必须与 buildTeachingTurnInput 的装配一致，
     // 否则规则整段被剥离，自由需求又会回到“全靠模型自觉”。

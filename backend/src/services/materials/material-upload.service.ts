@@ -49,6 +49,9 @@ export interface MaterialLibraryStats {
   total: number;
   uploadCount: number;
   webCount: number;
+  /** 上传来源占用的容量——**配额口径**（2026-11-22 起配额只算上传，web 采集是系统缓存不占配额）。 */
+  uploadBytes: number;
+  /** 全部资料（含 web 采集）占用的磁盘容量——仅展示参考，不用于配额判定。 */
   totalBytes: number;
   quotaBytes: number;
 }
@@ -56,12 +59,15 @@ export interface MaterialLibraryStats {
 /** 资源库容量统计（列表接口/前端展示用）。 */
 export function getMaterialLibraryStats(userId: string): MaterialLibraryStats {
   const items = listMaterials(userId);
-  const uploadCount = items.filter((record) => record.origin !== 'web').length;
+  const uploadItems = items.filter((record) => record.origin !== 'web');
+  const sumBytes = (records: MaterialRecord[]) =>
+    records.reduce((sum, record) => sum + (Number(record.size) || 0), 0);
   return {
     total: items.length,
-    uploadCount,
-    webCount: items.length - uploadCount,
-    totalBytes: items.reduce((sum, record) => sum + (Number(record.size) || 0), 0),
+    uploadCount: uploadItems.length,
+    webCount: items.length - uploadItems.length,
+    uploadBytes: sumBytes(uploadItems),
+    totalBytes: sumBytes(items),
     quotaBytes: resolveUserQuotaBytes(),
   };
 }
@@ -103,12 +109,16 @@ export async function saveUploadedMaterial(input: {
   }
 
   const size = Math.min(buffer.byteLength, MAX_UPLOAD_BYTES);
-  // 同名同大小视为覆盖：先扣掉旧版本占用的容量，避免“替换自己”被配额误拦。
+  // 配额口径（2026-11-22 外部评审切口 D）：**只算上传来源**。web 采集落同一目录但属系统缓存，
+  // 隐形吃掉用户配额会造成「库里看着空、上传却被拒、还不知删什么」的莫名体验。
+  // 同名同大小视为覆盖：先扣掉旧版本占用的容量，避免“替换自己”被配额误拦（web 记录永不被上传覆盖）。
   const replaced = existingRecords.filter(
-    (existing) => existing.name === originalName && existing.size === size
+    (existing) =>
+      existing.origin !== 'web' && existing.name === originalName && existing.size === size
   );
+  const uploadRecords = existingRecords.filter((existing) => existing.origin !== 'web');
   const usedBytes =
-    existingRecords.reduce((sum, existing) => sum + (Number(existing.size) || 0), 0) -
+    uploadRecords.reduce((sum, existing) => sum + (Number(existing.size) || 0), 0) -
     replaced.reduce((sum, existing) => sum + (Number(existing.size) || 0), 0);
   const quotaBytes = resolveUserQuotaBytes();
   if (quotaBytes > 0 && usedBytes + size > quotaBytes) {

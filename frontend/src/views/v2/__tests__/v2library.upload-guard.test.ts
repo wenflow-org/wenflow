@@ -56,6 +56,8 @@ function libraryOf(items: Array<Record<string, unknown>>, quotaBytes = 200 * 102
       total: items.length,
       uploadCount: items.length,
       webCount: 0,
+      // 配额口径只算上传来源（2026-11-22 切口 D）；本 helper 的 items 全为 upload，两口径相等
+      uploadBytes: items.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
       totalBytes: items.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
       quotaBytes
     }

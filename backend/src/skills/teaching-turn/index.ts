@@ -147,6 +147,12 @@ export interface TeachingTurnInput {
       excerpt: string;
     } | null;
     /**
+     * 教师补充槽**诚实回执**（2026-11-22 切口 C）：上一轮 control.supplement 的采集结果状态。
+     * pending=仍在采集途中（承接一句、照常推进主线）；expired=采集失败/超期（诚实交代、不再复诺）。
+     * 逐回合变化 → 载荷尾部（与 supplementaryMaterial 同纪律）。
+     */
+    supplementStatus?: { status: 'pending' | 'expired'; topic: string } | null;
+    /**
      * 当前任务 materialRefs 的**章节原文窗口**（material-sections 取回，≤2×4K 字，2026-09-24）。
      * 讲到哪章就能看到那章原文；无引用/取回失败时为 null。
      * anchor='semantic' = 标题/引文均未命中，由**语义召回**兜底选出的最相关原文块（2026-10-16）。
@@ -3194,6 +3200,8 @@ function buildPromptInput(input: TeachingTurnInput) {
     priorMisconceptions: scenarioPriorMisconceptions,
     // 尾部已单独注入 supplementaryMaterial，scenario 体内不再重复携带
     supplementaryMaterial: scenarioSupplementaryMaterial,
+    // 诚实回执（2026-11-22 切口 C）：与 supplementaryMaterial 同为逐回合变化子键 → 同纪律提取到尾部
+    supplementStatus: scenarioSupplementStatus,
     // 缓存追踪实测（2026-09-28）：memoryWarmup 是漏网的第 7 个逐回合变化子键——温故点被消费后
     // 逐回合合并回计划（teaching-warmup.ts），留在 scenario（system 消息）会让消费温故的回合
     // 整段 KV 缓存归零。提取到载荷尾部，模板引用路径同步改为顶层键名（core yaml 已同步）。
@@ -3264,6 +3272,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(input.boardContext ? { boardContext: input.boardContext } : {}),
       // 教师补充材料（逐回合变化 → 同样放载荷尾部）：上一轮 control.supplement 的入库成果
       ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
+      // 教师补充槽诚实回执（逐回合变化 → 载荷尾部）：pending=在途承接；expired=坦白没查到
+      ...(scenarioSupplementStatus ? { supplementStatus: scenarioSupplementStatus } : {}),
       // 温故计划（逐回合被消费合并 → 载荷尾部；模板引用路径已同步为顶层 memoryWarmup）
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
       // 课堂契约支线（逐回合变化 → 载荷尾部）：预算、停车区、本轮指令
@@ -3280,6 +3290,7 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
       ...(scenarioBranchState ? { branchState: scenarioBranchState } : {}),
       ...(scenarioBranchDirective ? { branchDirective: scenarioBranchDirective } : {}),
+      ...(scenarioSupplementStatus ? { supplementStatus: scenarioSupplementStatus } : {}),
     },
     knowledge: input.knowledge,
     learner: input.learner,

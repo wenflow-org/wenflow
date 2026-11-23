@@ -42,6 +42,7 @@ import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
   promoteSupplementSlot,
   fetchSupplementMaterial,
+  supplementStatusForScenario,
   type SupplementSlot,
 } from './teaching-supplement.service';
 import { normalizeForKeywordMatch } from './checkpoint-shared';
@@ -393,8 +394,17 @@ export async function processStudentMessage(
       && previousTeachingAssistantCount >= 2,
   });
   // 教师补充材料（批次 E）：上一轮请求已入库 → 本轮把就绪载荷送进 scenario（模型可引用出处讲）。
+  // 未就绪/刚过期 → 诚实回执 supplementStatus（supplementStatusForScenario）：此前零注入，
+  // 学生秒回时老师只能「装失忆」，过期则静默吞掉承诺、永不交代（2026-11-22 切口 C）。
   if (supplementPromotion.payload) {
     (turnInput.scenario as Record<string, unknown>).supplementaryMaterial = supplementPromotion.payload;
+  }
+  const supplementStatus = supplementStatusForScenario(
+    supplementPromotion,
+    sessionArtifacts.supplement as SupplementSlot | undefined
+  );
+  if (supplementStatus) {
+    (turnInput.scenario as Record<string, unknown>).supplementStatus = supplementStatus;
   }
   // 教学配图时机（代码裁决 → **显式**送进本轮输入）：上一轮画了字符结构 / 学生在描述位置 /
   // 当前任务本身就是结构化关系 → 本轮给模型一次出图机会。

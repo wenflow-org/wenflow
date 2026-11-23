@@ -24,6 +24,7 @@ import {
   PLAIN_TEXT_EXTS,
   classifyDocumentExtension,
   evaluateTextLayer,
+  gatePageCountForFormat,
   getDocumentExt,
   isProseTextLine,
   rejectMessageFor,
@@ -205,6 +206,7 @@ export async function parseDocument(file: Buffer | string, filename: string): Pr
     if (!evaluated.ok) return reject(ext, evaluated.reason as DocumentRejectReason, 'text');
     // Markdown 从 ATX 标题建锚点；其余纯文本保持无锚点（下游 pack 回退到正文行）
     const anchors = isMarkdownExt(ext) ? extractMarkdownAnchors(text) : [];
+    const stored = text.slice(0, MAX_STORED_MARKDOWN_CHARS);
     return {
       status: 'ok',
       ext,
@@ -212,8 +214,9 @@ export async function parseDocument(file: Buffer | string, filename: string): Pr
       charCount: text.length,
       structure: { ...emptyStructure(), headingCount: anchors.length, chunkCount: anchors.length },
       anchors,
-      markdown: text.slice(0, MAX_STORED_MARKDOWN_CHARS),
-      warnings: [],
+      markdown: stored,
+      // 截断留痕与 office 路径同口径（此前 txt/md 路径静默截断，2026-11-22 补齐）
+      warnings: stored.length < text.length ? ['内容过长，已截断存储'] : [],
     };
   }
 
@@ -279,8 +282,14 @@ export async function parseDocument(file: Buffer | string, filename: string): Pr
     chunkCount: anchors.length,
   };
 
-  const totalPages = pageCount || structure.slideCount || structure.sheetCount || 0;
-  const evaluated = evaluateTextLayer({ charCount: markdown.length, pageCount: totalPages || null });
+  // 文本层闸门格式分档（2026-11-22 外部评审切口 A）：页均 ≥100 只对 PDF 生效——扫描件误判的
+  // 痛点在图片型 PDF；教学 pptx 一页常只有标题+3~5 个短要点（页均 40~80 字）、xlsx 工作表密度
+  // 更低，拿「页均」卡它们会成批误杀合法课件。pptx/xlsx/docx/txt 统一只按整篇 ≥MIN_TOTAL_CHARS
+  // 判；slide/sheet 数仍进 structure 供展示与锚点，不参与闸门。
+  const evaluated = evaluateTextLayer({
+    charCount: markdown.length,
+    pageCount: gatePageCountForFormat({ ext, pageCount, slideCount: structure.slideCount, sheetCount: structure.sheetCount }),
+  });
   if (!evaluated.ok) {
     return { ...reject(ext, evaluated.reason as DocumentRejectReason, format), warnings };
   }

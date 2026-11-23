@@ -8,6 +8,7 @@ import {
   readMaterial,
   saveUploadedMaterial,
 } from '../material-upload.service';
+import { writeMaterial, type MaterialRecord } from '../material-store';
 
 let root = '';
 
@@ -123,8 +124,45 @@ describe('material-upload.service', () => {
     expect(stats.total).toBe(1);
     expect(stats.uploadCount).toBe(1);
     expect(stats.webCount).toBe(0);
+    expect(stats.uploadBytes).toBe(saved.record!.size);
     expect(stats.totalBytes).toBe(saved.record!.size);
     expect(stats.quotaBytes).toBeGreaterThan(0);
+  });
+
+  it('配额只算上传来源：web 采集不占配额、不被上传拒收（2026-11-22 切口 D）', async () => {
+    // 1KB 配额：正常上传（≈360B）能过；若 web 字节计入配额，这条 10MB 采集件会把它顶爆
+    process.env.MATERIAL_USER_QUOTA_BYTES = '1024';
+    const webRecord: MaterialRecord = {
+      id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+      userId: 'user-1',
+      name: '采集的网页.md',
+      ext: '.md',
+      format: 'md',
+      size: 10 * 1024 * 1024,
+      charCount: 1000,
+      structure: {
+        pageCount: null, slideCount: 0, sheetCount: 0,
+        headingCount: 1, tableCount: 0, listCount: 0, paragraphCount: 1, chunkCount: 1,
+      },
+      anchors: [],
+      warnings: [],
+      createdAt: '2026-11-22T00:00:00.000Z',
+      origin: 'web',
+      sourceUrl: 'https://example.com/collected',
+      fetchedAt: '2026-11-22T00:00:00.000Z',
+    };
+    writeMaterial(webRecord, '# 采集的网页\n正文');
+
+    const saved = await saveUploadedMaterial({
+      userId: 'user-1',
+      originalName: '正常上传.txt',
+      buffer: Buffer.from(LONG_ENOUGH_TEXT, 'utf-8'),
+    });
+    expect(saved.ok).toBe(true);
+
+    const stats = getMaterialLibraryStats('user-1');
+    expect(stats.uploadBytes).toBe(saved.record!.size);
+    expect(stats.totalBytes).toBe(saved.record!.size + webRecord.size);
   });
 
   it('非法 id 不会造成目录穿越', () => {

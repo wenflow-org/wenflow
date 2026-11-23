@@ -6,7 +6,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { promoteSupplementSlot, type SupplementSlot } from '../teaching-supplement.service';
+import { promoteSupplementSlot, supplementStatusForScenario, type SupplementSlot } from '../teaching-supplement.service';
 
 let root = '';
 
@@ -113,6 +113,47 @@ describe('promoteSupplementSlot 状态机', () => {
     const { slot: next, payload } = promoteSupplementSlot(slot, userId, 3);
     expect(next?.status).toBe('delivered');
     expect(payload?.materialId).toBe(materialId);
+  });
+});
+
+describe('supplementStatusForScenario · 诚实回执注入判定（2026-11-22 切口 C）', () => {
+  it('采集在途（requested、无载荷）→ pending（等待期每轮承接，不装失忆）', () => {
+    const slot: SupplementSlot = {
+      status: 'requested', topic: '复利公式', query: '复利公式',
+      requestedAt: new Date().toISOString(), requestedTurn: 2,
+    };
+    const status = supplementStatusForScenario({ slot, payload: null }, slot);
+    expect(status).toEqual({ status: 'pending', topic: '复利公式' });
+  });
+
+  it('刚翻转 expired（对象引用 ≠ artifacts 旧槽位）→ expired（一次性坦白）', () => {
+    const oldSlot: SupplementSlot = {
+      status: 'requested', topic: '一直没采到', query: '一直没采到',
+      requestedAt: new Date().toISOString(), requestedTurn: 10,
+    };
+    const flipped: SupplementSlot = { ...oldSlot, status: 'expired' };
+    const status = supplementStatusForScenario({ slot: flipped, payload: null }, oldSlot);
+    expect(status).toEqual({ status: 'expired', topic: '一直没采到' });
+  });
+
+  it('已是旧槽位的 expired（引用相同）→ 不注（避免后续轮次反复道歉）', () => {
+    const expiredSlot: SupplementSlot = {
+      status: 'expired', topic: '一直没采到', query: '一直没采到',
+      requestedAt: new Date().toISOString(), requestedTurn: 10,
+    };
+    expect(supplementStatusForScenario({ slot: expiredSlot, payload: null }, expiredSlot)).toBeNull();
+  });
+
+  it('payload 就绪（delivered）→ 不注（走 supplementaryMaterial 载荷）', () => {
+    const slot: SupplementSlot = {
+      status: 'delivered', topic: '费曼学习法', query: '费曼学习法',
+      requestedAt: new Date().toISOString(), requestedTurn: 2, deliveredTurn: 3,
+    };
+    expect(supplementStatusForScenario({ slot, payload: { excerpt: '…' } }, slot)).toBeNull();
+  });
+
+  it('无槽位 → 不注', () => {
+    expect(supplementStatusForScenario({ slot: null, payload: null }, undefined)).toBeNull();
   });
 });
 

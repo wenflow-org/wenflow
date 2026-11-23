@@ -40,15 +40,22 @@
 
     <!-- 挂载选择弹层：从资料库勾选 + 上传新文件；确认后整包回填挂载列表 -->
     <div v-if="pickerOpen" class="mat-upload__picker" role="dialog" aria-modal="true" aria-label="选择要挂载的资料" @click.self="closePicker">
-      <div class="mat-upload__picker-card">
+      <div
+        ref="pickerCardEl"
+        class="mat-upload__picker-card"
+        tabindex="-1"
+        @keydown.esc.prevent="closePicker"
+      >
         <header class="mat-upload__picker-head">
           <strong>选择要挂载的资料</strong>
           <span class="mat-upload__picker-count">{{ attached.length }} / {{ PATH_LIMIT }}</span>
           <button type="button" class="mat-upload__picker-close" aria-label="关闭" @click="closePicker">✕</button>
         </header>
         <div class="mat-upload__picker-list">
+          <!-- 2026-11-22 去歧义：列表默认只显示**本次已挂载**的资料；资料库要点「从资料库选择」才展开——
+               没传、没选，弹层就是空的，不会让人误以为路径已经带着资料 -->
           <label
-            v-for="item in libraryItems"
+            v-for="item in pickerRows"
             :key="item.id"
             class="mat-upload__picker-row"
             :class="{ 'mat-upload__picker-row--attached': isAttached(item.id) }"
@@ -63,11 +70,16 @@
             <span class="mat-upload__picker-name" :title="item.name">{{ item.name }}</span>
             <span class="mat-upload__picker-desc">{{ describe(item) }}</span>
           </label>
-          <p v-if="!libraryItems.length" class="mat-upload__picker-empty">
-            资料库还没有文件。用下方「上传新文件」传一份（支持 PDF / Word / PPT / Excel / TXT / MD / CSV）。
+          <p v-if="!pickerRows.length" class="mat-upload__picker-empty">
+            {{ libraryExpanded && !libraryItems.length
+              ? '资料库还没有文件。用下方「上传新文件」传一份（支持 PDF / Word / PPT / Excel / TXT / MD / CSV）。'
+              : '还没挂载资料——要带的话，点「从资料库选择」挑一份，或直接上传新文件。' }}
           </p>
         </div>
         <footer class="mat-upload__picker-foot">
+          <button type="button" class="mat-upload__picker-browse" @click="libraryExpanded = !libraryExpanded">
+            {{ libraryExpanded ? '收起资料库' : '从资料库选择' }}
+          </button>
           <button type="button" class="mat-upload__picker-upload" :disabled="uploading" @click="inputRef?.click()">
             {{ uploading ? '上传中…' : '上传新文件' }}
           </button>
@@ -80,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import {
   getMaterialLibrary,
   uploadMaterial,
@@ -124,9 +136,20 @@ const uploading = ref(false);
 const error = ref('');
 const showAll = ref(false);
 const pickerOpen = ref(false);
+const libraryExpanded = ref(false);
+const pickerCardEl = ref<HTMLElement | null>(null);
+const lastTrigger = ref<HTMLElement | null>(null);
 
 const attached = computed<UploadedMaterial[]>(() => props.modelValue || []);
 const libraryHasUploads = computed(() => (library.value?.uploadCount ?? 0) > 0);
+/** 弹层列表 = 本次已挂载的资料 + （点「从资料库选择」展开后）库里未挂载的其余文件。
+    默认收起：没传、没选，弹层就是空的——不给人"路径已经带着资料"的暗示。 */
+const pickerRows = computed<UploadedMaterial[]>(() => {
+  const rest = libraryExpanded.value
+    ? libraryItems.value.filter((item) => !isAttached(item.id))
+    : [];
+  return [...attached.value, ...rest];
+});
 const shownAttached = computed(() =>
   showAll.value ? attached.value : attached.value.slice(0, CHIP_LIMIT)
 );
@@ -177,12 +200,21 @@ onMounted(refresh);
 /** 父页面回形针按钮调用：打开挂载选择弹层（顺带刷新资料库清单） */
 async function openPicker() {
   error.value = '';
+  libraryExpanded.value = false;
   await refresh();
   pickerOpen.value = true;
+  // 焦点管理（2026-11-21 走查）：回形针按钮在 composer__box 内，点它开弹层后焦点若仍留在
+  // 盒内，composer 的 :focus-within 蓝色焦点环会一直亮在弹层背后（暗色下像一整块蓝边大黑框）。
+  // 打开即把焦点移进弹层卡片；关闭时还给原触发元素。
+  lastTrigger.value = document.activeElement as HTMLElement | null;
+  await nextTick();
+  pickerCardEl.value?.focus();
 }
 
 function closePicker() {
   pickerOpen.value = false;
+  lastTrigger.value?.focus?.();
+  lastTrigger.value = null;
 }
 
 /** 弹层勾选/取消：满了再勾被 checkbox disabled 挡住；这里只处理取消与未满勾选 */
@@ -360,7 +392,7 @@ defineExpose({ refresh, openPicker, addFiles });
 .mat-upload__picker-card {
   display: flex;
   flex-direction: column;
-  width: min(560px, 100%);
+  width: min(620px, 100%);
   max-height: min(70vh, 520px);
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg, 14px);
@@ -449,6 +481,35 @@ defineExpose({ refresh, openPicker, addFiles });
   gap: 10px;
   padding: 10px 14px;
   border-top: 1px solid var(--line);
+}
+
+/* 底栏按钮不折行（2026-11-22 走查）：加宽卡片后 hint 允许收缩换行，按钮保持单行 */
+.mat-upload__picker-browse,
+.mat-upload__picker-upload,
+.mat-upload__picker-done {
+  white-space: nowrap;
+  flex: none;
+}
+
+.mat-upload__picker-hint {
+  flex: 1;
+  min-width: 0;
+}
+
+.mat-upload__picker-browse {
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-sm);
+  background: none;
+  padding: 5px 12px;
+  color: var(--ink);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mat-upload__picker-browse:hover {
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  color: var(--blue-deep);
 }
 
 .mat-upload__picker-upload {

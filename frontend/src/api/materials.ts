@@ -72,6 +72,9 @@ export interface MaterialLibraryStats {
   total: number;
   uploadCount: number;
   webCount: number;
+  /** 上传来源字节——配额口径（web 采集是系统缓存，不占配额）。 */
+  uploadBytes: number;
+  /** 全部资料字节（含 web）——仅展示参考。 */
   totalBytes: number;
   quotaBytes: number;
 }
@@ -117,6 +120,9 @@ export async function getMaterialLibrary(options: { includeUsage?: boolean } = {
         total: items.length,
         uploadCount: items.filter((item) => item.origin !== 'web').length,
         webCount: items.filter((item) => item.origin === 'web').length,
+        uploadBytes: items
+          .filter((item) => item.origin !== 'web')
+          .reduce((sum, item) => sum + (Number(item.size) || 0), 0),
         totalBytes: items.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
         quotaBytes: 0,
       },

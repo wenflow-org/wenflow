@@ -177,4 +177,26 @@ function normalizeUrl(url: string): string | null {
   }
 }
 
+/**
+ * 回执状态注入判定（2026-11-22 诚实回执，外部评审切口 C）：
+ * promoteSupplementSlot 返回「未就绪/刚过期」时，引擎把本函数结果送进 scenario.supplementStatus，
+ * 让老师能承接或坦白——此前零注入，学生秒回时老师只能「装失忆」，过期则静默吞掉承诺。
+ *   - pending：槽位仍 requested（采集在途）→ 等待期每轮注入；
+ *   - expired：requested→expired 本轮刚翻转（对象引用 ≠ artifacts 里的旧槽位）→ 只注一次，
+ *     避免后续轮次反复道歉；
+ *   - delivered（payload 就绪）/ 无槽位 / 已是旧槽位 → null（不注入）。
+ */
+export function supplementStatusForScenario(
+  promoted: { slot: SupplementSlot | null; payload: unknown },
+  previousSlot: SupplementSlot | undefined
+): { status: 'pending' | 'expired'; topic: string } | null {
+  const slot = promoted.slot;
+  if (!slot || promoted.payload) return null;
+  if (slot.status === 'requested') return { status: 'pending', topic: slot.topic };
+  if (slot.status === 'expired' && slot !== previousSlot) {
+    return { status: 'expired', topic: slot.topic };
+  }
+  return null;
+}
+
 export const teachingSupplementService = { fetchSupplementMaterial, promoteSupplementSlot, buildSupplementPayload };
