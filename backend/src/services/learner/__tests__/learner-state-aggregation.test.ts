@@ -334,6 +334,19 @@ describe('deriveLearningControlState（单课压力起作用的地方 = 课内�
     expect(control.challengeLevelCap).toBe('low');
   });
 
+  it('近期弃课/崩溃硬信号 → 即使指标很好也强制 recover（P0-2）', () => {
+    const control = deriveLearningControlState({
+      dynamicState: dynamicState({ metrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 }, recentTrend: 'improving' }) as any,
+      knowledgeMemory: knowledgeMemory(),
+      lessonMetrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 },
+      distressRecover: true,
+    });
+    expect(control.paceMode).toBe('recover');
+    expect(control.challengeLevelCap).toBe('low');
+    expect(control.checkpointNeed).toBe('low');
+    expect(control.controlFlags).toEqual({ distressRecover: true });
+  });
+
   it('高位学霸（趋势 stable、ACWR 已回落）也能进 push——不只看 improving 斜率（2026-11-23 复核）', () => {
     const control = deriveLearningControlState({
       dynamicState: dynamicState({ metrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 }, recentTrend: 'stable' }) as any,

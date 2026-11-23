@@ -15,6 +15,12 @@ import { normalizeForKeywordMatch, resolveUnderstandingReading } from '../../ser
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
 import type { ChatContentPart, ChatMessageContent } from '../../gateway/api-gateway/types';
 import { normalizeVisionImages, MAX_VISION_IMAGES_PER_MESSAGE } from '../../utils/vision-content';
+import {
+  LOAD_BAND_INDEX,
+  isLoadBand,
+  resolveLoadBand,
+  type LoadBand,
+} from '../../services/learning/load-band';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -257,7 +263,7 @@ export interface TeachingTurnInput {
       successRate?: number | null;
       relearnSuggestions?: Array<{ conceptKey?: string; label?: string; consecutiveAgain?: number; reason?: string }>;
     } | null;
-    /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadIndex */
+    /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadBand */
     interactionProfile?: {
       current?: Record<string, number> | null;
       history?: Array<{
@@ -420,6 +426,9 @@ export interface TeachingTurnOutput {
     studentNeed?: typeof ALLOWED_STUDENT_NEEDS[number];
     engagement: number;
     emotionalState: string;
+    /** 权威档位（2026-11-23）：under|flow|hint|overload|unknown；numeric loadIndex 由它派生 */
+    loadBand?: LoadBand;
+    /** 兼容字段：新模型不再输出 0-1 浮点，由 loadBand 映射 */
     loadIndex: number;
     loadBasis: string;
   };
@@ -900,12 +909,38 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
       emotionalState: (typeof analysis.emotionalState === 'string' && (ALLOWED_EMOTIONAL_STATES as readonly string[]).includes(analysis.emotionalState))
         ? analysis.emotionalState
         : 'neutral',
-      loadIndex: Number.isFinite(analysis.loadIndex)
-        ? Math.max(0, Math.min(1, Number(analysis.loadIndex)))
-        : 0.5,
-      loadBasis: (typeof analysis.loadBasis === 'string' && (ALLOWED_LOAD_BASIS as readonly string[]).includes(analysis.loadBasis))
-        ? analysis.loadBasis
-        : 'absent',
+      // 2026-11-23 P1-5：档位为权威，数值只做兼容映射。
+      // - 模型显式给 loadBand → 用档位中点（消灭回合级伪精确）；
+      // - 只有 legacy numeric → 原样保留（旧会话/旧夹具行为不变），档位由阈值反推；
+      // - 两者都缺 → unknown（0.5），loadBasis 必须是 absent。
+      ...(() => {
+        const rawLoadBand = (analysis as { loadBand?: unknown }).loadBand;
+        const explicitBand = isLoadBand(rawLoadBand);
+        // legacy「无证据」契约：loadIndex=0.5 + loadBasis=absent。没有显式档位时，
+        // 这条必须落 unknown，而不是被 numeric 反推成 flow——否则"没看见"会变成"正常"。
+        const explicitAbsent = analysis.loadBasis === 'absent';
+        const loadBand = !explicitBand && explicitAbsent
+          ? 'unknown'
+          : resolveLoadBand(rawLoadBand, analysis.loadIndex);
+        const legacyNumeric = Number.isFinite(analysis.loadIndex)
+          ? Math.max(0, Math.min(1, Number(analysis.loadIndex)))
+          : null;
+        const rawBasis = typeof analysis.loadBasis === 'string'
+          && (ALLOWED_LOAD_BASIS as readonly string[]).includes(analysis.loadBasis)
+          && analysis.loadBasis !== 'absent'
+          ? analysis.loadBasis
+          : null;
+        return {
+          loadBand,
+          loadIndex: explicitBand
+            ? LOAD_BAND_INDEX[loadBand]
+            : explicitAbsent
+              ? LOAD_BAND_INDEX.unknown
+              : (legacyNumeric ?? LOAD_BAND_INDEX[loadBand]),
+          // 不变量：unknown ⇔ absent；有档位但没给依据时按文本语义（semantic）兜底。
+          loadBasis: loadBand === 'unknown' ? 'absent' : (rawBasis ?? 'semantic'),
+        };
+      })(),
     },
     knowledge: {
       currentPoint: resolvedCurrentPoint,
@@ -3303,7 +3338,7 @@ function buildAnalysisOnlyPayload(input: TeachingTurnInput) {
   return {
     ...buildPromptInput(input),
     _analysisOnlyDirective:
-      '【本次调用为认知判定阶段】只输出 analysis 对象（含 cognitiveLevel/levelScore/understanding/confusionPoints/engagement/emotionalState/loadIndex/loadBasis），'
+      '【本次调用为认知判定阶段】只输出 analysis 对象（含 cognitiveLevel/levelScore/understanding/confusionPoints/engagement/emotionalState/loadBand/loadBasis），'
       + '不输出 reply/knowledge/pedagogy/control。所有判定必须基于输入证据，无证据时按规则取默认值。',
   };
 }

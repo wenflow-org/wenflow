@@ -56,6 +56,7 @@ export const teachingTurnRuntimeDefinition: RuntimeDefinitionRecord = {
       'analysis.understanding',
       'analysis.confusionPoints',
       'analysis.engagement',
+      'analysis.loadBand',
       'analysis.loadIndex',
       'analysis.loadBasis',
       'knowledge.currentPoint',

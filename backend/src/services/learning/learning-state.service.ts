@@ -42,6 +42,9 @@ import {
   type PreparedLearningStateMetricCommit,
   type DisplayMetricCommitInput,
   type SessionScoreInput,
+  SESSION_LSS_PRIOR_FALLBACK,
+  SESSION_LSS_PRIOR_SESSIONS,
+  poolObservationWithPrior,
   LearningStateRevisionConflictError,
   EWMA_CONFIG,
   NATURAL_DECAY,
@@ -563,16 +566,24 @@ export class LearningStateService {
     const normalizedSessionLf = Math.min(10, Math.max(0, input.sessionLf ?? input.sessionLss));
     const confidence = input.confidence === undefined
       ? 0.75
-      : Math.min(1, Math.max(0.2, input.confidence));
-
-    // 低置信度自动降权，避免单次评估抖动过大
-    const confidenceAdjustedLss = normalizedLss * (0.6 + confidence * 0.4);
-    const confidenceAdjustedKtl = normalizedSessionKtl * (0.6 + confidence * 0.4);
-    const confidenceAdjustedLf = normalizedSessionLf * (0.6 + confidence * 0.4);
+      : Math.min(1, Math.max(0, input.confidence));
 
     const previousSnapshots = await this.listCommittedSnapshots(userId, undefined, sourceKey);
     const previousSnapshot = previousSnapshots[previousSnapshots.length - 1] || null;
     const previousMetrics = previousSnapshot ? this.restoreMetrics(previousSnapshot.metrics) : null;
+
+    // 2026-11-23 P0-1：低置信度向**同量纲先验**部分池化，而不是乘系数向 0 收缩。
+    // - sessionLss 是单课事件量：先验取该学习者历史 sessionLss 中位数（首课 5.0）；
+    // - sessionKtl / sessionLf 是状态量：先验取上一份 committed 状态（与本次同量纲）。
+    // 旧实现 `x*(0.6+0.4c)` 把"不确定"乘成"低分"（c=0.2 时 9→6.12），且方向是向 0 而非个人基线；
+    // 对轻课同样会压到 low 锚点以下（2.5→1.7），丢的是相对位置而不只是绝对值。
+    const lssPrior = await this.resolveSessionLssPrior(userId, input.sessionId);
+    const ktlPrior = previousMetrics?.ktl ?? normalizedSessionKtl;
+    const lfPrior = previousMetrics?.lf ?? normalizedSessionLf;
+    const confidenceAdjustedLss = poolObservationWithPrior(normalizedLss, lssPrior, confidence);
+    const confidenceAdjustedKtl = poolObservationWithPrior(normalizedSessionKtl, ktlPrior, confidence);
+    const confidenceAdjustedLf = poolObservationWithPrior(normalizedSessionLf, lfPrior, confidence);
+
     const metrics = this.projectState(previousMetrics, {
       lss: confidenceAdjustedLss,
       ktlInput: confidenceAdjustedKtl,
@@ -601,7 +612,7 @@ export class LearningStateService {
     const data = await this.buildMetricCreateData(userId, metrics, inputs, options);
 
     logger.info(
-      `[LearningState] 会话评分更新: user=${userId}, sessionLss=${normalizedLss.toFixed(2)}, sessionKtl=${normalizedSessionKtl.toFixed(2)}, sessionLf=${normalizedSessionLf.toFixed(2)}, confidence=${confidence.toFixed(2)}, adjustedLss=${confidenceAdjustedLss.toFixed(2)}, adjustedKtl=${confidenceAdjustedKtl.toFixed(2)}, adjustedLf=${confidenceAdjustedLf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`
+      `[LearningState] 会话评分更新: user=${userId}, sessionLss=${normalizedLss.toFixed(2)}, sessionKtl=${normalizedSessionKtl.toFixed(2)}, sessionLf=${normalizedSessionLf.toFixed(2)}, confidence=${confidence.toFixed(2)}, priorLss=${lssPrior.toFixed(2)}, priorKtl=${ktlPrior.toFixed(2)}, priorLf=${lfPrior.toFixed(2)}, pooledLss=${confidenceAdjustedLss.toFixed(2)}, pooledKtl=${confidenceAdjustedKtl.toFixed(2)}, pooledLf=${confidenceAdjustedLf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`
     );
 
     return {
@@ -611,6 +622,48 @@ export class LearningStateService {
       metrics,
       data,
     };
+  }
+
+  /**
+   * 会话 LSS 的个人先验：最近若干节**已完成会话**的 raw sessionLss 中位数。
+   *
+   * 为什么读 teaching_sessions.wrapup.evaluation.sessionLss 而不是 learning_metrics.lss：
+   * 后者存的是已经池化/衰减后的状态值，拿它做先验会把要修的偏差再灌回去。
+   * 查询失败（旧库/测试 mock 无该表）时回落到中性 5.0——先验只是兜底，不影响主流程。
+   */
+  private async resolveSessionLssPrior(userId: string, excludeSessionId?: string | null): Promise<number> {
+    try {
+      const rows = await prisma.teaching_sessions.findMany({
+        where: {
+          userId,
+          status: 'completed',
+          wrapup: { not: null },
+          ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
+        },
+        orderBy: { endTime: 'desc' },
+        take: SESSION_LSS_PRIOR_SESSIONS,
+        select: { wrapup: true },
+      });
+      const values: number[] = [];
+      for (const row of rows) {
+        if (!row.wrapup) continue;
+        try {
+          const evaluation = JSON.parse(row.wrapup)?.evaluation;
+          const value = Number(evaluation?.sessionLss);
+          if (Number.isFinite(value)) values.push(Math.min(10, Math.max(0, value)));
+        } catch {
+          // 单行脏 JSON 跳过，不影响其他历史
+        }
+      }
+      if (values.length === 0) return SESSION_LSS_PRIOR_FALLBACK;
+      values.sort((a, b) => a - b);
+      const middle = Math.floor(values.length / 2);
+      return values.length % 2 === 1
+        ? values[middle]
+        : (values[middle - 1] + values[middle]) / 2;
+    } catch {
+      return SESSION_LSS_PRIOR_FALLBACK;
+    }
   }
 
   async commitDisplayMetrics(

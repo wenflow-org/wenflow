@@ -204,7 +204,7 @@ export interface TeachingScenarioContext {
   /**
    * 交互特征情报（认知负荷量测 · 前端情报层）：
    * 本轮学生输入的打字节奏统计 + 近 5 轮学生消息特征对比，缺失字段为 undefined（absent）。
-   * 仅供 LLM 结合文本语义判断 loadIndex，不参与任何规则计算。
+   * 仅供 LLM 结合文本语义判断 loadBand，不参与任何规则计算。
    */
   interactionProfile: {
     current: InteractionMetaRecord | null;

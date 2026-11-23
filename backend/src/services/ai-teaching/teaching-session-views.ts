@@ -438,6 +438,7 @@ export const COMPLETION_TURNS_BACKSTOP = 8;
 export async function commitSessionLoadMetric(session: TeachingSessionRecord): Promise<void> {
   const loadIndexes: number[] = [];
   const basisCounter = new Map<string, number>();
+  const bandCounter = new Map<string, number>();
   for (const message of session.messages) {
     const load = Number(message.analysis?.loadIndex);
     if (Number.isFinite(load)) loadIndexes.push(load);
@@ -445,12 +446,18 @@ export async function commitSessionLoadMetric(session: TeachingSessionRecord): P
     if (typeof basis === 'string' && basis) {
       basisCounter.set(basis, (basisCounter.get(basis) || 0) + 1);
     }
+    const band = message.analysis?.loadBand;
+    if (typeof band === 'string' && band) {
+      bandCounter.set(band, (bandCounter.get(band) || 0) + 1);
+    }
   }
   if (loadIndexes.length === 0) return;
   const avg = loadIndexes.reduce((sum, value) => sum + value, 0) / loadIndexes.length;
   const max = Math.max(...loadIndexes);
   const basisDist: Record<string, number> = {};
   for (const [key, count] of basisCounter) basisDist[key] = count;
+  const bandDist: Record<string, number> = {};
+  for (const [key, count] of bandCounter) bandDist[key] = count;
 
   await prisma.learning_metrics.upsert({
     where: {
@@ -468,6 +475,7 @@ export async function commitSessionLoadMetric(session: TeachingSessionRecord): P
       metadata: JSON.stringify({
         max: Number(max.toFixed(3)),
         basisDist,
+        ...(Object.keys(bandDist).length > 0 ? { bandDist } : {}),
         perTurnCount: loadIndexes.length,
         scale: '0-1',
       }),

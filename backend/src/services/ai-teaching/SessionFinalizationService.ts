@@ -18,6 +18,7 @@ import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './warmup-writeback';
 // 非正常终态判定（幽灵课 / 弃跑状态泄漏）：叶子方向的单向依赖，不成环（lifecycle 不 import 本服务）
 import { isAbnormalSessionClosure } from './teaching-session-lifecycle';
+import { recordDistressAbandonEvidence } from '../learner/distress-signal';
 import { evaluateSessionClosable } from './teaching-closure';
 import { computeEffectiveDurationMinutes } from './teaching-session-views';
 import { parseSessionArtifacts } from './checkpoint-shared';
@@ -249,6 +250,19 @@ export class SessionFinalizationService {
       // 回执 abandoned 脱同步，并污染完成课计数族。落 status='abandoned'、不产 wrapup/结算；
       // 操作响应保持 completed（runner endTeaching 以操作状态为准）。
       if (isAbnormalSessionClosure({ endReason: input.endReason, status: session.status })) {
+        // 2026-11-23 P0-2：学习者主动弃课 → 落一条控制面信号（不进学习指标）。
+        // 「一键清场」也用 learner-abandoned，但 operationId 前缀是 abandon:，属管理员动作，排除。
+        const administrativeClearance = operationId.startsWith('abandon:');
+        if (input.endReason === 'learner-abandoned' && !administrativeClearance) {
+          await recordDistressAbandonEvidence({
+            userId: session.userId,
+            sessionId: session.id,
+            pathId: session.learningPathId,
+            taskId: session.taskId,
+            endReason: input.endReason,
+            occurredAt: simulatedNowOr(),
+          });
+        }
         const abandonedSession = await teachingSessionRepository.abandonSessionFinalization(
           input.sessionId,
           input.endReason || 'learner-abandoned',

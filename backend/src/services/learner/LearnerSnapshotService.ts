@@ -11,6 +11,7 @@ import type {
   LearnerTeachingHints,
 } from '../../agents/profile-learner-model-agent/types';
 import { learnerKnowledgeMemoryService } from './LearnerKnowledgeMemoryService';
+import { loadRecentDistressSignal } from './distress-signal';
 // 相对量判据（ACWR/form）单一真理源——把"疲劳/节奏/可加速"从绝对阈值迁到尺度无关的判据上。
 import { classifyLoad, LOAD_VERDICT_THRESHOLDS } from '../learning/learning-load-verdict';
 // 会话 LSS 高压门槛的唯一来源（mid 的中点=6 不是高压，见 session-evaluation-scale）。
@@ -76,6 +77,11 @@ export function deriveLearningControlState(input: {
    * 全局聚合管节奏/疲劳，路径级管单课难易 —— 分母（同一路径的基线）对了，难易判断才有意义。
    */
   lessonMetrics?: { lss: number; ktl: number; lf: number; lsb: number };
+  /**
+   * P0-2 控制面硬信号：近 72h 存在主动弃课/崩溃事件（由 distress-signal 读取并过滤窗口）。
+   * 它强制 paceMode=recover，**不参与**任何分数计算。
+   */
+  distressRecover?: boolean;
 }): LearnerLearningControlState {
   const { dynamicState, knowledgeMemory } = input;
   const lesson = input.lessonMetrics ?? dynamicState.metrics;
@@ -123,13 +129,14 @@ export function deriveLearningControlState(input: {
     && lss <= 4
     && (dynamicState.recentTrend === 'improving' || stableHighPerformer);
 
-  const paceMode: LearnerLearningControlState['paceMode'] = overloaded || lessonStress
+  const distressRecover = input.distressRecover === true;
+  const paceMode: LearnerLearningControlState['paceMode'] = distressRecover || overloaded || lessonStress
     ? 'recover'
     : pushEligible
       ? 'push'
       : 'steady';
 
-  const conceptLoad: LearnerLearningControlState['conceptLoad'] = overloaded || lessonStress
+  const conceptLoad: LearnerLearningControlState['conceptLoad'] = distressRecover || overloaded || lessonStress
     ? 'low'
     : pushEligible && globalVerdict.recovered && prerequisiteGapCount === 0
       ? 'high'
@@ -162,6 +169,7 @@ export function deriveLearningControlState(input: {
     // 不得据此跳过新任务的核心 KC。
     shouldAvoidNewConcepts: conceptLoad === 'low',
     shouldPreferConsolidation: reviewPriority === 'high',
+    ...(distressRecover ? { controlFlags: { distressRecover: true } } : {}),
   };
 }
 
@@ -478,10 +486,12 @@ export class LearnerSnapshotService {
       ...knowledgeMemory,
       ...(currentPath ? { currentPath } : {}),
     };
+    const recentDistress = await loadRecentDistressSignal(input.userId);
     const learningControlState = deriveLearningControlState({
       dynamicState,
       knowledgeMemory: finalKnowledgeMemory,
       lessonMetrics,
+      distressRecover: Boolean(recentDistress),
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,
@@ -608,10 +618,12 @@ export class LearnerSnapshotService {
       ...knowledgeMemory,
       ...(currentPath ? { currentPath } : {}),
     };
+    const recentDistress = await loadRecentDistressSignal(input.userId);
     const learningControlState = deriveLearningControlState({
       dynamicState,
       knowledgeMemory: finalKnowledgeMemory,
       lessonMetrics,
+      distressRecover: Boolean(recentDistress),
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,

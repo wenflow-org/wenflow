@@ -27,6 +27,7 @@ import { appendClosureFollowUp, buildClosureAudit } from './teaching-closure';
 import {
   aggregateSessionEvaluationFromMessages,
   buildSessionEvaluationShadow,
+  type SessionHardSignals,
 } from '../learning/session-evaluation-aggregate';
 import { isCalibratableDirection, replanAttributionService, type ReplanAttributionEvidence } from './ReplanAttributionService';
 import { replanAdvisoryService, shouldBuildReplanAdvisory, toAttributionRecall, NO_ADVISORY, type ReplanAdvisory } from './ReplanAdvisoryService';
@@ -70,6 +71,7 @@ import { learningStateService, type LearningStateMetrics } from '../learning/lea
 import { insightCalibrationService } from '../learner/insight-calibration.service';
 import { markMisconceptionsAddressed } from '../learner/misconception-ledger.service';
 import { recordChurnRiskAtFinalize } from '../learner/churn-evidence.service';
+import { recordDistressAbandonEvidence } from '../learner/distress-signal';
 import { learnerExitService } from '../learner/LearnerExitService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
@@ -631,6 +633,35 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
   }
 }
 
+/**
+ * 从 lessonReport 提取影子层的代码裁决硬事件（P1-1）。
+ * 只认 checkpoint / exit-ticket 证据行；没有证据则返回 null（影子退回纯逐轮聚合）。
+ */
+function buildShadowHardSignals(report: unknown): SessionHardSignals | null {
+  if (!report || typeof report !== 'object') return null;
+  const record = report as { evidence?: unknown; met?: unknown };
+  const evidence = Array.isArray(record.evidence) ? record.evidence : [];
+  const checkpoint = evidence.filter((item): item is Record<string, unknown> => {
+    if (!item || typeof item !== 'object') return false;
+    const kind = (item as { kind?: unknown }).kind;
+    return kind === 'checkpoint' || kind === 'exit-ticket';
+  });
+  if (checkpoint.length === 0) return null;
+  const independentPasses = checkpoint.filter((item) => item.independent === true && item.correct === true).length;
+  const firstAttemptPasses = checkpoint.filter((item) => item.firstAttempt === true && item.correct === true).length;
+  const attempts = checkpoint.reduce((sum, item) => {
+    const value = Number(item.attempts);
+    return sum + (Number.isFinite(value) && value > 0 ? Math.floor(value) : 1);
+  }, 0);
+  return {
+    checkpointSamples: checkpoint.length,
+    independentPasses,
+    firstAttemptPasses,
+    attempts,
+    ...(typeof record.met === 'boolean' ? { contractMet: record.met } : {}),
+  };
+}
+
 export async function endSession(
   sessionId: string,
   endReason = 'manual-end',
@@ -1003,7 +1034,10 @@ export async function endSession(
   // **不改变任何现有消费方**：learning-state.service / ReplanAdvisoryService /
   // LearnerKnowledgeMemoryService 仍读 LLM 值（evaluationResult）。这里只额外留痕。
   // 落点 = teaching_sessions.wrapup.shadowDeterministic（JSON 列，无需迁移）+ 一条 info 日志。
-  const deterministicEvaluation = aggregateSessionEvaluationFromMessages(session.messages);
+  const deterministicEvaluation = aggregateSessionEvaluationFromMessages(
+    session.messages,
+    buildShadowHardSignals(sessionArtifacts.lessonReport),
+  );
   const shadowDeterministic = buildSessionEvaluationShadow({
     llm: evaluationResult?.evaluation ?? null,
     deterministic: deterministicEvaluation,
@@ -1025,7 +1059,19 @@ export async function endSession(
   });
 
   const lastAnalyzedMessage = [...session.messages].reverse().find((message) => !!message.analysis);
-  const scoreInput = evaluationResult ? {
+  // 2026-11-23 P0-1 守卫：零证据会话（没有任何真实学生回合）不写状态行。
+  // 此前这类会话会以 low 档 + confidence=0.1 落一条"假课"，部分池化后虽回到中性，
+  // 但仍是一条不存在的学习事件——直接不写，保持 PMC 序列干净。
+  const hasRealStudentTurn = session.messages.some(
+    (message) => message.role === 'user' && !message.checkpoint && !message.peer,
+  );
+  const zeroEvidenceEvaluation = Boolean(evaluationResult)
+    && !hasRealStudentTurn
+    && (evaluationResult!.evaluation.confidence ?? 0) <= 0.15;
+  if (zeroEvidenceEvaluation && !abnormalClosure) {
+    logger.info('[AITeaching] 零证据会话：跳过 learning_metrics 写入', { sessionId });
+  }
+  const scoreInput = evaluationResult && !zeroEvidenceEvaluation ? {
     sessionLss: evaluationResult.evaluation.sessionLss,
     sessionKtl: evaluationResult.evaluation.sessionKtl,
     sessionLf: evaluationResult.evaluation.sessionLf,
@@ -1320,6 +1366,21 @@ export async function endSession(
     // 非正常终态：到此为止——aux 课后刷新链（快照/状态评审/概念归并/备课）会写正式轨读数，跳过。
     // 返回值也保持 wrapup=null，与落库语义一致（调用方按 status 判定收束完成，不依赖 wrapup）。
     if (abnormalClosure) {
+      // 2026-11-23 P0-2：弃课不写学习指标（数据卫生），但必须留一条**控制面**信号——
+      // 否则"崩着走"的学习者下一节课仍会按 steady/push 加码。只认主动弃课；
+      // 路径调整前的「一键清场」也复用 learner-abandoned，但 operationId 前缀是 abandon:，
+      // 属管理员动作而非学习者情绪，必须排除，避免误锁 recover。
+      const administrativeClearance = typeof operationId === 'string' && operationId.startsWith('abandon:');
+      if (endReason === 'learner-abandoned' && !administrativeClearance) {
+        await recordDistressAbandonEvidence({
+          userId: session.userId,
+          sessionId: session.id,
+          pathId: session.learningPathId,
+          taskId: session.taskId,
+          endReason,
+          occurredAt: closureEndedAt,
+        });
+      }
       return {
         status: 'completed',
         operationId,

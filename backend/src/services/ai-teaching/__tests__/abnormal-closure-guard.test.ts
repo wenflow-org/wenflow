@@ -32,6 +32,7 @@ const mockRecordSessionOutcome = jest.fn();
 const mockMarkMisconceptionsAddressed = jest.fn();
 const mockRecordChurnRiskAtFinalize = jest.fn();
 const mockRecordCheckpointAttemptEvidence = jest.fn();
+const mockRecordDistressAbandonEvidence = jest.fn();
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -90,6 +91,9 @@ jest.mock('../ReplanAdvisoryService', () => ({
 jest.mock('../ReplanAttributionService', () => ({
   replanAttributionService: { attribute: jest.fn() },
   isCalibratableDirection: jest.fn().mockReturnValue(false),
+}));
+jest.mock('../../learner/distress-signal', () => ({
+  recordDistressAbandonEvidence: (...args: unknown[]) => mockRecordDistressAbandonEvidence(...args),
 }));
 jest.mock('../../learner/LearnerSnapshotService', () => ({
   learnerSnapshotService: {
@@ -232,6 +236,7 @@ beforeEach(() => {
   mockMarkMisconceptionsAddressed.mockResolvedValue(undefined);
   mockRecordChurnRiskAtFinalize.mockResolvedValue(undefined);
   mockRecordCheckpointAttemptEvidence.mockResolvedValue(undefined);
+  mockRecordDistressAbandonEvidence.mockResolvedValue(undefined);
 });
 
 describe('isAbnormalSessionClosure 判定口径', () => {
@@ -325,12 +330,31 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
     expect(mockRecordChurnRiskAtFinalize).not.toHaveBeenCalled();
     expect(mockRecordCheckpointAttemptEvidence).not.toHaveBeenCalled();
 
+    // ④b 控制面安全阀（P0-2）：只落一条弃课控制事件，不写学习指标/分数
+    expect(mockRecordDistressAbandonEvidence).toHaveBeenCalledTimes(1);
+    expect(mockRecordDistressAbandonEvidence.mock.calls[0][0]).toMatchObject({
+      userId: 'user-1',
+      sessionId: 'sess-abandon-1',
+      endReason: 'learner-abandoned',
+    });
+
     // ⑤ aux 课后刷新链（快照/状态评审/概念归并/概念负担/备课）不触发
     expect(mockRefreshDashboardGuidance).not.toHaveBeenCalled();
     expect(mockRefreshLearnerStateReview).not.toHaveBeenCalled();
     expect(mockRefreshConceptConsolidator).not.toHaveBeenCalled();
     expect(mockWarmConceptLoad).not.toHaveBeenCalled();
     expect(mockPrepareNextLesson).not.toHaveBeenCalled();
+  });
+
+  it('路径调整的一键清场（operationId=abandon:）不落弃课控制信号', async () => {
+    mockClaimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'abandon:sess-abandon-1',
+      leaseOwner: 'lease-1',
+      session: session({ status: 'finalizing' }),
+    });
+    await endSession('sess-abandon-1', 'learner-abandoned', 7, 'abandon:sess-abandon-1');
+    expect(mockRecordDistressAbandonEvidence).not.toHaveBeenCalled();
   });
 
   it('正常收束（manual-end）：同一 fixture 下正式轨逐项仍然写（对照，防误伤）', async () => {

@@ -387,6 +387,14 @@ export interface LearnerLearningControlState {
   /** 考测需求：recover 期统一 low（低压力巩固），契约强制出题仍由代码闸门控制，不受本字段影响 */
   checkpointNeed: 'high' | 'medium' | 'low';
   /**
+   * 控制面硬信号（2026-11-23 P0-2）：由代码事件驱动，不参与分数测量。
+   * - distressRecover=true：近 72h 有主动弃课/崩溃事件，强制 paceMode=recover（cap=low）。
+   *   仅当存在该类事件时出现，旧快照没有该键。
+   */
+  controlFlags?: {
+    distressRecover?: boolean;
+  };
+  /**
    * 语义边界（2026-11-23）：仅表示「优先巩固旧知、降低新概念密度」，**不是**「禁止覆盖本课
    * 契约必需内容」。目前无运行时读者（prompt 只读 reviewPriority/challengeLevelCap/paceMode），
    * 不得据此跳过新任务的核心 KC。
