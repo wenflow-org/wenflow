@@ -78,9 +78,14 @@ export interface LearnerNarrativeInsights {
 }
 
 export interface LearnerCurriculumControls {
-  taskGranularityLevel: 'small' | 'medium' | 'large';
-  conceptDensityLevel: 'low' | 'medium' | 'high';
-  reviewFrequencyLevel: 'low' | 'medium' | 'high';
+  /**
+   * 2026-11-23 三档退役（taskGranularityLevel / conceptDensityLevel / reviewFrequencyLevel）：
+   * 全仓零功能消费（仅画像页展示），且语义名不副实——课程结构实际由 CLT 契约 +
+   * TOPIC_GRANULARITY_BOUNDS 体量真值表控制，复习节奏由 FSRS + 概念负担引擎接管；
+   * 聚合器按静态规则反推的三档若被接进生成链，等于把「双权威打架」请回主链
+   * （外审 2026-11-23 拍板：坚决不接通，走退役）。只保留 progressionStrategyNote——
+   * 它经 personalization.generatePromptEnhancement 进课堂 prompt，是活字段。
+   */
   progressionStrategyNote: string;
 }
 

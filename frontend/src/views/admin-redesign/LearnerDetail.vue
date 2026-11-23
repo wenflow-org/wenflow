@@ -2957,16 +2957,16 @@ const historyNarrativeSections = computed<{ label: string; items: string[] }[]>(
   return sections
 })
 
-/** 画像补充展示：课程控制（curriculumControls）——运营价值：平台侧可执行的粒度/密度/复习策略。
-    2026-11-09：四项都是规则推导产物，输入有观测时标「规则推导」而非「实测」。 */
+/** 画像补充展示：课程控制（curriculumControls）——2026-11-23 三档退役
+    （taskGranularityLevel / conceptDensityLevel / reviewFrequencyLevel 全仓零功能消费且
+    名不副实：课程结构由 CLT 契约 + 体量真值表控制、复习节奏归 FSRS，见后端 types.ts 记账），
+    只留 progressionStrategyNote 一行。若运营需要看「现在系统怎么控这个人的课」，
+    应投影真正生效的控制面（paceMode / challengeLevelCap / FSRS 温故负载），不是镜像推导。 */
 const curriculumRows = computed(() =>
   kvRows((profile.value?.curriculumControls || null) as Record<string, unknown> | null, {
-    taskGranularityLevel: '任务粒度',
-    conceptDensityLevel: '概念密度',
-    reviewFrequencyLevel: '复习频率',
     progressionStrategyNote: '推进策略'
   }, 'curriculumControls', {
-    derivedKeys: ['taskGranularityLevel', 'conceptDensityLevel', 'reviewFrequencyLevel', 'progressionStrategyNote']
+    derivedKeys: ['progressionStrategyNote']
   })
 )
 
