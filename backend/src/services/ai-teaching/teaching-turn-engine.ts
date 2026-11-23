@@ -42,9 +42,14 @@ import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
   promoteSupplementSlot,
   fetchSupplementMaterial,
+  fetchSupplementMaterialSync,
   supplementStatusForScenario,
+  supplementSyncPlan,
+  buildSupplementPayload,
   type SupplementSlot,
+  type SupplementSyncOutcome,
 } from './teaching-supplement.service';
+import { getRequestContext } from '../../gateway/api-gateway/context';
 import { normalizeForKeywordMatch } from './checkpoint-shared';
 import {
   TeachingCheckpoint,
@@ -135,6 +140,19 @@ import {
   generateExitTicketForLesson,
   figureGateSnapshot,
 } from './teaching-turn-preparation';
+
+/**
+ * 补充材料同轮复调的进度事件（2026-11-23）：经请求级流式通道下发（路由翻译为 SSE
+ * `progress` 事件），前端在「正在查阅外部资料：…」状态行提示。非流式/测试上下文无
+ * streamRequest 时静默——进度提示永不影响主流程。
+ */
+function emitSupplementProgress(stage: 'searching' | 'fusing', topic: string): void {
+  try {
+    getRequestContext()?.streamRequest?.onStream?.({ type: 'progress', stage, topic });
+  } catch {
+    // 进度事件失败不追责
+  }
+}
 export { generateOpening, appendExitTicketToReply, ensureCheckpointQuestionVisible, resolveCompletionScope, computeLearnerShortAckStreak, hasUnverifiablePriorClaim, COMPLETION_SCOPE_OUT_MIN_TURNS } from './teaching-turn-preparation';
 export async function processStudentMessage(
   sessionId: string,
@@ -428,7 +446,8 @@ export async function processStudentMessage(
   // 旧写法 withTimeout 自建的 controller 无人消费，超时 reject 后底层模型调用仍在跑，而 finally 已经
   // releaseOperation，于是「租约已释放但仍在烧 token」，并发新请求会与幽灵回合双花同一份预算。
   const turnStartedAt = Date.now();
-  const turnResult = await withTimeoutSignal(
+  // let（非 const）：补充材料同轮复调（下方 sync 块）成功时会把整个回合结果换成本轮二次调用产出
+  let turnResult = await withTimeoutSignal(
     (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
       contextEnvelope: {
         schemaVersion: 'context-envelope/v1',
@@ -446,9 +465,94 @@ export async function processStudentMessage(
     throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
   }
 
-  const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
+  let turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
   let rawTeachingOutput = extractTeachingOutput(turnResult);
-  const promptDebug = extractTeachingPromptDebug(turnResult);
+  let promptDebug = extractTeachingPromptDebug(turnResult);
+  // —— 教师补充材料·同轮同步复调（2026-11-23 设计定稿，外审「隔轮异步违约」正解）——
+  // 主路径：截获 control.supplement → 带硬预算同步采集（search→选源→fetch→入库，与备课采集
+  // 同源裁决 + 防注入纪律）→ 成功则同轮二次调用融合（与下方算式修复块同形态：scenario 注入 +
+  // 共享前缀 KV 缓存；restart 事件让前端清掉草稿改流式展示），第二段产出作为本轮正式回复，
+  // 槽位直写 delivered。失败/超时/闭卷 → 什么都不换：草稿过渡句照常落轮，既有异步链
+  //（后台采集 + 下轮晋升 + supplementStatus 诚实回执）原样兜底——昨天的诚实回执从主路径
+  // 降级为兜底层，一层不废。
+  let supplementSyncOutcome: SupplementSyncOutcome | null = null;
+  let supplementSyncSlot: SupplementSlot | null = null;
+  let supplementSyncPayload: ReturnType<typeof buildSupplementPayload> = null;
+  {
+    const firstRequest = rawTeachingOutput?.control?.supplement;
+    if (supplementSyncPlan(firstRequest, sessionArtifacts.supplement as SupplementSlot | undefined, sessionArtifacts)) {
+      const syncStartedAt = Date.now();
+      const topic = String(firstRequest.topic);
+      emitSupplementProgress('searching', topic);
+      const outcome = await fetchSupplementMaterialSync(session.userId, topic, String(firstRequest.query || topic));
+      if (outcome.ok && outcome.materialId) {
+        const payload = buildSupplementPayload(session.userId, outcome.materialId, topic);
+        if (payload) {
+          emitSupplementProgress('fusing', topic);
+          (turnInput.scenario as Record<string, unknown>).supplementaryMaterial = payload;
+          // recall 前重置 delta 消费位 + 发 restart：前端清掉草稿文本，改流式展示融合后的正式回复
+          const streamRequest = getRequestContext()?.streamRequest;
+          if (streamRequest) {
+            streamRequest.consumed = false;
+            streamRequest.onStream?.({ type: 'restart', attempt: 2 });
+          }
+          try {
+            const recallResult = await withTimeoutSignal(
+              (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
+                contextEnvelope: {
+                  schemaVersion: 'context-envelope/v1',
+                  principal: { userId: session.userId },
+                  session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
+                },
+                abortSignal: signal,
+              }),
+              300_000,
+              'SUPPLEMENT_RECALL_TIMEOUT: 补充材料融合重调超时'
+            );
+            if (recallResult.success) {
+              const fused = extractTeachingOutput(recallResult);
+              if (fused?.reply) {
+                turnResult = recallResult;
+                turnRuntimeEnvelope = recallResult?.runtimeEnvelope || null;
+                rawTeachingOutput = fused;
+                promptDebug = extractTeachingPromptDebug(recallResult);
+                supplementSyncOutcome = { ...outcome, ok: true, durationMs: Date.now() - syncStartedAt };
+                supplementSyncPayload = payload;
+                supplementSyncSlot = {
+                  status: 'delivered',
+                  topic,
+                  query: String(firstRequest.query || topic),
+                  requestedAt: new Date().toISOString(),
+                  requestedTurn: updatedMessages.length,
+                  deliveredTurn: updatedMessages.length,
+                  materialId: payload.materialId,
+                  materialTitle: payload.title,
+                  sourceUrl: payload.sourceUrl,
+                };
+              }
+            }
+          } catch (error) {
+            logger.warn('[AITeaching] 补充材料融合重调失败，按草稿过渡句放行（异步链兜底）', {
+              sessionId,
+              topic,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+      if (!supplementSyncOutcome) {
+        supplementSyncOutcome = { ...outcome, ok: false, durationMs: Date.now() - syncStartedAt };
+      }
+      logger.info('[AITeaching] 补充材料同轮复调收口', {
+        sessionId,
+        topic,
+        mode: supplementSyncOutcome.ok ? 'sync' : 'fallback',
+        outcomeError: outcome.error ?? null,
+        durationMs: supplementSyncOutcome.durationMs,
+        materialId: outcome.materialId ?? null,
+      });
+    }
+  }
   // 内容正确性第一刀（2026-10-08，宽域 A 轨 3/10 课 P0 的可检出形态）：回复里的算式
   // 确定性复算，命中即带修复指令重调一次（前缀 KV 缓存使重调远便宜于全新回合）；
   // 复检仍错→只打遥测放行，绝不阻塞课堂。repairInstruction 的模型侧承接条款见
@@ -1893,11 +1997,16 @@ export async function processStudentMessage(
       })(),
       // 冻结的收束目标集：只增一次，后续回合沿用（防止目标集随模型新增/改名膨胀）
       completionTargets,
-      // 教师补充槽（批次 E）：① 晋升结果落槽（delivered/expired）；② 本轮新请求（闸门：
-      // 已有槽位则忽略——每 session 至多一次）写 requested + fire 后台采集入库。
+      // 教师补充槽（批次 E）：① 同轮同步复调成功 → 直写 delivered 槽（2026-11-23），不再走
+      // 后台采集；② 晋升结果落槽（delivered/expired）；③ 本轮新请求且同步未成（失败/超时/闭卷
+      // 之外的回落）→ 既有异步链：写 requested + fire 后台采集入库。
       // 采集产物进资料库（持久）；槽位流转全部随回合同事务写，无中途并发写。
       ...(() => {
         const existing = sessionArtifacts.supplement as SupplementSlot | undefined;
+        if (supplementSyncSlot) {
+          // 同步复调已在本轮交付：二段输出若再带 supplement 请求也在此被拦（每 session ≤1 次）
+          return { supplement: supplementSyncSlot };
+        }
         if (supplementPromotion.slot && supplementPromotion.slot !== existing) {
           return { supplement: supplementPromotion.slot };
         }
@@ -2363,8 +2472,27 @@ export async function processStudentMessage(
     ...(assistantMessage.diagrams?.length ? { diagrams: assistantMessage.diagrams } : {}),
     // 位置线图（Scope B）：结构化数值域下行，前端确定性渲染成 SVG
     ...(assistantMessage.figures?.length ? { figures: assistantMessage.figures } : {}),
-    // 教师补充材料卡片（批次 E）：本轮晋升成功时随消息下发（前端渲染卡片，点开看章节）
-    ...(supplementPromotion.payload ? { supplementaryMaterial: supplementPromotion.payload } : {}),
+    // 教师补充材料卡片（批次 E）：本轮晋升成功时随消息下发（前端渲染卡片，点开看章节）；
+    // 同轮同步复调成功时挂融合用的同一份 payload（2026-11-23——此前 sync 模式不发卡）
+    ...(supplementPromotion.payload
+      ? { supplementaryMaterial: supplementPromotion.payload }
+      : (supplementSyncPayload
+        ? { supplementaryMaterial: supplementSyncPayload }
+        : {})),
+    // 补充材料同步复调 telemetry（2026-11-23）：mode=sync 同轮交付 / fallback 回落异步链；
+    // 只在触发轮存在，实用性测试与线上观测靠它统计触发率与耗时分布
+    ...(supplementSyncOutcome
+      ? {
+          supplementSync: {
+            mode: supplementSyncOutcome.ok ? 'sync' as const : 'fallback' as const,
+            ok: supplementSyncOutcome.ok,
+            durationMs: supplementSyncOutcome.durationMs,
+            error: supplementSyncOutcome.error ?? null,
+            materialId: supplementSyncOutcome.materialId ?? null,
+            sourceUrl: supplementSyncOutcome.sourceUrl ?? null,
+          },
+        }
+      : {}),
     strategies: effectiveTeachingOutput.pedagogy.strategies,
     knowledgePoint: effectiveTeachingOutput.knowledge.currentPoint,
     ...(effectiveTeachingOutput.knowledge.confirmCheck

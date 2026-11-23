@@ -400,6 +400,8 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
       sessionArtifacts: {
         ...(memoryWarmup ? { memoryWarmup } : {}),
         lessonContract,
+        // 闭卷模式（2026-11-23 同轮复调配套）：仅在显式 false 时落盘（缺省=允许联网补充）
+        ...(input.allowWebSupplement === false ? { allowWebSupplement: false } : {}),
       },
     },
   }, RECOVERY_WINDOW_MS);

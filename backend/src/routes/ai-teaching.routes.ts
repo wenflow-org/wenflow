@@ -658,6 +658,9 @@ const handleStreamingMessage = async (
         writeSseEvent(res, 'restart', { attempt: event.attempt });
       } else if (event.type === 'error') {
         writeSseEvent(res, 'error', { code: event.code, message: event.message });
+      } else if (event.type === 'progress') {
+        // 编排层阶段提示（2026-11-23 补充材料同轮复调）：前端「正在查阅外部资料：xxx」状态行
+        writeSseEvent(res, 'progress', { stage: event.stage, topic: event.topic });
       }
     },
   };
@@ -888,6 +891,8 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
     const session = await aiTeachingCoordinator.startSession({
       userId,
       taskId,
+      // 闭卷模式开关（2026-11-23）：仅显式 false 时生效（缺省允许联网补充）
+      ...(req.body?.allowWebSupplement === false ? { allowWebSupplement: false as const } : {}),
     });
 
     res.json({

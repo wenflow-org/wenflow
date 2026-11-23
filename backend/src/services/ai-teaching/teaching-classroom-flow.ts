@@ -177,6 +177,9 @@ export function buildTeachingControlContext(
     allowPrerequisiteRecovery: true,
     allowPeerSupport: canTriggerPeer,
     allowCheckpoint: stage === 'checkpoint' || stage === 'teaching' || stage === 'ready_to_close',
+    // 闭卷模式（2026-11-23 同轮复调配套）：会话级 allowWebSupplement=false 时提示词同步禁发
+    // control.supplement——编排层闸（teaching-supplement.service supplementSyncPlan）之外的第二道
+    allowWebSupplement: sessionArtifacts?.allowWebSupplement !== false,
     nearWrapup: sessionArtifacts.endReason === 'completion-candidate' || stage === 'ready_to_close' || stage === 'wrapup',
   };
 }

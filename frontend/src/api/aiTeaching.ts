@@ -557,10 +557,14 @@ const FINALIZATION_UNACTIONABLE_ERROR_CODES = new Set([
 ]);
 
 export const aiTeachingAPI = {
-  async startSession(taskId: string, mode?: 'tutor' | 'review'): Promise<TeachingSession> {
+  async startSession(taskId: string, mode?: 'tutor' | 'review', options?: { allowWebSupplement?: boolean }): Promise<TeachingSession> {
     const result = await api.post(
       `/ai-teaching/tasks/${taskId}/session`,
-      mode ? { mode } : {},
+      {
+        ...(mode ? { mode } : {}),
+        // 闭卷模式（2026-11-23 同轮复调配套）：仅显式 false 时下发（缺省允许联网补充）
+        ...(options?.allowWebSupplement === false ? { allowWebSupplement: false } : {}),
+      },
       { timeout: AI_REQUEST_TIMEOUT }
     );
     return result.data || result;
@@ -638,7 +642,7 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string; images?: TeachingMessageImage[] },
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onProgress?: (stage: string, topic: string) => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string; images?: TeachingMessageImage[] },
     meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
@@ -667,6 +671,9 @@ export const aiTeachingAPI = {
           } else if (event === 'restart') {
             receivedAnything = true;
             handlers.onRestart?.();
+          } else if (event === 'progress') {
+            // 编排层阶段提示（2026-11-23 补充材料同轮复调）：「正在查阅外部资料」状态行
+            handlers.onProgress?.(String(data?.stage || ''), String(data?.topic || ''));
           } else if (event === 'final') {
             receivedAnything = true;
             result = data?.data || data || null;

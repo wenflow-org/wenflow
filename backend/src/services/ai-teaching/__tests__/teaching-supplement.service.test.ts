@@ -6,7 +6,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { promoteSupplementSlot, supplementStatusForScenario, type SupplementSlot } from '../teaching-supplement.service';
+import {
+  promoteSupplementSlot,
+  supplementStatusForScenario,
+  supplementSyncPlan,
+  fetchSupplementMaterialSync,
+  type SupplementSlot,
+} from '../teaching-supplement.service';
 
 let root = '';
 
@@ -154,6 +160,81 @@ describe('supplementStatusForScenario · 诚实回执注入判定（2026-11-22 �
 
   it('无槽位 → 不注', () => {
     expect(supplementStatusForScenario({ slot: null, payload: null }, undefined)).toBeNull();
+  });
+});
+
+describe('supplementSyncPlan · 同轮复调触发判定（2026-11-23）', () => {
+  const request = { topic: '复利公式', query: '复利公式' };
+
+  it('正常请求 + 无旧槽位 + 未闭卷 → 尝试同步采集', () => {
+    expect(supplementSyncPlan(request, undefined, {})).toBe(true);
+  });
+
+  it('无请求 / topic 空 → 不试（没有触发就没有复调）', () => {
+    expect(supplementSyncPlan(null, undefined, {})).toBe(false);
+    expect(supplementSyncPlan({ topic: '  ' }, undefined, {})).toBe(false);
+  });
+
+  it('已有旧槽位（在途/已交付/已过期）→ 不试（每 session ≤1 次纪律不变）', () => {
+    const slot: SupplementSlot = {
+      status: 'requested', topic: '旧的', query: '旧的',
+      requestedAt: new Date().toISOString(), requestedTurn: 1,
+    };
+    expect(supplementSyncPlan(request, slot, {})).toBe(false);
+  });
+
+  it('闭卷模式（allowWebSupplement === false）→ 不试（引擎闸第一道）', () => {
+    expect(supplementSyncPlan(request, undefined, { allowWebSupplement: false })).toBe(false);
+    // 缺省/true = 允许
+    expect(supplementSyncPlan(request, undefined, { allowWebSupplement: true })).toBe(true);
+    expect(supplementSyncPlan(request, undefined, undefined)).toBe(true);
+  });
+});
+
+describe('fetchSupplementMaterialSync · 带硬预算同步采集（2026-11-23）', () => {
+  it('采集成功 → 透传 outcome + durationMs', async () => {
+    const deps = {
+      searchWeb: (async () => ({ results: [] })) as never,
+      fetchWeb: (async () => ({})) as never,
+      ingestWebMaterial: (async () => ({})) as never,
+      findWebRecordByTitle: (() => ({ id: 'm_sync', sourceUrl: 'https://example.com/a' })) as never,
+    };
+    const outcome = await fetchSupplementMaterialSync('user_sync1', '话题', '查询', deps as never);
+    expect(outcome.ok).toBe(true);
+    expect(outcome.materialId).toBe('m_sync');
+    expect(outcome.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('采集卡死超预算 → ok=false（sync-budget-exceeded），永不抛错', async () => {
+    // 预算下限 2000ms（防呆）；2000 预算 vs 3s 挂死 → 超预算胜出
+    process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS = '2000';
+    try {
+      const deps = {
+        searchWeb: (async () => new Promise((_, reject) => setTimeout(() => reject(new Error('hang')), 3000))) as never,
+        fetchWeb: (async () => ({})) as never,
+        ingestWebMaterial: (async () => ({})) as never,
+        findWebRecordByTitle: (() => null) as never,
+      };
+      const outcome = await fetchSupplementMaterialSync('user_sync2', '话题', '查询', deps as never);
+      expect(outcome.ok).toBe(false);
+      expect(outcome.error).toBe('sync-budget-exceeded');
+      expect(outcome.durationMs).toBeGreaterThanOrEqual(2000);
+      expect(outcome.durationMs).toBeLessThan(4000);
+    } finally {
+      delete process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS;
+    }
+  });
+
+  it('采集抛错 → ok=false 带原因，永不向上抛', async () => {
+    const deps = {
+      searchWeb: (async () => { throw new Error('provider down'); }) as never,
+      fetchWeb: (async () => ({})) as never,
+      ingestWebMaterial: (async () => ({})) as never,
+      findWebRecordByTitle: (() => null) as never,
+    };
+    const outcome = await fetchSupplementMaterialSync('user_sync3', '话题', '查询', deps as never);
+    expect(outcome.ok).toBe(false);
+    expect(String(outcome.error)).toContain('provider down');
   });
 });
 

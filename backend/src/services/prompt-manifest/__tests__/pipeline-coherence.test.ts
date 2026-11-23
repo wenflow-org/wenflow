@@ -21,7 +21,7 @@ describe('teaching-turn 契约收口', () => {
   const rules = rulesOf('teaching-turn');
 
   it('看图指代只由 boardContext 决定，不再保留“文本自足是有条件的”旧分叉', () => {
-    const rule15 = rules[14];
+    const rule15 = rules[15]; // 2026-11-23 新增 supplementStatus 条件规则 → 常驻规则重编号，boardContext 规则 15→16
     expect(rule15).toContain('boardContext');
     expect(rule15).toContain('文本自足与看图指代');
     expect(rule15).not.toContain('文本自足是有条件的');

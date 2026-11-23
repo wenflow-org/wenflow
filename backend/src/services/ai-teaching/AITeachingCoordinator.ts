@@ -87,6 +87,12 @@ export interface TeachingSessionStartInput {
    * 一期仅观测——学到的东西照常进记忆/画像，但不产生路径调整建议）。
    */
   mode?: 'tutor' | 'review' | 'extension';
+  /**
+   * 闭卷模式开关（2026-11-23 补充材料同轮复调配套）：false = 本节课禁止联网补充
+   *（课堂 control.supplement 同闸）——服务传了自有红皮书/校内讲义、严禁公网杂音的
+   * 学习者。缺省/true = 允许（默认自动）。落 sessionArtifacts 随会话持久。
+   */
+  allowWebSupplement?: boolean;
 }
 
 export interface TeachingOpening {

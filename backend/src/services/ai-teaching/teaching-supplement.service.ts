@@ -200,3 +200,75 @@ export function supplementStatusForScenario(
 }
 
 export const teachingSupplementService = { fetchSupplementMaterial, promoteSupplementSlot, buildSupplementPayload };
+
+/* ── 同轮同步复调（2026-11-23 设计定稿）──────────────────────────────
+ * 此前 control.supplement 是纯异步：槽 requested → 后台采集 → 下轮晋升，学生秒回时
+ * 老师只能靠 supplementStatus 承接。现在升级为主路径：引擎截获请求后带硬预算同步采集，
+ * 拿到正文即同轮二次调用融合；失败/超时 → 回落既有异步链（后台采集 + 下轮晋升 +
+ * supplementStatus 诚实回执），本文件不改老链路，只提供两个新纯函数/包装。 */
+
+/** 同步采集硬预算（毫秒）：search+fetch 全程上限，超时回落异步链。 */
+export const SUPPLEMENT_SYNC_FETCH_BUDGET_MS = 10_000;
+
+function readSyncBudgetMs(): number {
+  const raw = Number(process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS);
+  return Number.isFinite(raw) && raw >= 2_000 ? Math.floor(raw) : SUPPLEMENT_SYNC_FETCH_BUDGET_MS;
+}
+
+export interface SupplementSyncRequestLike {
+  topic?: unknown;
+  query?: unknown;
+}
+
+/**
+ * 是否尝试同轮同步采集（纯函数，单测锚点）。三个条件都满足才试：
+ *   ① 本轮模型确实发起了 supplement 请求（topic 非空）；
+ *   ② 没有「在途/已交付」的旧槽位（每 session ≤1 次的既有纪律不变）；
+ *   ③ 会话未进入闭卷模式（sessionArtifacts.allowWebSupplement === false 时禁止）。
+ */
+export function supplementSyncPlan(
+  request: SupplementSyncRequestLike | null | undefined,
+  existingSlot: SupplementSlot | undefined,
+  sessionArtifacts: Record<string, unknown> | undefined
+): boolean {
+  const topic = String(request?.topic || '').trim();
+  if (!topic) return false;
+  if (existingSlot) return false;
+  if (sessionArtifacts?.allowWebSupplement === false) return false;
+  return true;
+}
+
+export interface SupplementSyncOutcome extends SupplementFetchOutcome {
+  /** 同步采集全程耗时（含预算超时）。 */
+  durationMs: number;
+}
+
+/**
+ * 带硬预算的同步采集：内部复用 fetchSupplementMaterial（同一套 search→选源→fetch→入库
+ * 与防注入纪律），超预算即放弃（底层任务不取消也无害——入库有 URL/标题去重，异步兜底
+ * 重跑同一查询时 findWebRecordByTitle 会直接复用）。永不抛错。
+ */
+export async function fetchSupplementMaterialSync(
+  userId: string,
+  topic: string,
+  query: string,
+  deps: SupplementDeps = { searchWeb, fetchWeb, ingestWebMaterial, findWebRecordByTitle }
+): Promise<SupplementSyncOutcome> {
+  const startedAt = Date.now();
+  const budgetMs = readSyncBudgetMs();
+  try {
+    const outcome = await Promise.race([
+      fetchSupplementMaterial(userId, topic, query, deps),
+      new Promise<SupplementFetchOutcome>((resolve) =>
+        setTimeout(() => resolve({ ok: false, error: 'sync-budget-exceeded' }), budgetMs)
+      ),
+    ]);
+    return { ...outcome, durationMs: Date.now() - startedAt };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startedAt,
+    };
+  }
+}
