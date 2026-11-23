@@ -219,6 +219,19 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.reasons).toEqual(['ready_to_accelerate']);
   });
 
+  it('升档 + 知识类理由：fragile/struggling 只留支架，不吃掉 ready_to_accelerate（2026-11-23）', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: metrics(3, 6, 2),
+      learningControlState: { paceMode: 'push', conceptLoad: 'high', challengeLevelCap: 'high' },
+      knowledgeSignals: { fragileCount: 2, strugglingCount: 1, prerequisiteGapCount: 0 },
+    });
+    expect(decision.delta).toBe(1);
+    // 知识类理由不否决升档，也就不能把「有余力」的标签挤掉——否则 push 的
+    // 「减少示范与提示」提示词在 fragile 恒大于 0 的真实载荷里永远不触发。
+    expect(decision.reasons).toEqual(['fragile_concepts', 'struggling_concepts', 'ready_to_accelerate']);
+  });
+
   it('上一节课紧绷（lss>4）→ 即使上限允许也不升档', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),

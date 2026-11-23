@@ -314,7 +314,13 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
   const finalDelta = adjusted - baseline;
 
   const finalReasons = [...reasons];
-  if (finalReasons.length === 0 && finalDelta > 0) finalReasons.push('ready_to_accelerate');
+  // 升档本身就是「有余力」的结论：只要没有负荷类降档理由，即使带着知识类理由也补上
+  // ready_to_accelerate。知识类理由（fragile/struggling/prerequisite）只要求"多给支架"、
+  // 不否决升档；此前只在 reasons 全空时才补标签，而 fragile 通道几乎恒大于 0，
+  // 于是 push 的「减少示范与提示」提示词在真实载荷里永远不触发（2026-11-23 复核）。
+  if (finalDelta > 0 && !finalReasons.some((reason) => DECREASE_REASON_SET.has(reason))) {
+    finalReasons.push('ready_to_accelerate');
+  }
   const capApplied = adjusted < desired;
   const floorApplied = delta < 0 && floored > desired;
 

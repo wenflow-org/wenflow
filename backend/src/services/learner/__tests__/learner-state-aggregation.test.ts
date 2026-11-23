@@ -89,9 +89,10 @@ describe('getAggregatedState（PMC 日负荷模型）', () => {
     const globalKtl = aggregated!.metrics.ktl;
     const pathBKtl = aggregated!.perPath.find((e) => e.pathId === 'lp-B')!.metrics.ktl;
     expect(globalKtl).toBeGreaterThan(pathBKtl);
-    // 冷启动按 PMC 从 0 生长：1 天负荷 6 → ktl=0.05×6=0.3、lf=0.30×6=1.8
-    expect(globalKtl).toBeCloseTo(0.3, 6);
-    expect(aggregated!.metrics.lf).toBeCloseTo(1.8, 6);
+    // 2026-11-23 可达性修复后的口径：首日负荷作为慢性基线（bootstrapFromFirstLoad），
+    // 同日两课求和 6 → 首日 ktl=lf=6（不再从 0 生长成 0.05×6）。
+    expect(globalKtl).toBeCloseTo(6, 6);
+    expect(aggregated!.metrics.lf).toBeCloseTo(6, 6);
     // dayLoad 保留原始观测，但 fatigueBonus 归零（PMC 已把同日课量求和进 KTL/LF，不重复加成）
     expect(aggregated!.dayLoad).toEqual({ lessons: 2, minutes: 100, fatigueBonus: 0 });
     // lsb = ktl − lf（form）
@@ -122,9 +123,9 @@ describe('getCurrentState 支持 asOf（PMC 读侧：行过滤按 asOf）', () =
     });
 
     const atThatTime = await learningStateService.getCurrentState('u1', { pathId: 'lp-A', asOf: at });
-    // 只有第一行（lss=5）参与 → PMC 的 ktl/lf 由单课负荷推出；晚于 asOf 的 9 不参与
+    // 只有第一行（lss=5）参与；bootstrap 口径下首日负荷即慢性基线 → ktl=lf=5；晚于 asOf 的 9 不参与
     expect(atThatTime!.lss).toBeCloseTo(5, 6);
-    expect(atThatTime!.ktl).toBeLessThan(5); // 单课 lss=5 → ktl = 0.05×5 = 0.25
+    expect(atThatTime!.ktl).toBeCloseTo(5, 6);
     expect(findSpy).toHaveBeenCalled();
   });
 });
