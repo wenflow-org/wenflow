@@ -5,6 +5,7 @@
  * （布鲁姆分类法关键词启发式 + 静态建议文案）。服务类保留同名薄委托，既有调用方不受影响。
  */
 import { type LearningStateMetrics } from './learning-state-types';
+import { classifyLoad } from './learning-load-verdict';
 
 // 认知层级
 export enum CognitiveLevel {
@@ -108,17 +109,26 @@ export function analyzeCognitiveLevel(studentMessage: string, _contextMessage?: 
 }
 
 /**
- * 生成学习建议
+ * 生成学习建议。
+ *
+ * 2026-11-23 复核（控制面/状态页双判据分裂）：原实现自写一套绝对阈值（lf>7 / lsb<0 / ktl>7&&lsb<2），
+ * 与快照 paceMode 的 ACWR/form 判据不同源——会出现「后台已 recover、状态页一派祥和」或反向打架。
+ * 现统一消费 `classifyLoad` 的裁决（与 LearnerSnapshotService / 课堂同一真理源）：
+ * - 高疲劳 = ACWR ≥ 1.5（相对量，尺度无关；冷启动 ktl<3 时 acwr=null 不误报）
+ * - 状态不佳 = form<0 且基座成熟（冷启动爬升期 lsb<0 属正常，不再报「状态不佳」）
+ * - 该巩固 = 知识基座已厚（ktl≥7）且明显有余力（ACWR≤0.5）——继续加新内容不如练习巩固
+ * - 状态良好 = 恢复良好（ACWR≤0.85）且本节压力低（lss<5）
  */
 export function generateSuggestion(metrics: LearningStateMetrics): {
   type: 'fatigue' | 'lsb_negative' | 'efficiency_drop' | 'overstudy' | 'good';
   title: string;
   message: string;
 } {
-  const { lss, ktl, lf, lsb } = metrics;
+  const { lss, ktl, lf } = metrics;
+  const verdict = classifyLoad({ ktl, lf });
 
-  // 高疲劳
-  if (lf > 7) {
+  // 高疲劳（ACWR 高档）
+  if (verdict.fatigueRisk === 'high') {
     return {
       type: 'fatigue',
       title: '需要休息',
@@ -126,8 +136,8 @@ export function generateSuggestion(metrics: LearningStateMetrics): {
     };
   }
 
-  // LSB 为负
-  if (lsb < 0) {
+  // 负荷失衡（form<0 且基座成熟）
+  if (verdict.imbalanced) {
     return {
       type: 'lsb_negative',
       title: '状态不佳',
@@ -135,8 +145,8 @@ export function generateSuggestion(metrics: LearningStateMetrics): {
     };
   }
 
-  // 过度学习
-  if (ktl > 7 && lsb < 2) {
+  // 需要巩固（基座已厚 + 明显有余力）
+  if (verdict.accelerateReady && ktl >= 7) {
     return {
       type: 'overstudy',
       title: '需要巩固',
@@ -144,8 +154,8 @@ export function generateSuggestion(metrics: LearningStateMetrics): {
     };
   }
 
-  // 状态良好
-  if (lsb > 3 && lss < 5) {
+  // 状态良好（恢复良好 + 本节压力低）
+  if (verdict.recovered && lss < 5) {
     return {
       type: 'good',
       title: '状态良好',

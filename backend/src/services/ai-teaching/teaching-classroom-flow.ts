@@ -9,6 +9,7 @@
 import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
 import { classifyLoad } from '../learning/learning-load-verdict';
+import { SESSION_LSS_HIGH_THRESHOLD } from '../learning/session-evaluation-scale';
 import type { TeachingSessionMessage, TeachingKnowledgePointState } from './TeachingSessionRepository';
 import type { TeachingScenarioContext } from './TeachingContextBuilder';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
@@ -116,7 +117,7 @@ export function deriveTeachingRuntimeSignals(context: TeachingScenarioContext) {
   // 相对量判据（尺度无关）：疲劳由 ACWR 定、恢复由 form 定——绝对 `lf>=6` 在 PMC 日负荷口径下失效
   const verdict = classifyLoad({ ktl, lf });
 
-  const recommendedPacing: 'slow' | 'moderate' | 'fast' = verdict.fatigueRisk === 'high' || lss >= 6
+  const recommendedPacing: 'slow' | 'moderate' | 'fast' = verdict.fatigueRisk === 'high' || lss >= SESSION_LSS_HIGH_THRESHOLD
     ? 'slow'
     : verdict.recovered && lss <= 4
       ? 'fast'
@@ -243,10 +244,11 @@ export function determineNextStage(params: {
   // 软通道不再参与阶段判定，仍留在 analysis 里供遥测与复盘。
   const evidencedConfusions = countEvidencedConfusions(teachingOutput.analysis);
   const completionCandidate = teachingOutput.control?.isCompletionCandidate === true;
-  // loadIndex 作为 intervention 的辅助证据（认知过载 >0.85 且理解不足时倾向干预，
-  // 而非仅依赖情绪/困惑点显式信号；M1 感知层消费接入）
+  // loadIndex 作为 intervention 的辅助证据（认知过载 >0.8 且理解不足时倾向干预，
+  // 而非仅依赖情绪/困惑点显式信号；M1 感知层消费接入）。
+  // 过载线 0.8 与提示词三路由对齐（0.6-0.8 愤悱带 / >0.8 过载）——原 0.85 留出 0.8-0.85 空白带。
   const loadIndex = Number(teachingOutput.analysis?.loadIndex);
-  const highLoad = Number.isFinite(loadIndex) && loadIndex > 0.85;
+  const highLoad = Number.isFinite(loadIndex) && loadIndex > 0.8;
   // θ−d 路由（回合级知识追踪信号）：mastery 显著低于任务难度或建议 scaffold 时，
   // 视同"知识状态层面的卡点"，与负荷路由（瞬态）互补作为 intervention 辅助证据
   const ktEstimate = teachingOutput.analysis?.ktEstimate;
@@ -260,7 +262,7 @@ export function determineNextStage(params: {
     return { stage: 'ready_to_close', reason: '检测到完成候选，当前任务已接近收束' };
   }
 
-  // PF 逃生舱：连续 2 轮 frustrated 或 loadIndex > 0.85 → 强制退出 PF 模式（标记可收束，跳过整合）
+  // PF 逃生舱：连续 2 轮 frustrated 或 loadIndex > 0.8 → 强制退出 PF 模式（标记可收束，跳过整合）
   if (taskMode === 'productiveFailure' && ((frustratedStreak ?? 0) >= 2 || highLoad)) {
     return { stage: 'ready_to_close', reason: `PF 逃生舱触发：${highLoad ? '认知过载' : `连续 ${frustratedStreak} 轮受挫`}，退出有效失败模式` };
   }

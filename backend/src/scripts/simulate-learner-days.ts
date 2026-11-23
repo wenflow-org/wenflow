@@ -75,10 +75,10 @@ export function buildDefaultPlan(): SimPlan {
   return {
     days: 3,
     lessons: [
-      { dayOffset: 0, pathKey: 'A', difficulty: 9, durationMinutes: 45, recordAdjustment: true },
-      { dayOffset: 0, pathKey: 'A', difficulty: 9, durationMinutes: 45, recordAdjustment: true },
-      { dayOffset: 0, pathKey: 'C', difficulty: 9, durationMinutes: 45, recordAdjustment: true },
-      { dayOffset: 0, pathKey: 'C', difficulty: 9, durationMinutes: 45, recordAdjustment: true, applyAdjustment: true },
+      { dayOffset: 0, pathKey: 'A', difficulty: 10, durationMinutes: 45, recordAdjustment: true },
+      { dayOffset: 0, pathKey: 'A', difficulty: 10, durationMinutes: 45, recordAdjustment: true },
+      { dayOffset: 0, pathKey: 'C', difficulty: 10, durationMinutes: 45, recordAdjustment: true },
+      { dayOffset: 0, pathKey: 'C', difficulty: 10, durationMinutes: 45, recordAdjustment: true, applyAdjustment: true },
       { dayOffset: 1, pathKey: 'B', difficulty: 5, durationMinutes: 30 },
       { dayOffset: 1, pathKey: 'B', difficulty: 5, durationMinutes: 30 },
       { dayOffset: 2, pathKey: 'A', difficulty: 5, durationMinutes: 30 },

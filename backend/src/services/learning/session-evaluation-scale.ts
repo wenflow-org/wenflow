@@ -106,3 +106,15 @@ export const SESSION_EVALUATION_ZERO_EVIDENCE = {
   confidence: 0.1,
   reasoning: '无对话证据',
 } as const;
+
+/**
+ * 会话 LSS「高压」数值门槛（唯一来源）。
+ *
+ * 三档代表值：low=2.5 / mid=6 / high=9。mid 的定义是「有明显吃力和停顿但引导下仍能推进」——
+ * 良性困难（愤悱带），不是过载。任何消费方都不得再用 `>= 6` 判高压：mid 的中点恰好是 6，
+ * 会把整档良性吃力一刀切判成 recover / 降档（2026-11-23 复核：一节完全健康的 mid 课，
+ * 次日 paceMode=recover、难度封顶 low）。
+ *
+ * 取 mid 上界 7 与 high 下界 8 的中点 7.5：只有 high 档（8-10）命中，legacy 数值 5-7 不再命中。
+ */
+export const SESSION_LSS_HIGH_THRESHOLD = 7.5;
