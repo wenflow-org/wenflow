@@ -512,7 +512,6 @@
         <section v-if="liveControlRows.length" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">当前生效调控</h3>
-            <span class="mk-card__meta">课堂实时读取 · 非画像推导</span>
           </div>
           <div class="ld-kv">
             <div v-for="kv in liveControlRows" :key="kv.label" class="ld-kv__row">
@@ -2971,28 +2970,29 @@ const historyNarrativeSections = computed<{ label: string; items: string[] }[]>(
 })
 
 /** 画像补充展示：当前生效调控（2026-11-23 控制面投影）——运营排障看「系统现在怎么控这个人的课」。
-    只投影课堂实时读取的硬信号（learningControlState + teachingHints.avoid），每项带触发语义；
+    卡面只留档位，触发语义放 title：把触发条件塞进读数括号会把真正要看的档位淹掉，
+    三行 KV 的布局本身已经说明「谁在什么档」；需要排障时悬停看触发条件。
     不堆任何派生标签——镜像推导类字段已随三档退役移除。paceMode/challengeLevelCap/avoid 此前
     页面不可见（同屏不复读检查通过），FSRS 温故负载在「记忆与调度」页签单源展示，这里不重复。 */
 const LIVE_CONTROL_ZH: Record<string, string> = {
-  recover: '降压恢复（疲劳/高负荷触发）',
+  recover: '降压恢复',
   steady: '按序推进',
-  push: '放开推进（余力充足触发）'
+  push: '放开推进'
 }
 const liveControlRows = computed(() => {
   const rows: ProfileKvRow[] = []
   const cs = (rawDetail.value?.learningControlState || null) as Record<string, unknown> | null
   if (cs) {
     if (typeof cs.paceMode === 'string') {
-      rows.push({ label: '节奏模式', value: LIVE_CONTROL_ZH[cs.paceMode] || String(cs.paceMode), hint: '课堂难度封顶与推进节奏的当前档位', prior: false, derived: true })
+      rows.push({ label: '节奏模式', value: LIVE_CONTROL_ZH[cs.paceMode] || String(cs.paceMode), hint: '课堂推进节奏：疲劳/高负荷时降压恢复，余力充足时放开推进', prior: false, derived: true })
     }
     if (typeof cs.challengeLevelCap === 'string') {
-      const capZh: Record<string, string> = { low: '低（高疲劳/压力/脆弱概念时限高）', medium: '中', high: '高' }
-      rows.push({ label: '挑战封顶', value: capZh[cs.challengeLevelCap] || String(cs.challengeLevelCap), hint: '本课挑战难度上限，向下限高不限低', prior: false, derived: true })
+      const capZh: Record<string, string> = { low: '低', medium: '中', high: '高' }
+      rows.push({ label: '挑战封顶', value: capZh[cs.challengeLevelCap] || String(cs.challengeLevelCap), hint: '本课挑战难度上限，高疲劳/压力/脆弱概念时封到低', prior: false, derived: true })
     }
     if (typeof cs.reviewPriority === 'string') {
-      const rpZh: Record<string, string> = { high: '高（前置缺口/严重挣扎/失衡触发优先巩固）', medium: '中', low: '低' }
-      rows.push({ label: '巩固优先级', value: rpZh[cs.reviewPriority] || String(cs.reviewPriority), hint: '是否触发「优先稳前置/巩固」开关；到期队列明细见「记忆与调度」页签', prior: false, derived: true })
+      const rpZh: Record<string, string> = { high: '高', medium: '中', low: '低' }
+      rows.push({ label: '巩固优先级', value: rpZh[cs.reviewPriority] || String(cs.reviewPriority), hint: '前置缺口/严重挣扎/失衡时优先巩固，到期队列见「记忆与调度」页签', prior: false, derived: true })
     }
   }
   const avoid = (rawDetail.value?.teachingHints as { avoid?: unknown } | null | undefined)?.avoid

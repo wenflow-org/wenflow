@@ -110,6 +110,24 @@ describe('画像 · 去噪与文案清洗', () => {
   })
 })
 
+describe('画像 · 当前生效调控只留档位', () => {
+  it('卡头不再挂「课堂实时读取 · 非画像推导」这类次要说明', () => {
+    expect(LD).not.toContain('课堂实时读取 · 非画像推导')
+  })
+
+  it('档位值去掉括号里的触发说明；触发语义留在 title，卡面只让布局说话', () => {
+    expect(LD).toContain("recover: '降压恢复'")
+    expect(LD).toContain("steady: '按序推进'")
+    expect(LD).toContain("push: '放开推进'")
+    expect(LD).not.toContain('降压恢复（疲劳/高负荷触发）')
+    expect(LD).not.toContain('低（高疲劳/压力/脆弱概念时限高）')
+    expect(LD).not.toContain('高（前置缺口/严重挣扎/失衡触发优先巩固）')
+    expect(LD).toContain("hint: '课堂推进节奏：疲劳/高负荷时降压恢复，余力充足时放开推进'")
+    expect(LD).toContain("hint: '本课挑战难度上限，高疲劳/压力/脆弱概念时封到低'")
+    expect(LD).toContain("hint: '前置缺口/严重挣扎/失衡时优先巩固，到期队列见「记忆与调度」页签'")
+  })
+})
+
 describe('图谱 · 图例与高度', () => {
   it('图例解释形状与大小（不只是颜色）', () => {
     expect(GRAPH_EXPLORER).toContain('圆点=核心概念')
