@@ -51,7 +51,7 @@ describe('A 项：产出与练习动作必须纯文本可完成、平台可观�
 
   it('编译产物 md：规则 15 逐字携带新禁令', () => {
     const line = MD.split('\n').find((l) => l.includes('当前课堂以**文本为主**')) || '';
-    expect(line.trimStart().startsWith('15.')).toBe(true);
+    expect(line.trimStart().startsWith('18.')).toBe(true);
     expect(line).toContain('不得布置离线物理动作');
     expect(line).toContain('对着镜子念一遍');
     expect(line).toContain('平台观测不到');

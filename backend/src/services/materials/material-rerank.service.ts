@@ -12,7 +12,11 @@
  *   - DS 提示词门拦截更高（71.4%）但本阶段不引入 LLM 调用，留待后续。
  *
  * 阈值缺省 0.29 = 评测「误杀≤2%」工作点（true cited 误杀 4/227=1.8%，拦 20/35）。
- * 硬性原则：fail-open——没配/超时/报错一律放行，闸门永远不能挡住路径生成。
+ * 失败语义（2026-11-22 外部评审切口 B，两档拆开）：
+ *   - **未配置/禁用/样本不足** → fail-open 全放行（dev 环境没配 reranker 也能用，行为不变）；
+ *   - **已配置但打分失败/超时** → **fail-closed 全量拦截**——闸门在而判不了时，自动挂载
+ *     「宁可不挂、绝不乱挂」（此前全放行会把无关旧资料静默塞进新课，逼下游 path-planning
+ *     写防御规则擦屁股）。只影响自动选择链（path.coordinator 遗留通道）；显式挂载不经本闸。
  */
 import crypto from 'crypto';
 import { logger } from '../../utils/logger';
@@ -158,8 +162,9 @@ async function rerankScores(
 }
 
 /**
- * 注入闸门。返回 kept/dropped；applied=false 时 kept===传入 records（fail-open）。
- * 打分部分成功也照常应用（有分数的按阈值，没分数的放行——宁漏勿杀）。
+ * 注入闸门。未配置/禁用/样本不足 → applied=false 且 kept===传入 records（fail-open）。
+ * 已配置但打分失败/超时 → fail-closed：kept=[]，全部进 dropped（宁可不挂、绝不乱挂）。
+ * 打分部分成功也照常应用（有分数的按阈值，没分数的放行——响应能解析回来说明服务在，只缺个别条）。
  */
 export async function applyMaterialRerankGate(
   options: MaterialRerankGateOptions
@@ -182,11 +187,20 @@ export async function applyMaterialRerankGate(
   try {
     scores = await rerankScores(options.query, records, options);
   } catch (error) {
-    logger.warn('[material-rerank] 注入闸门打分失败，放行（fail-open）', {
+    // 已配置但判不了 → 宁可不挂（2026-11-22 切口 B）：旧资料乱挂进新课比不挂更伤
+    logger.warn('[material-rerank] 注入闸门打分失败，全量拦截（fail-closed，宁可不挂）', {
       error: error instanceof Error ? error.message : String(error),
       count: records.length,
+      dropped: records.map((record) => record.name),
     });
-    return { ...empty('error'), threshold };
+    return {
+      kept: [],
+      dropped: records,
+      applied: false,
+      reason: 'error',
+      scores: {},
+      threshold,
+    };
   }
 
   const kept: MaterialRecord[] = [];

@@ -438,6 +438,7 @@ export const COMPLETION_TURNS_BACKSTOP = 8;
 export async function commitSessionLoadMetric(session: TeachingSessionRecord): Promise<void> {
   const loadIndexes: number[] = [];
   const basisCounter = new Map<string, number>();
+  const bandCounter = new Map<string, number>();
   for (const message of session.messages) {
     const load = Number(message.analysis?.loadIndex);
     if (Number.isFinite(load)) loadIndexes.push(load);
@@ -445,12 +446,18 @@ export async function commitSessionLoadMetric(session: TeachingSessionRecord): P
     if (typeof basis === 'string' && basis) {
       basisCounter.set(basis, (basisCounter.get(basis) || 0) + 1);
     }
+    const band = message.analysis?.loadBand;
+    if (typeof band === 'string' && band) {
+      bandCounter.set(band, (bandCounter.get(band) || 0) + 1);
+    }
   }
   if (loadIndexes.length === 0) return;
   const avg = loadIndexes.reduce((sum, value) => sum + value, 0) / loadIndexes.length;
   const max = Math.max(...loadIndexes);
   const basisDist: Record<string, number> = {};
   for (const [key, count] of basisCounter) basisDist[key] = count;
+  const bandDist: Record<string, number> = {};
+  for (const [key, count] of bandCounter) bandDist[key] = count;
 
   await prisma.learning_metrics.upsert({
     where: {
@@ -468,6 +475,7 @@ export async function commitSessionLoadMetric(session: TeachingSessionRecord): P
       metadata: JSON.stringify({
         max: Number(max.toFixed(3)),
         basisDist,
+        ...(Object.keys(bandDist).length > 0 ? { bandDist } : {}),
         perTurnCount: loadIndexes.length,
         scale: '0-1',
       }),
@@ -623,3 +631,46 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
  * 只给模型"最近发生了什么、哪些没通过"，用于**换表征再确认**——不铺原始 20 条（噪声）。
  * 返回 null = 本节课还没有检查点记录（模型据此不改变默认行为）。
  */
+
+/**
+ * 学生侧 wrapup 投影（2026-11-24 脱敏复核）。
+ *
+ * 背景：`teaching_sessions.wrapup` 现在同时承载运营观测字段（影子双写、收束控制态、
+ * 收束审计、运行时信封）。这些是**内部排障数据**，不应随学生端 `/sessions/:id/detail`
+ * 与 `/tasks/:taskId/evaluation/latest` 一起下发；学生页面实际只消费 summary / evaluation
+ * 的分数 / stateUpdate / progress。
+ *
+ * 保留：summary、progress、evidence、stateUpdate（完课卡长期指标）、duration、
+ *       sources、evaluation 中的 sessionLss/sessionKtl/sessionLf/duration/messageCount。
+ * 移除：shadowDeterministic（影子公式对比）、controlStateSnapshot（控制面）、
+ *       runtimeEnvelope / finalizationAction / closureAudit（内部审计）、learner（内部节奏建议）、
+ *       evaluation.metricTiers / metricEvidence / metricMetadata / reasoning / confidence（判定依据）。
+ */
+const STUDENT_WRAPUP_INTERNAL_KEYS = [
+  'shadowDeterministic',
+  'controlStateSnapshot',
+  'runtimeEnvelope',
+  'finalizationAction',
+  'closureAudit',
+  'learner',
+] as const;
+
+const STUDENT_EVALUATION_INTERNAL_KEYS = [
+  'metricTiers',
+  'metricEvidence',
+  'metricMetadata',
+  'reasoning',
+  'confidence',
+] as const;
+
+export function projectWrapupForStudent(wrapup: any): any {
+  if (!wrapup || typeof wrapup !== 'object' || Array.isArray(wrapup)) return wrapup;
+  const projected: Record<string, any> = { ...wrapup };
+  for (const key of STUDENT_WRAPUP_INTERNAL_KEYS) delete projected[key];
+  if (projected.evaluation && typeof projected.evaluation === 'object' && !Array.isArray(projected.evaluation)) {
+    const evaluation = { ...projected.evaluation };
+    for (const key of STUDENT_EVALUATION_INTERNAL_KEYS) delete evaluation[key];
+    projected.evaluation = evaluation;
+  }
+  return projected;
+}

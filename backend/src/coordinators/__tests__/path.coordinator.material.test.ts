@@ -96,6 +96,7 @@ afterEach(() => {
   delete process.env.MATERIAL_COLLECTION_DISABLED
   delete process.env.MATERIAL_COLLECTION_TIMEOUT_MS
   delete process.env.MATERIAL_UPLOAD_INJECTION_DISABLED
+  delete process.env.MATERIAL_SEMANTIC_DISABLED
   if (uploadRoot) {
     try { fs.rmSync(uploadRoot, { recursive: true, force: true }) } catch { /* 忽略清理失败 */ }
     uploadRoot = ''
@@ -142,6 +143,37 @@ function seedUpload(
     warnings: [],
     createdAt: '2026-09-22T00:00:00.000Z',
   }, '附件正文……')
+}
+
+/** 联网资料夹具：与采集链回填的 materialId 同 id，正文带多个 ATX 标题（供宽化重建）。 */
+function seedWebMaterial(userId: string, id: string, headings: string[], name = '联网资料正文缓存') {
+  if (!uploadRoot) {
+    uploadRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wenflow-upload-'))
+    process.env.MATERIAL_UPLOAD_DIR = uploadRoot
+  }
+  writeMaterial({
+    id,
+    userId,
+    name,
+    ext: '.md',
+    format: 'markdown',
+    size: 1000,
+    charCount: 2000,
+    origin: 'web',
+    sourceUrl: 'https://www.moe.gov.cn/example',
+    fetchedAt: '2026-01-02T03:04:05.000Z',
+    structure: {
+      pageCount: 0, slideCount: 0, sheetCount: 0, headingCount: headings.length,
+      tableCount: 0, listCount: 0, paragraphCount: headings.length, chunkCount: headings.length,
+    },
+    anchors: headings.map((heading, index) => ({
+      heading,
+      location: String(index + 1),
+      preview: `${heading}的原文片段`,
+    })),
+    warnings: [],
+    createdAt: '2026-01-02T03:04:05.000Z',
+  }, headings.map((heading) => `# ${heading}\n\n${heading}的原文片段`).join('\n\n'))
 }
 
 describe('goal-path-visible-summary：needsMaterial 白名单透传', () => {
@@ -191,6 +223,62 @@ describe('path.coordinator 资料采集接线', () => {
     expect(materials).toHaveLength(1)
     expect(materials[0].pack.sections[0].id).toBe('s-1')
     expect(materials[0].pack.keyPoints[0].cite).toBe('健康包括……')
+  })
+
+  it('首采宽化（2026-11-23 带宽审计）：采集包按入库正文重建章节树，缺口信息不丢', async () => {
+    process.env.MATERIAL_SEMANTIC_DISABLED = '1'
+    const materialId = '99999999-8888-7777-6666-555555555555'
+    const headings = ['一、健康领域', '二、语言领域', '三、社会领域', '四、科学领域', '五、艺术领域', '六、实施建议', '七、评价方式', '八、家园共育']
+    seedWebMaterial('u1', materialId, headings)
+    collectMock.mockResolvedValue([{
+      ...FAKE_PACK_RESULT,
+      status: 'partial' as const,
+      pack: { ...FAKE_PACK_RESULT.pack, materialId },
+      // 覆盖较完整的 partial（缺口不超过已覆盖）→ 保留，缺口照常透传
+      coverage: { covered: ['健康领域', '语言领域'], missing: ['社会领域'] },
+    }])
+
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u1',
+      rawGoal: '按指南设计活动',
+      visibleSummary: VISIBLE_WITH_NEED,
+    } as any)
+
+    const materials = result.userProfile.normalizedInput.resources.materials
+    expect(materials).toHaveLength(1)
+    // 采集链原本只给 1 个章节；宽化后按入库正文重建（标题 8 条 + 正文行兜底，与「库优先」同口径）
+    expect(materials[0].pack.sections.length).toBeGreaterThan(5)
+    expect(materials[0].pack.sections.map((section: any) => section.title)).toContain('八、家园共育')
+    // 采集链判定的缺口与状态保留（不能被重建包的空覆盖冒充完整）
+    expect(materials[0].coverage.missing).toEqual(['社会领域'])
+    expect(materials[0].status).toBe('partial')
+    expect(materials[0].notes.join(' ')).toContain('重建章节树')
+    delete process.env.MATERIAL_SEMANTIC_DISABLED
+  })
+
+  it('零星局部的 partial（缺口多于已覆盖）→ 按未命中丢弃，不进入路径', async () => {
+    process.env.MATERIAL_SEMANTIC_DISABLED = '1'
+    const materialId = '88888888-7777-6666-5555-444444444444'
+    seedWebMaterial('u1', materialId, ['三、简答题', '四、论述题'])
+    collectMock.mockResolvedValue([{
+      ...FAKE_PACK_RESULT,
+      status: 'partial' as const,
+      pack: { ...FAKE_PACK_RESULT.pack, materialId },
+      coverage: { covered: ['三、简答题', '四、论述题'], missing: ['exam_paper', '专升本教育学真题', '教育学专升本简答论述真题'] },
+    }])
+
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u1',
+      rawGoal: '按指南设计活动',
+      visibleSummary: VISIBLE_WITH_NEED,
+    } as any)
+
+    const materials = result.userProfile.normalizedInput.resources.materials
+    expect(materials).toHaveLength(1)
+    expect(materials[0].status).toBe('not_found')
+    expect(materials[0].pack).toBeNull()
+    expect(materials[0].notes.join(' ')).toContain('按未命中丢弃')
+    delete process.env.MATERIAL_SEMANTIC_DISABLED
   })
 
   it('采集抛错 → fail-open：路径生成继续，materials 记 note + 一条 warn', async () => {
@@ -393,6 +481,23 @@ describe('path.coordinator 显式挂载分支（资料跟路径生成走，2026-
     expect(result.userProfile.normalizedInput.resources.materials).toBeUndefined()
     const attachLog = infoMock.mock.calls.find((call) => String(call[0]) === '[path-coordinator] 资料挂载')
     expect((attachLog?.[1] as any)?.mode).toBe('explicit-empty')
+  })
+
+  it('显式挂载 + goal 声明 needsMaterial → 不触发联网采集，避免外部结果顶掉挂载资料', async () => {
+    seedMaterial('u-explicit', '11111111-2222-3333-4444-555555555001', '第一份资料.md')
+    collectMock.mockClear()
+
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u-explicit',
+      rawGoal: '按指南设计幼儿活动',
+      visibleSummary: VISIBLE_WITH_NEED,
+      materialIds: ['11111111-2222-3333-4444-555555555001'],
+    } as any)
+
+    const materials = result.userProfile.normalizedInput.resources.materials
+    expect(materials).toHaveLength(1)
+    expect(materials[0].pack.materialId).toBe('11111111-2222-3333-4444-555555555001')
+    expect(collectMock).not.toHaveBeenCalled()
   })
 
   it('materialIds undefined（存量/VL/直连）→ 沿用资料库自动扫库，行为不变', async () => {

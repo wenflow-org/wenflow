@@ -231,6 +231,7 @@ const stats = ref<MaterialLibraryStats>({
   total: 0,
   uploadCount: 0,
   webCount: 0,
+  uploadBytes: 0,
   totalBytes: 0,
   quotaBytes: 0,
 });
@@ -294,7 +295,8 @@ const tabs = computed<Array<{ key: FilterKey; label: string; count: number }>>((
 
 const summaryText = computed(() => {
   // 来源拆分已由页签承载（全部/我上传/联网采集），此处只留总量与配额，避免 390 宽重复占行。
-  const used = formatBytes(stats.value.totalBytes);
+  // 配额口径只算上传来源（2026-11-22）：web 采集是系统缓存，不占用户配额。
+  const used = formatBytes(stats.value.uploadBytes);
   const quota = stats.value.quotaBytes > 0 ? ` / ${formatBytes(stats.value.quotaBytes)}` : '';
   return `${stats.value.total} 份 · 已用 ${used}${quota}`;
 });
@@ -481,7 +483,8 @@ async function uploadFiles(files: File[]) {
   uploading.value = true;
   uploadErrors.value = [];
   const failed: string[] = [];
-  let usedBytes = stats.value.totalBytes;
+  // 配额预检与后端同口径：只算上传来源字节（web 采集不占配额，2026-11-22）
+  let usedBytes = stats.value.uploadBytes;
   let uploadedAny = false;
   for (const file of files) {
     const problem = uploadProblem(file, usedBytes, stats.value.quotaBytes);

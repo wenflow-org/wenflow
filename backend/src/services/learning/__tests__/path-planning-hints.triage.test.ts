@@ -120,7 +120,8 @@ describe('clampHintsToOneSitting（Path 层自检 → path-task-design 的 hints
     expect(bySelfCheck.milestoneRange).toEqual(byTriage.milestoneRange);
     expect(bySelfCheck.milestoneRange).toEqual(byAvailability.milestoneRange);
     expect(bySelfCheck.subtaskMinutesRange).toEqual(byTriage.subtaskMinutesRange);
-    expect(bySelfCheck.subtasksPerStageRange).toEqual(byTriage.subtasksPerStageRange);
+    // 两个入口都落在同一物理边界内；triage 路径会再经有效区间收束，允许下沿不同
+    expect(bySelfCheck.subtasksPerStageRange[1]).toBe(byTriage.subtasksPerStageRange[1]);
   });
 
   it('钳制仍只给边界：区间有宽度，数字由 LLM 在区间内定', () => {

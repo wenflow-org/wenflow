@@ -143,9 +143,11 @@ export class LearningStateReadService {
       return { calculatedAt: r.calculatedAt, lss, ktl: r.ktl, lf: r.lf, sourceKey: r.sourceKey, taskId: r.taskId };
     });
     // until=asOf：把"最后一节课之后到今天"的空闲日补进序列，KTL/LF 才会按 λ^d 回落
+    // bootstrapFromFirstLoad：生产读侧用首日负荷做慢性基线（2026-11-23 可达性修复；
+    // 从 0 起步会让常规学习者永远跨不过 ktl≥3 的 ACWR 有效性门）。checkpoint 种子优先。
     const series = replayDailyPmc(
       normalizedRows,
-      { until: asOf, ...(checkpoint ? { seed: checkpoint.seed } : {}) },
+      { until: asOf, bootstrapFromFirstLoad: true, ...(checkpoint ? { seed: checkpoint.seed } : {}) },
     );
     if (!series.latest) return null;
     // 2b：重放完成后按 30 天节奏滚动写回 checkpoint（maybeWriteCheckpoint 内部 best-effort，
@@ -205,7 +207,9 @@ export class LearningStateReadService {
         sourceKey: r.sourceKey,
         taskId: r.taskId,
       })),
-      { until: asOf },
+      // 与 derivePmcState 同口径（2026-11-23）：首日负荷作慢性基线。否则同一屏上
+      // current 卡（bootstrap）与趋势末点（from-0）会给出两套 ktl/lf。
+      { until: asOf, bootstrapFromFirstLoad: true },
     );
 
     const byDay = new Map<string, { ktl: number; lf: number; lsb: number; mature: boolean }>();

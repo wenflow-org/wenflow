@@ -107,6 +107,14 @@ export function buildStoredGoalPathRequest(path: RegenerablePath, adjustments?: 
     return null
   }
 
+  // 澄清契约（2026-11-24）：重试/重生成沿用原契约。此前只带 visibleSummary + 旧身份标签，
+  // 契约在重生成时被丢掉 ⇒ rationale 闸门失效、路径退回无契约旧轨。
+  const clarification = (goalFinalPayload as any).clarification
+    ?? parsed?.sceneFraming?.normalizedInput?.clarification
+    ?? parsed?.normalizedInput?.clarification
+    ?? parsed?.normalizedInput?.normalizedInput?.clarification
+    ?? null
+
   return {
     userId: path.userId,
     source: 'goal' as const,
@@ -126,6 +134,7 @@ export function buildStoredGoalPathRequest(path: RegenerablePath, adjustments?: 
     goalHandoffFields: goalFinalPayload.goalHandoffFields && typeof goalFinalPayload.goalHandoffFields === 'object'
       ? goalFinalPayload.goalHandoffFields
       : undefined,
+    ...(clarification ? { clarification } : {}),
     // 重生成锁快照（资料跟路径生成走）：优先读 goalFinalPayload.materialIds（显式挂载随
     // GoalPathRequest 持久化，失败占位路径重试时 packs 尚未写入），回落到资料 pack 快照。
     // 显式空数组必须原样保留（[] = 显式不挂载，重生成零注入，不得回退扫库）；
@@ -177,6 +186,8 @@ export async function buildGoalPathRequestFromConversation(path: RegenerablePath
     finalUserVisible: typeof collectedData.finalUserVisible === 'string' ? collectedData.finalUserVisible : undefined,
     structuredData: (collectedData as any)?.structuredData || null,
     learnerLoadProfile: resolveLearnerLoadProfileFromCollectedData(collectedData),
+    // 澄清契约（2026-11-24）：会话存档里有就沿用，重生成不得退回无契约旧轨。
+    ...((collectedData as any)?.clarification ? { clarification: (collectedData as any).clarification } : {}),
     prerequisiteCheckResults: Array.isArray(collectedData.understanding?.prerequisiteCheckResults)
       ? collectedData.understanding.prerequisiteCheckResults
       : null,

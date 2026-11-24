@@ -47,6 +47,11 @@ export interface MaterialRecord {
   sourceUrl?: string | null;
   /** 联网抓取时间（ISO）；上传附件为空。 */
   fetchedAt?: string | null;
+  /**
+   * 页面发布时间（ISO，2026-11-23 外审切口④）：搜索 Provider（Tavily published_date / Exa
+   * publishedDate）拿到才填，**可空、绝不拿 fetchedAt 冒充**——供时效判定与来源卡展示。
+   */
+  publishedAt?: string | null;
 }
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

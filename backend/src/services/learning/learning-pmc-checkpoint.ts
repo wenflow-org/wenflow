@@ -24,7 +24,12 @@ import { dayKeyOf, addDaysToDayKey, parseDayKeyStart, endOfDay } from '../time/d
 import type { PmcReplaySeed, UserPmcSeries } from './learning-load-pmc.service';
 
 export const PMC_CHECKPOINT_INTERVAL_DAYS = 30;
-export const PMC_CHECKPOINT_METRIC_VERSION = 'state-v2';
+/**
+ * checkpoint 口径版本。
+ * 2026-11-23 升到 v3：PMC 读侧改为「首日负荷作为慢性基线播种」（bootstrapFromFirstLoad）。
+ * 旧 v2 种子是按 from-0 口径收盘的，继续续放会把新口径抵消——版本不匹配自动作废、全量重放。
+ */
+export const PMC_CHECKPOINT_METRIC_VERSION = 'state-v3';
 
 /** v1 只做全局序列；预留路径 scope 扩展位 */
 const GLOBAL_SCOPE = '';

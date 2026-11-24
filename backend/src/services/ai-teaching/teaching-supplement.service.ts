@@ -97,6 +97,8 @@ export async function fetchSupplementMaterial(
           url: item.finalUrl || candidate.url,
           title: item.title || topic,
           text: String(item.text),
+          // 发布时间与抓取时间分立（切口④）：搜索 Provider（Tavily/Exa）给多少用多少，没给留空
+          publishedAt: candidate.publishedAt ?? null,
         });
         if (ingested?.record?.id) {
           return { ok: true, materialId: ingested.record.id, sourceUrl: normalizeUrl(item.finalUrl || candidate.url) };
@@ -114,12 +116,12 @@ export async function fetchSupplementMaterial(
   }
 }
 
-/** 已入库记录 → 补充材料载荷（章节窗口优先，回退正文开头；≤1200 字）。 */
+/** 已入库记录 → 补充材料载荷（章节窗口优先，回退正文开头；≤1200 字；publishedAt 可空）。 */
 export function buildSupplementPayload(
   userId: string,
   materialId: string,
   topic: string
-): { materialId: string; title: string; topic: string; sourceUrl: string | null; excerpt: string } | null {
+): { materialId: string; title: string; topic: string; sourceUrl: string | null; publishedAt: string | null; excerpt: string } | null {
   const found = readMaterial(userId, materialId);
   if (!found) return null;
   const window = extractSectionWindow(found.markdown, {}, SUPPLEMENT_EXCERPT_CHARS);
@@ -128,6 +130,7 @@ export function buildSupplementPayload(
     title: found.record.name,
     topic,
     sourceUrl: found.record.sourceUrl ?? null,
+    publishedAt: found.record.publishedAt ?? null,
     excerpt: window.excerpt || '',
   };
 }
@@ -177,4 +180,200 @@ function normalizeUrl(url: string): string | null {
   }
 }
 
+/**
+ * 回执状态注入判定（2026-11-22 诚实回执，外部评审切口 C）：
+ * promoteSupplementSlot 返回「未就绪/刚过期」时，引擎把本函数结果送进 scenario.supplementStatus，
+ * 让老师能承接或坦白——此前零注入，学生秒回时老师只能「装失忆」，过期则静默吞掉承诺。
+ *   - pending：槽位仍 requested（采集在途）→ 等待期每轮注入；
+ *   - expired：requested→expired 本轮刚翻转（对象引用 ≠ artifacts 里的旧槽位）→ 只注一次，
+ *     避免后续轮次反复道歉；
+ *   - delivered（payload 就绪）/ 无槽位 / 已是旧槽位 → null（不注入）。
+ */
+export function supplementStatusForScenario(
+  promoted: { slot: SupplementSlot | null; payload: unknown },
+  previousSlot: SupplementSlot | undefined
+): { status: 'pending' | 'expired'; topic: string } | null {
+  const slot = promoted.slot;
+  if (!slot || promoted.payload) return null;
+  if (slot.status === 'requested') return { status: 'pending', topic: slot.topic };
+  if (slot.status === 'expired' && slot !== previousSlot) {
+    return { status: 'expired', topic: slot.topic };
+  }
+  return null;
+}
+
 export const teachingSupplementService = { fetchSupplementMaterial, promoteSupplementSlot, buildSupplementPayload };
+
+/* ── 学生贴链接通道（2026-11-23，DeepSeek 调研 ③ 的修正落法）──────────────
+ * 与 control.supplement 的本质区别：URL 在**调用模型前**就能用正则确定性抽出，
+ * 不需要先问模型 → 走「回合前预抓 + 单次调用」，省掉二次调用的整段耗时与 Token。
+ * 配额独立（学生贴的是自带学习材料，不占老师补料的每课 1 次）；
+ * 安全面自洽（学生手贴 URL 是不可信输入：SSRF 闸 + 登录墙/超时细分降级）。 */
+
+import { extractHttpUrls, isSafePublicHttpUrl } from '../../utils/url-safety';
+
+/** 每节课最多读几条学生链接（独立于 supplement 的每课 1 次）。 */
+export const STUDENT_LINK_MAX_PER_LESSON = 3;
+
+export type StudentLinkSkipReason = 'no-url' | 'closed-book' | 'unsafe-url' | 'quota-exhausted';
+
+export type StudentLinkPlan =
+  | { action: 'read'; url: string }
+  | { action: 'skip'; reason: StudentLinkSkipReason; url?: string };
+
+/**
+ * 回合前判定：这条学生消息要不要预读链接（纯函数，单测锚点）。
+ * 规则：抽第一条 http(s) URL；闭卷模式不下发抓取（status 提示走 closed-mode，让学生贴正文）；
+ * 每课独立配额 STUDENT_LINK_MAX_PER_LESSON；SSRF 闸不过的 URL 不抓（status=unsafe 提示贴正文）。
+ */
+export function planStudentLinkRead(
+  message: string,
+  sessionArtifacts: Record<string, unknown> | undefined,
+  linkReadCount: number
+): StudentLinkPlan {
+  const urls = extractHttpUrls(message, 1);
+  if (urls.length === 0) return { action: 'skip', reason: 'no-url' };
+  const url = urls[0];
+  if (sessionArtifacts?.allowWebSupplement === false) return { action: 'skip', reason: 'closed-book', url };
+  if (linkReadCount >= STUDENT_LINK_MAX_PER_LESSON) return { action: 'skip', reason: 'quota-exhausted', url };
+  const safety = isSafePublicHttpUrl(url);
+  if (!safety.ok) return { action: 'skip', reason: 'unsafe-url', url };
+  return { action: 'read', url };
+}
+
+export interface StudentLinkOutcome {
+  ok: boolean;
+  url: string;
+  title?: string;
+  excerpt?: string;
+  /** 细分降级码：login-required / blocked / timeout / unreadable —— 提示词据此让老师自然引导 */
+  code?: 'login-required' | 'blocked' | 'timeout' | 'unreadable';
+  durationMs?: number;
+}
+
+/**
+ * 带预算读单条学生链接：直接 fetchWeb（无搜索环节），章节窗口截 ≤1200 字。
+ * 失败归类尽力而为：Provider 错误串含 401/403/login → login-required；超时 → timeout；其余 → unreadable。
+ * 永不抛错（超预算 Promise.race 兜底），调用方只消费 outcome。
+ */
+export async function readStudentLink(
+  userId: string,
+  url: string,
+  deps: { fetchWeb: typeof fetchWeb } = { fetchWeb }
+): Promise<StudentLinkOutcome> {
+  const startedAt = Date.now();
+  try {
+    const outcome = await Promise.race([
+      deps.fetchWeb({
+        urls: [url],
+        format: 'markdown',
+        extractDepth: 'advanced',
+        perUrlTimeoutMs: 12_000,
+        purpose: `学生贴链接阅读：${url}`,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
+    ]);
+    if (!outcome) return { ok: false, url, code: 'timeout', durationMs: Date.now() - startedAt };
+    const errors = outcome.errors || [];
+    const errText = errors.map((e) => String((e as unknown as Record<string, unknown>)?.message ?? e)).join(' ');
+    if (/401|403|login|登录|forbidden/i.test(errText)) {
+      return { ok: false, url, code: 'login-required', durationMs: Date.now() - startedAt };
+    }
+    if (/timeout|timed?\s*out|超时/i.test(errText)) {
+      return { ok: false, url, code: 'timeout', durationMs: Date.now() - startedAt };
+    }
+    const item = (outcome.results || []).find(
+      (entry) => !entry.suspicious && typeof entry.text === 'string' && entry.text.trim().length > 0
+    );
+    if (!item) return { ok: false, url, code: 'unreadable', durationMs: Date.now() - startedAt };
+    const text = String(item.text);
+    const window = extractSectionWindow(text, {}, SUPPLEMENT_EXCERPT_CHARS);
+    return {
+      ok: true,
+      url: item.finalUrl || url,
+      title: item.title || '学生发来的链接',
+      excerpt: window.excerpt || '',
+      durationMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const code = /timeout/i.test(message) ? 'timeout' as const : 'unreadable' as const;
+    return { ok: false, url, code, durationMs: Date.now() - startedAt };
+  }
+}
+
+/* ── 同轮同步复调（2026-11-23 设计定稿）──────────────────────────────
+ * 此前 control.supplement 是纯异步：槽 requested → 后台采集 → 下轮晋升，学生秒回时
+ * 老师只能靠 supplementStatus 承接。现在升级为主路径：引擎截获请求后带硬预算同步采集，
+ * 拿到正文即同轮二次调用融合；失败/超时 → 回落既有异步链（后台采集 + 下轮晋升 +
+ * supplementStatus 诚实回执），本文件不改老链路，只提供两个新纯函数/包装。 */
+
+/**
+ * 同步采集硬预算（毫秒）：search+fetch 全程上限，超时回落异步链。
+ * 实测（2026-11-23 真栈）：Tavily 搜索 + advanced 抓取 + 入库全程约 16s，10s 预算必然回落；
+ * 20s 覆盖常规链路，同时给「同轮融合」留出真实可用的窗口（超过 20s 的价值低于让学生干等）。
+ */
+export const SUPPLEMENT_SYNC_FETCH_BUDGET_MS = 20_000;
+
+function readSyncBudgetMs(): number {
+  const raw = Number(process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS);
+  return Number.isFinite(raw) && raw >= 2_000 ? Math.floor(raw) : SUPPLEMENT_SYNC_FETCH_BUDGET_MS;
+}
+
+export interface SupplementSyncRequestLike {
+  topic?: unknown;
+  query?: unknown;
+}
+
+/**
+ * 是否尝试同轮同步采集（纯函数，单测锚点）。三个条件都满足才试：
+ *   ① 本轮模型确实发起了 supplement 请求（topic 非空）；
+ *   ② 没有「在途/已交付」的旧槽位（每 session ≤1 次的既有纪律不变）；
+ *   ③ 会话未进入闭卷模式（sessionArtifacts.allowWebSupplement === false 时禁止）。
+ */
+export function supplementSyncPlan(
+  request: SupplementSyncRequestLike | null | undefined,
+  existingSlot: SupplementSlot | undefined,
+  sessionArtifacts: Record<string, unknown> | undefined
+): boolean {
+  const topic = String(request?.topic || '').trim();
+  if (!topic) return false;
+  if (existingSlot) return false;
+  if (sessionArtifacts?.allowWebSupplement === false) return false;
+  return true;
+}
+
+export interface SupplementSyncOutcome extends SupplementFetchOutcome {
+  /** 同步采集全程耗时（含预算超时）。 */
+  durationMs: number;
+}
+
+/**
+ * 带硬预算的同步采集：内部复用 fetchSupplementMaterial（同一套 search→选源→fetch→入库
+ * 与防注入纪律），超预算即放弃（底层任务不取消也无害——入库有 URL/标题去重，异步兜底
+ * 重跑同一查询时 findWebRecordByTitle 会直接复用）。永不抛错。
+ */
+export async function fetchSupplementMaterialSync(
+  userId: string,
+  topic: string,
+  query: string,
+  deps: SupplementDeps = { searchWeb, fetchWeb, ingestWebMaterial, findWebRecordByTitle }
+): Promise<SupplementSyncOutcome> {
+  const startedAt = Date.now();
+  const budgetMs = readSyncBudgetMs();
+  try {
+    const outcome = await Promise.race([
+      fetchSupplementMaterial(userId, topic, query, deps),
+      new Promise<SupplementFetchOutcome>((resolve) =>
+        setTimeout(() => resolve({ ok: false, error: 'sync-budget-exceeded' }), budgetMs)
+      ),
+    ]);
+    return { ...outcome, durationMs: Date.now() - startedAt };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startedAt,
+    };
+  }
+}

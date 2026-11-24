@@ -4,7 +4,7 @@
  * 覆盖 2026-10-21 评测接入的四条分支（EMBEDDING-DECISION-EVAL.md）：
  *   1) 未配置/禁用/样本不足 → 闸门不启用，全量放行；
  *   2) 正常打分 → 阈值过滤 + 分数缓存（二次调用不再出网）；
- *   3) HTTP 失败/超时 → fail-open 全量放行；
+ *   3) 已配置但 HTTP 失败/超时 → fail-closed 全量拦截（宁可不挂、绝不乱挂，切口 B）；
  *   4) 部分资料无分数 → 无分数的放行（宁漏勿杀）。
  */
 import type { MaterialRecord } from '../material-store';
@@ -136,7 +136,7 @@ describe('applyMaterialRerankGate', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it('HTTP 失败 → fail-open 全量放行', async () => {
+  it('已配置但 HTTP 失败 → fail-closed 全量拦截（宁可不挂、绝不乱挂）', async () => {
     process.env.RERANK_API_URL = 'https://rerank.example/v1/rerank';
     const fetchImpl = jest.fn(async () => jsonResponse({ error: 'boom' }, 500));
     const a = makeRecord({ id: 'a', name: 'a.md' });
@@ -144,7 +144,8 @@ describe('applyMaterialRerankGate', () => {
     const result = await applyMaterialRerankGate({ query: QUERY, records: [a, b], fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(result.applied).toBe(false);
     expect(result.reason).toBe('error');
-    expect(result.kept).toHaveLength(2);
+    expect(result.kept).toHaveLength(0);
+    expect(result.dropped.map((record) => record.id)).toEqual(['a', 'b']);
   });
 
   it('部分资料无分数 → 无分数的放行（宁漏勿杀）', async () => {

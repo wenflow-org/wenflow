@@ -21,6 +21,7 @@ import {
   type FormThresholds,
 } from '../learning-load.pmc';
 import { dedupeLessonRows, replayDailyPmc } from '../learning-load-pmc.service';
+import { classifyLoad } from '../learning-load-verdict';
 
 /** 旧模型（learning-state.service 的按课 EWMA）复刻：单课日应与新引擎逐字一致 */
 const legacyStep = (prevKtl: number, prevLf: number, lss: number) => ({
@@ -236,5 +237,58 @@ describe('replayDailyPmc 跨家族去重（同日同 taskId 只算一节课）',
       { ...tc('t1'), calculatedAt: new Date('2026-10-13T15:59:59.999Z') },
     ];
     expect(dedupeLessonRows(rows)).toHaveLength(2);
+  });
+});
+
+describe('replayDailyPmc 冷启动基线（2026-11-23 可达性修复）', () => {
+  const dayAt = (offset: number) => new Date(Date.UTC(2026, 9, 12 + offset, 4, 0, 0));
+  const row = (offset: number, lss: number) => ({ calculatedAt: dayAt(offset), lss, ktl: 0, lf: 0 });
+
+  it('默认（审计/旧口径）仍从 0 重放：1 天负荷 5 → ktl=0.25、lf=1.5', () => {
+    const series = replayDailyPmc([row(0, 5)]);
+    expect(series.latest!.ktl).toBeCloseTo(0.25, 6);
+    expect(series.latest!.lf).toBeCloseTo(1.5, 6);
+  });
+
+  it('bootstrapFromFirstLoad：首日负荷作为慢性基线 → 1 天负荷 5 → ktl=lf=5', () => {
+    const series = replayDailyPmc([row(0, 5)], { bootstrapFromFirstLoad: true });
+    expect(series.latest!.ktl).toBeCloseTo(5, 6);
+    expect(series.latest!.lf).toBeCloseTo(5, 6);
+    // ACWR 有效性门（ktl≥3）首日即开，不再 40 天跨不过
+    expect(classifyLoad(series.latest!).mature).toBe(true);
+  });
+
+  it('bootstrap 下限 2.5：首日超轻课（lss=1）不会把基线压到 1', () => {
+    const series = replayDailyPmc([row(0, 1)], { bootstrapFromFirstLoad: true });
+    expect(series.latest!.ktl).toBeGreaterThan(2);
+    expect(series.latest!.lf).toBeGreaterThan(2);
+  });
+
+  it('常规基线 + 连肝 5 天 → 失衡判据触发；停学 7 天 → recovered（回 steady/push 区）', () => {
+    const rows = [
+      row(0, 3.4), row(1, 3.4), row(2, 3.4),          // 3 天常规，建立基线
+      row(3, 6.8), row(4, 6.8), row(5, 6.8), row(6, 6.8), row(7, 6.8), // 连肝 5 天
+    ];
+    const during = replayDailyPmc(rows, { bootstrapFromFirstLoad: true });
+    const heavyDay = during.pmc[during.pmc.length - 1];
+    // 连肝第 5 天：lf 冲到 6.23、ktl 只到 4.17 → form<0 且基座成熟 ⇒ 失衡（recover 入口）
+    expect(classifyLoad(heavyDay).imbalanced).toBe(true);
+    expect(classifyLoad(heavyDay).fatigueRisk).not.toBe('low');
+
+    const afterRest = replayDailyPmc(rows, {
+      bootstrapFromFirstLoad: true,
+      until: dayAt(14), // 最后一课后停学 7 天
+    });
+    const restDay = afterRest.pmc[afterRest.pmc.length - 1];
+    // 空闲日按 λ 自然回落（KTL 半衰期 13.5 天）：4.17×0.95^7≈2.91、6.23×0.70^7≈0.51。
+    // 7 天后高疲劳/失衡都已解除，且 ktl≈2.91 仍在有效性门(2.5)上 → acwr≈0.18、
+    // recovered=true、pacing=fast：恢复开关能真正回到 steady/push 区。
+    const restVerdict = classifyLoad(restDay);
+    expect(restVerdict.fatigueRisk).toBe('low');
+    expect(restVerdict.imbalanced).toBe(false);
+    expect(restVerdict.recovered).toBe(true);
+    expect(restVerdict.pacing).toBe('fast');
+    expect(restDay.lf).toBeLessThan(heavyDay.lf);
+    expect(restDay.ktl).toBeLessThan(heavyDay.ktl);
   });
 });

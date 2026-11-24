@@ -31,6 +31,7 @@ function libraryOf(items: Array<Record<string, unknown>>) {
       total: items.length,
       uploadCount: uploads.length,
       webCount: items.length - uploads.length,
+      uploadBytes: uploads.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
       totalBytes: items.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
       quotaBytes: 200 * 1024 * 1024,
     },
@@ -138,7 +139,7 @@ describe('MaterialUploadArea（挂载器语义）', () => {
     expect(mockRemove).not.toHaveBeenCalled();
   });
 
-  it('挂载选择弹层：只列上传来源，勾选回填挂载列表，第 4 份被禁用', async () => {
+  it('挂载选择弹层：默认空态不列资料库，展开后只列上传来源、勾选回填、第 4 份被禁用', async () => {
     const uploads = [1, 2, 3, 4].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` }));
     const web = baseMaterial({ id: 'w1', name: '联网资料.md', origin: 'web' });
     mockLibrary.mockResolvedValue(libraryOf([...uploads, web]));
@@ -151,13 +152,34 @@ describe('MaterialUploadArea（挂载器语义）', () => {
     await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker();
     await flushPromises();
 
+    // 默认收起：列表只显示本次已挂载的 3 份，资料库不冒出来
+    expect(w.findAll('.mat-upload__picker-row').length).toBe(3);
+
+    // 点「从资料库选择」展开 → 未挂载的第 4 份出现，联网资料仍不进弹层
+    await w.find('.mat-upload__picker-browse').trigger('click');
+    await flushPromises();
     const rows = w.findAll('.mat-upload__picker-row');
-    expect(rows.length).toBe(4); // 联网资料不进弹层
+    expect(rows.length).toBe(4); // 已挂载 3 + 库里未挂载 1；联网资料被过滤
     expect(w.text()).not.toContain('联网资料.md');
     // 前 3 份已挂载（勾选），第 4 份 disabled
     const boxes = w.findAll('.mat-upload__picker-row input[type="checkbox"]');
     expect((boxes[0].element as HTMLInputElement).checked).toBe(true);
     expect((boxes[3].element as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('新对话（什么都没挂）打开弹层 → 空态一句话，不列任何资料', async () => {
+    mockLibrary.mockResolvedValue(libraryOf([baseMaterial()]));
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
+    await flushPromises();
+    await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker();
+    await flushPromises();
+
+    expect(w.findAll('.mat-upload__picker-row').length).toBe(0);
+    expect(w.find('.mat-upload__picker-empty').text()).toContain('还没挂载资料');
+    // 点「从资料库选择」→ 资料库才展开
+    await w.find('.mat-upload__picker-browse').trigger('click');
+    await flushPromises();
+    expect(w.findAll('.mat-upload__picker-row').length).toBe(1);
   });
 
   it('弹层取消勾选 → emit 列表摘掉该项', async () => {

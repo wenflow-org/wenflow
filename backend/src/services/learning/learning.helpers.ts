@@ -818,6 +818,10 @@ export function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPa
       goalHandoffFields: handoff.goalHandoffFields && typeof handoff.goalHandoffFields === 'object'
         ? handoff.goalHandoffFields
         : null,
+      // 澄清契约随快照持久化（2026-11-24）：重试/重生成需要它继续约束 rationale 与 topology。
+      clarification: handoff.clarification
+        ?? data.userProfile?.normalizedInput?.clarification
+        ?? null,
     };
   }
 

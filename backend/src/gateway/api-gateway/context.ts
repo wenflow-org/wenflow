@@ -10,11 +10,14 @@ export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'la
  * - delta：内容增量（透传上游 token）
  * - restart：逻辑重试重新生成，客户端应清空已显示内容
  * - error：带内失败（HTTP 200 已提交后无法改状态码）
+ * - progress：编排层阶段提示（2026-11-23 补充材料同轮复调）——不携带内容，
+ *   前端展示状态行（「正在查阅外部资料…」）；永不影响主流程
  */
 export type PromptStreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'restart'; attempt: number }
-  | { type: 'error'; code: string; message: string };
+  | { type: 'error'; code: string; message: string }
+  | { type: 'progress'; stage: 'searching' | 'fusing' | 'reading-link'; topic: string };
 
 /** 请求级流式意向：路由在进入业务链路前通过 setRequestContext 注入 */
 export interface StreamRequest {

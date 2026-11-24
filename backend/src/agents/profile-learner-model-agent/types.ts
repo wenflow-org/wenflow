@@ -376,14 +376,36 @@ export interface LearnerKnowledgeMemory {
 }
 
 export interface LearnerLearningControlState {
+  /** 节奏模式：recover=降压恢复（疲劳/失衡/本路径高压）、steady=按序推进、push=放开推进 */
   paceMode: 'recover' | 'steady' | 'push';
+  /** 概念负荷档：recover 期 low；push 且全局恢复良好且无前置缺口 high；其余 medium */
   conceptLoad: 'low' | 'medium' | 'high';
+  /** 巩固优先级：前置缺口/高严重度卡点/全局失衡 high；普通卡点 medium；其余 low */
   reviewPriority: 'high' | 'medium' | 'low';
+  /** 任务难度上限：recover=low(≤4) / steady=medium(≤7) / push=high(≤10)，见 TaskDifficultyAdjustmentService */
   challengeLevelCap: 'low' | 'medium' | 'high';
+  /** 考测需求：recover 期统一 low（低压力巩固），契约强制出题仍由代码闸门控制，不受本字段影响 */
   checkpointNeed: 'high' | 'medium' | 'low';
+  /**
+   * 控制面硬信号（2026-11-23 P0-2）：由代码事件驱动，不参与分数测量。
+   * - distressRecover=true：近 72h 有主动弃课/崩溃事件，强制 paceMode=recover（cap=low）。
+   *   仅当存在该类事件时出现，旧快照没有该键。
+   */
+  controlFlags?: {
+    distressRecover?: boolean;
+    /** 触发强制 recover 的那次弃课/崩溃事件时间（ISO）；供运营侧定位「本节为何被压到 low」 */
+    distressRecoverAt?: string;
+  };
+  /**
+   * 语义边界（2026-11-23）：仅表示「优先巩固旧知、降低新概念密度」，**不是**「禁止覆盖本课
+   * 契约必需内容」。目前无运行时读者（prompt 只读 reviewPriority/challengeLevelCap/paceMode），
+   * 不得据此跳过新任务的核心 KC。
+   */
   shouldAvoidNewConcepts: boolean;
+  /** 巩固优先：reviewPriority=high 的投影，teaching-turn 规则显式读取 */
   shouldPreferConsolidation: boolean;
-  shouldOfferBreak: boolean;
+  // 2026-11-23 退役 shouldOfferBreak：原字段（疲劳高→建议休息）全仓零运行时读者——prompt 的
+  // break 许可已由 paceMode=recover 规则覆盖，状态页另有「需要休息」建议出口。按僵尸字段删除。
 }
 
 export interface LearnerReplanSignal {

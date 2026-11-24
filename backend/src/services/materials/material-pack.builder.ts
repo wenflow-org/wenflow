@@ -155,10 +155,14 @@ export function buildPackFromMaterial(record: MaterialRecord, markdown: string):
     publisher: null,
     sourceTier: isWeb ? classifySourceTier(sourceUrl) : 'unknown',
     sourceUrl,
+    // 来源权威分级（2026-11-23）：上传/挂载=权威锚定，联网=参考补充
+    origin: isWeb ? 'web' : 'upload',
     // 附件正文可回溯（学习者侧「点开看原文」）
     materialId: record.id,
     version: null,
     fetchedAt: record.createdAt || new Date().toISOString(),
+    // 发布时间与抓取时间分立（切口④）：Provider 没给就留空，不冒充
+    publishedAt: isWeb ? record.publishedAt ?? null : null,
     license: null,
     tldr: clamp(markdown, MAX_TLDR_CHARS),
     sections,
@@ -284,7 +288,14 @@ export async function buildPackFromMaterialAsync(
     const points = buildSemanticKeyPoints(picked, base.pack.title, base.pack.sourceUrl);
     if (points.length === 0) return base;
     const sectionChunks = selectStratifiedChunks(index.chunks, MAX_PACK_SECTIONS);
-    const sections = sectionChunks.length > 0 ? buildSemanticSections(sectionChunks) : base.pack.sections;
+    // 2026-11-24 目录保真：有显式章节锚点的文档，sections 必须沿用锚点树，不能被语义 chunk 覆盖。
+    // 根因：chunkMaterialMarkdown 按 900 字预算合并相邻小节，短文档（如 408 字的 10 章手册）
+    // 会被并成 1 个 chunk，语义 sections 随之退化成 1 节——Goal/Path 的「先看目录再选章节」
+    // 就丢了依据。长文档仍走语义分层；短文档/结构化文档保留 anchors 的完整目录。
+    const keepAnchorSections = (record.anchors?.length || 0) >= 3 && base.pack.sections.length >= 2;
+    const sections = keepAnchorSections
+      ? base.pack.sections
+      : (sectionChunks.length > 0 ? buildSemanticSections(sectionChunks) : base.pack.sections);
 
     return {
       ...base,

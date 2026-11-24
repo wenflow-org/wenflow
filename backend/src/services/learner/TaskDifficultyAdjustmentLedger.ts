@@ -18,6 +18,7 @@ import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
 import type { TaskDifficultyAdjustment } from './TaskDifficultyAdjustmentService';
 import { LOAD_BASED_DECREASE_REASONS } from './TaskDifficultyAdjustmentService';
+import { SESSION_LSS_HIGH_THRESHOLD } from '../learning/session-evaluation-scale';
 import { classifyLoad } from '../learning/learning-load-verdict';
 
 export const ADJUSTMENT_EVIDENCE_TYPE = 'task:difficulty:adjustment';
@@ -153,7 +154,8 @@ export function metricReasonsFromState(input: {
   // 2026-10-15 PMC 改造：疲劳判据改**相对量**（ACWR）——绝对 lf≥6 在日负荷口径下失效。
   // globalKtl 缺省（旧台账行没有该字段）时回落到绝对 lf≥6，保证历史行复算行为不变。
   if (input.pathState) {
-    if (input.pathState.lss >= 6) reasons.push('lesson_stress_high');
+    // 2026-11-23 复核：与判定器同阈值——mid 的中点=6 不是高压，门槛取 high 档 7.5。
+    if (input.pathState.lss >= SESSION_LSS_HIGH_THRESHOLD) reasons.push('lesson_stress_high');
     const pv = classifyLoad({ ktl: input.pathState.ktl, lf: input.pathState.lf });
     if (pv.fatigueRisk === 'high' || pv.imbalanced) reasons.push('path_load_unbalanced');
   }

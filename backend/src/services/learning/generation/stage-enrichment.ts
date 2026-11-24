@@ -90,6 +90,40 @@ import {
 } from './run-lifecycle';
 import { listEmptyMilestoneIds } from './retry-policy';
 
+/**
+ * 只保留**本阶段文本里真实出现**的前置概念（2026-11-24 KC 跨阶段偷跑第二刀）。
+ *
+ * 为什么需要：path-kc-mapping 的规则要求「prerequisiteTree.unknownConcepts 每个前置概念
+ * 都必须有完整 KC」。但渐进式只设计当前阶段，传全路径 prerequisiteTree 时，模型会为
+ * 后序阶段的概念（如阶段 2 的「编码/巩固/提取」）先造 KC；又受「不得留孤岛」约束，
+ * 只能硬挂到当前阶段任务上（l01 实证：阶段 1 第 3 课挂 kc-2h「区分巩固与提取线索」）。
+ *
+ * 口径：当前阶段 milestone 的 title/description/goal + 本阶段全部任务标题/描述/验收里
+ * 出现过的概念才保留；一个都没命中就整棵不发（prerequisiteTree 本就是可选输入）。
+ */
+export function scopePrerequisiteTreeToStage(tree: any, stageText: string): any | null {
+  if (!tree) return null;
+  const text = String(stageText || '');
+  const relevant = (value: unknown): boolean => {
+    const item = String(value || '').trim();
+    if (!item) return false;
+    if (text.includes(item)) return true;
+    return item
+      .split(/[、，,/／与和及]/)
+      .map((part) => part.trim())
+      .filter((part) => part.length >= 3)
+      .some((part) => text.includes(part));
+  };
+  const unknownConcepts = (Array.isArray(tree.unknownConcepts) ? tree.unknownConcepts : [])
+    .filter((item: any) => relevant(item?.concept) || relevant(item?.note));
+  const knownConcepts = (Array.isArray(tree.knownConcepts) ? tree.knownConcepts : [])
+    .filter((item: any) => relevant(item));
+  const gapChain = (Array.isArray(tree.gapChain) ? tree.gapChain : [])
+    .filter((item: any) => relevant(item));
+  if (!unknownConcepts.length && !knownConcepts.length && !gapChain.length) return null;
+  return { ...tree, unknownConcepts, knownConcepts, gapChain };
+}
+
 /** 只依赖 deleteMany 的最小客户端面（便于单测注入假实现） */
 export interface StageItemPruneClient {
   path_generation_stage_items: {
@@ -503,8 +537,30 @@ async function enrichLearningPathWithAndersonInner(
       // 替换共享 baseInput 里的全局 planningHints（全局锚按总学时均摊 + 「恰好 N 课」规则
       // = 5×10 式等分的来源）。clamp 用同一份逐阶段 hints，保证锚与硬上界一致。
       const stageHints = buildStageHints(milestone);
-      const stageNormalizedInput = stageHints && (normalizedInput as any)
-        ? { ...(normalizedInput as any), planningHints: stageHints }
+      // 时间降维（2026-11-24）：stageHints 仍用于代码侧 clamps/补课护栏，但**不把小时/任务数配额
+      // 交给提示词**——模型只应看到内容体量档与单次坐姿上限，课数由结束节点决定。
+      const promptHints = stageHints ? { ...(stageHints as Record<string, any>) } : null;
+      if (promptHints) {
+        for (const key of [
+          'targetSubtasksForStage',
+          'stageMinutesBudget',
+          'targetTotalHours',
+          'targetHoursPerMilestone',
+          'targetMinutesPerTask',
+          'targetSubtasksPerStage',
+          'targetMilestones',
+          'subtasksPerStageRange',
+          'conceptRange',
+          'maxWeeks',
+          'maxWeeksSource',
+          'paceSignal',
+          'capacityDeficit',
+        ]) {
+          delete promptHints[key];
+        }
+      }
+      const stageNormalizedInput = promptHints && (normalizedInput as any)
+        ? { ...(normalizedInput as any), planningHints: promptHints }
         : normalizedInput;
       // 资料章节按阶段位次分配（2026-10-17）：任务层每阶段只带 8 段，此前恒取前 8 段 ⇒
       // 24 章节的包里后 2/3 永远不可见，路径引用恒落原文前部（20 goal A/B：后半引用 9%）。
@@ -567,7 +623,8 @@ async function enrichLearningPathWithAndersonInner(
           coreConcept: milestone.coreConceptId || null,
           description: milestone.description || null,
           goal: milestone.goal || null,
-          estimatedHours: milestone.estimatedHours || null,
+          // 2026-11-24 时间降维：estimate-hours 不再是任务设计输入（避免用学时反推课数/分钟）。
+          // 保留在 paths/milestones 表供展示与汇总；任务设计只看独立认知闭环。
           // 2026-11-20：loadTarget 存在 cognitiveCore.loadProfile 里，此前没进 milestone 输入，
           // 导致 path-task-design 的「low 时每任务 ≤1 个新概念」规则永远不触发（语法阶段 1
           // 第 1 课挂 3 个 KC 的实证）。这里按 stageNumber 取当前阶段的负荷档位注入。
@@ -617,7 +674,7 @@ async function enrichLearningPathWithAndersonInner(
           stages: allMilestones.map((m) => ({
             stageNumber: m.stageNumber,
             title: m.title,
-            estimatedHours: m.estimatedHours || null,
+            // 2026-11-24：不向任务设计暴露每阶段学时；阶段位次/分工/概念边界足够。
             // 阶段概念边界（2026-11-20）：task-design 需要知道后序阶段解锁了哪些概念，
             // 才能把“不得把后序概念写进本阶段验收”落到概念名而不是只靠标题猜。
             coreConceptName: (m as any).coreConceptName
@@ -1202,13 +1259,58 @@ async function enrichLearningPathWithAndersonInner(
       };
       let stageKc: KcAnnotation | null = null;
       try {
-        const kcResult = await executeSkillWithResult(kcMapperDefinition, {
-          cognitiveCore: parsedTemplate?.cognitiveCore || parsedTemplate?.cognitiveDesign || null,
-          milestones: kcParams.milestones,
-          subtasks: kcParams.subtasks,
-          prerequisiteTree: parsedTemplate?.cognitiveCore?.prerequisiteTree
+        // 2026-11-24：渐进式只把**当前阶段**的 cognitiveCore/milestones 交给 KC 映射。
+        // 此前传全路径 cognitiveCore + 全部 milestones，但 subtasks 只有当前阶段 ⇒ 模型被迫给
+        // 未来概念造 KC，又受「不得留孤岛」约束，只能硬挂到当前任务上（KC 跨阶段偷跑）。
+        const currentStageNumbers = new Set(stageDesignOutputs.map((s) => s.stageNumber));
+        const currentMilestones = kcParams.milestones.filter((m) => currentStageNumbers.has(m.stageNumber));
+        const referencedConcepts = new Set<string>();
+        for (const milestone of currentMilestones) {
+          if (milestone.coreConcept) referencedConcepts.add(String(milestone.coreConcept));
+        }
+        for (const task of kcParams.subtasks) {
+          if (task.linkedConcept) referencedConcepts.add(String(task.linkedConcept));
+        }
+        const fullCore = parsedTemplate?.cognitiveCore || parsedTemplate?.cognitiveDesign || null;
+        const scopedConcepts = Array.isArray(fullCore?.coreConcepts)
+          ? fullCore!.coreConcepts.filter((concept: any) => (
+              referencedConcepts.has(String(concept?.id ?? '')) || referencedConcepts.has(String(concept?.name ?? ''))
+            ))
+          : [];
+        const scopedCore = fullCore
+          ? { ...fullCore, coreConcepts: scopedConcepts.length ? scopedConcepts : fullCore.coreConcepts }
+          : null;
+        if (fullCore && !scopedConcepts.length) {
+          logger.warn('[stage-enrichment] 渐进 KC 映射未匹配到当前阶段概念，回退全量 coreConcepts', {
+            pathId,
+            stageNumbers: [...currentStageNumbers],
+            referenced: [...referencedConcepts].slice(0, 8),
+          });
+        }
+        // 2026-11-24 KC 跨阶段偷跑第二刀：prerequisiteTree 仍是**全路径**的，而 kc-mapping
+        // 规则要求「unknownConcepts 每个前置概念都必须有完整 KC」——于是阶段 1 被迫给后序阶段
+        // 的「巩固/提取」造 KC，再硬挂到当前任务上（l01 实证：阶段 1 第 3 课挂 kc-2h）。
+        // 只保留本阶段文本里真实出现的前置概念；一个都没命中就整棵不发（该输入本就是可选的）。
+        const stageScopeText = [
+          ...currentMilestones.flatMap((m: any) => [m.title, m.description, m.goal]),
+          ...kcParams.subtasks.flatMap((t: any) => [t.title]),
+          ...stageDesignOutputs.flatMap((s) => s.subtasks.flatMap((t: any) => [
+            t.title,
+            t.description,
+            t.acceptanceHint,
+          ])),
+        ].map((part) => String(part || '')).join(' ');
+        const scopedPrerequisiteTree = scopePrerequisiteTreeToStage(
+          parsedTemplate?.cognitiveCore?.prerequisiteTree
             || parsedTemplate?.cognitiveDesign?.prerequisiteTree
             || null,
+          stageScopeText,
+        );
+        const kcResult = await executeSkillWithResult(kcMapperDefinition, {
+          cognitiveCore: scopedCore,
+          milestones: currentMilestones,
+          subtasks: kcParams.subtasks,
+          prerequisiteTree: scopedPrerequisiteTree,
         });
         stageKc = kcResult?.success && kcResult?.output ? kcResult.output : null;
       } catch (kcError) {

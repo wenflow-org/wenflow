@@ -46,7 +46,7 @@ describe('session-evaluation-aggregate：确定性聚合（纯函数、可重放
   it('公式版本随返回值带出', () => {
     const result = aggregateSessionEvaluation([allHigh()]);
     expect(result.formulaVersion).toBe(FORMULA_VERSION);
-    expect(FORMULA_VERSION).toBe('session-eval-det-v1');
+    expect(FORMULA_VERSION).toBe('session-eval-det-v2');
   });
 
   it('全 high：压力/疲劳高、知识获得质量低', () => {
@@ -271,5 +271,57 @@ describe('session-evaluation-aggregate：影子双写载荷', () => {
     expect(shadow.llm?.tiers).toEqual({ sessionLss: null, sessionKtl: null, sessionLf: null });
     expect(shadow.llm?.tierRanges).toEqual({ sessionLss: null, sessionKtl: null, sessionLf: null });
     expect(shadow.delta).not.toBeNull();
+  });
+});
+
+describe('P1-1 影子硬事件腿（checkpoint 独立通过率校准 KTL）', () => {
+  const hard = (over: Partial<{
+    checkpointSamples: number;
+    independentPasses: number;
+    firstAttemptPasses: number;
+    attempts: number;
+    contractMet: boolean;
+  }> = {}) => ({
+    checkpointSamples: 2,
+    independentPasses: 2,
+    firstAttemptPasses: 1,
+    attempts: 3,
+    ...over,
+  });
+
+  it('独立通过率会拉动 KTL，并记录 hardSignals 与诊断方法', () => {
+    const baseline = aggregateSessionEvaluation([allLow()]);
+    const calibrated = aggregateSessionEvaluation([allLow()], hard({ independentPasses: 0 }));
+    expect(calibrated.ktl).toBeLessThan(baseline.ktl);
+    expect(calibrated.hardSignals).toEqual(hard({ independentPasses: 0 }));
+    expect(calibrated.diagnostics.ktl.method).toContain('hard-events');
+  });
+
+  it('全部独立通过 → KTL 向 10 拉，不会被硬事件压低', () => {
+    const baseline = aggregateSessionEvaluation([allLow()]);
+    const calibrated = aggregateSessionEvaluation([allLow()], hard());
+    expect(calibrated.ktl).toBeGreaterThanOrEqual(baseline.ktl);
+  });
+
+  it('逐轮 KTL 完全缺失时，硬事件可以单独给出 KTL（method=hard-events）', () => {
+    const result = aggregateSessionEvaluation([obs({ loadIndex: 0.5 })], hard());
+    expect(result.ktl).toBe(10);
+    expect(result.diagnostics.ktl.method).toBe('hard-events');
+  });
+
+  it('无 checkpoint 样本 → 不启用硬事件腿', () => {
+    const result = aggregateSessionEvaluation([allLow()], hard({ checkpointSamples: 0 }));
+    expect(result.hardSignals).toBeUndefined();
+    expect(result.diagnostics.ktl.method).not.toContain('hard-events');
+  });
+
+  it('影子载荷携带 hardSignals（供后续 |Δ| 分布观测）', () => {
+    const deterministic = aggregateSessionEvaluation([allLow()], hard());
+    const shadow = buildSessionEvaluationShadow({
+      llm: { sessionLss: 5, sessionKtl: 5, sessionLf: 5, confidence: 0.5 },
+      deterministic,
+      recordedAt: '2026-11-23T00:00:00.000Z',
+    });
+    expect(shadow.deterministic.hardSignals).toEqual(hard());
   });
 });

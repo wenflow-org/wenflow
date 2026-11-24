@@ -58,8 +58,9 @@ describe('path-planning payload snapshot parity', () => {
     expect(payload).toContain('原始学习目标：零基础想学 Python 数据分析，用于财务工作')
     expect(payload).toContain('学习主题：')
     expect(payload).toContain('目标水平：beginner')
-    expect(payload).toContain('可用时间：每周 5 小时')
-    expect(payload).toContain('总学习周期（周）：8')
+    // 2026-11-24 时间降维：总可投入时间/总周期不再进入生成提示词（只保留单次坐姿与截止日）。
+    expect(payload).not.toContain('可用时间：每周 5 小时')
+    expect(payload).not.toContain('总学习周期（周）：8')
     expect(payload).toContain('用户确认的方案轮廓')
     expect(payload).toContain('学习方向：面向财务的数据分析入门')
     expect(payload).toContain('首个产出：一份财报数据分析')

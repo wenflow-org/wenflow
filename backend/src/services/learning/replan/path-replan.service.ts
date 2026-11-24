@@ -291,7 +291,7 @@ async function redesignMilestoneTasks(
       coreConcept: milestone.coreConceptId || null,
       description: milestone.description || null,
       goal: milestone.goal || null,
-      estimatedHours: milestone.estimatedHours || null,
+      // 2026-11-24 时间降维：任务设计输入不再暴露学时；重排规模仍由 replanHints 决定。
     },
     ...(previousMilestone ? {
       previousMilestone: {

@@ -3,6 +3,7 @@ import path from 'path';
 import {
   classifyDocumentExtension,
   evaluateTextLayer,
+  gatePageCountForFormat,
   getDocumentExt,
   parseDocument,
 } from '../document-parser';
@@ -69,6 +70,24 @@ describe('evaluateTextLayer · 文本层闸门', () => {
   });
 });
 
+describe('gatePageCountForFormat · 页均闸门格式分档（2026-11-22 切口 A）', () => {
+  it('PDF 保留页均口径：真实页数交给页均闸门（扫描件误判主战场）', () => {
+    expect(gatePageCountForFormat({ ext: '.pdf', pageCount: 8, slideCount: 0, sheetCount: 0 })).toBe(8);
+    expect(gatePageCountForFormat({ ext: '.PDF', pageCount: 3, slideCount: 0, sheetCount: 0 })).toBe(3);
+  });
+
+  it('pptx 不再拿「页均」卡：教学课件一页常只有标题+短要点，页均 40~80 字是合法形态', () => {
+    // 幻灯片数不参与闸门——此前 2500 字/30 页的正常课件会被 100/页误判为扫描件拒收
+    expect(gatePageCountForFormat({ ext: '.pptx', pageCount: null, slideCount: 30, sheetCount: 0 })).toBeNull();
+    expect(gatePageCountForFormat({ ext: '.xlsx', pageCount: null, slideCount: 0, sheetCount: 12 })).toBeNull();
+  });
+
+  it('非 PDF 的 pageCount（解析器异常兜底）同样不进页均闸门', () => {
+    expect(gatePageCountForFormat({ ext: '.docx', pageCount: 5, slideCount: 0, sheetCount: 0 })).toBeNull();
+    expect(gatePageCountForFormat({ ext: '.pdf', pageCount: null, slideCount: 0, sheetCount: 0 })).toBeNull();
+  });
+});
+
 describe('parseDocument', () => {
   it('legacy .doc 直接拒收，并给出可展示的中文原因', async () => {
     const result = await parseDocument(Buffer.from('dummy'), '旧文档.doc');
@@ -97,6 +116,15 @@ describe('parseDocument', () => {
     const result = await parseDocument(Buffer.from('   ', 'utf-8'), '空.md');
     expect(result.status).toBe('rejected');
     expect(result.rejectReason).toBe('empty_document');
+  });
+
+  it('txt 超长截断必须留 warning（此前 txt/md 静默截断，与 office 路径不一致）', async () => {
+    const text = '内容段落，用于撑满截断上限。'.repeat(40_000); // ≈ 56 万字 > 400K
+    const result = await parseDocument(Buffer.from(text, 'utf-8'), '长笔记.txt');
+    expect(result.status).toBe('ok');
+    expect(result.charCount).toBe(text.length);
+    expect(result.markdown.length).toBe(400_000);
+    expect(result.warnings).toContain('内容过长，已截断存储');
   });
 
   it('Markdown：从 ATX 标题建章节锚点，正文预览跳过网页样板', async () => {

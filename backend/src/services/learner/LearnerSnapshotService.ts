@@ -11,8 +11,11 @@ import type {
   LearnerTeachingHints,
 } from '../../agents/profile-learner-model-agent/types';
 import { learnerKnowledgeMemoryService } from './LearnerKnowledgeMemoryService';
+import { loadRecentDistressSignal } from './distress-signal';
 // 相对量判据（ACWR/form）单一真理源——把"疲劳/节奏/可加速"从绝对阈值迁到尺度无关的判据上。
-import { classifyLoad } from '../learning/learning-load-verdict';
+import { classifyLoad, LOAD_VERDICT_THRESHOLDS } from '../learning/learning-load-verdict';
+// 会话 LSS 高压门槛的唯一来源（mid 的中点=6 不是高压，见 session-evaluation-scale）。
+import { SESSION_LSS_HIGH_THRESHOLD } from '../learning/session-evaluation-scale';
 
 export interface LearnerSnapshotScopeInput {
   userId: string;
@@ -74,6 +77,13 @@ export function deriveLearningControlState(input: {
    * 全局聚合管节奏/疲劳，路径级管单课难易 —— 分母（同一路径的基线）对了，难易判断才有意义。
    */
   lessonMetrics?: { lss: number; ktl: number; lf: number; lsb: number };
+  /**
+   * P0-2 控制面硬信号：近 72h 存在主动弃课/崩溃事件（由 distress-signal 读取并过滤窗口）。
+   * 它强制 paceMode=recover，**不参与**任何分数计算。
+   */
+  distressRecover?: boolean;
+  /** 触发事件时间；仅用于快照/运营可见性，不参与判定 */
+  distressRecoverAt?: Date | string | null;
 }): LearnerLearningControlState {
   const { dynamicState, knowledgeMemory } = input;
   const lesson = input.lessonMetrics ?? dynamicState.metrics;
@@ -90,22 +100,51 @@ export function deriveLearningControlState(input: {
   // 那是"正在建立适应"，不是失衡（旧模型播种 ktl/lf 掩盖了这一点）。
   const lessonVerdict = classifyLoad({ ktl: lesson.ktl, lf: lesson.lf });
   const globalVerdict = classifyLoad({ ktl: dynamicState.metrics.ktl, lf: dynamicState.metrics.lf });
-  const overloaded = lessonVerdict.fatigueRisk === 'high' || lessonVerdict.imbalanced;
+  // 2026-11-23 复核：全局疲劳是学习者级信号，不能被「本路径这节还轻松」掩盖——并入 recover 判定
+  // （与 TaskDifficultyAdjustmentService 的 fatigue_high 降档理由同口径）。
+  const overloaded = lessonVerdict.fatigueRisk === 'high'
+    || lessonVerdict.imbalanced
+    || dynamicState.fatigueRisk === 'high'
+    || globalVerdict.fatigueRisk === 'high';
 
   // 单课压力大 → 课内降档/加支架。
   // LSS 是**会话级**量：只有拿到了"本节课所在路径"的状态时才成立；
   // 该路径还没有历史时不借用别的路径的单课压力（跨路径污染），只保留全局疲劳这一路信号。
-  const lessonStress = Boolean(input.lessonMetrics) && lss >= 6;
+  // 2026-11-23 复核：门槛不能用 6——sessionLss 档位化后 mid 的中点恰好=6，而 mid 的定义是
+  // 「有明显吃力和停顿但引导下仍能推进」（良性困难）；用 >=6 会让一节健康课把下一节锁进 recover。
+  // 只认 high 档（8-10），门槛取 SESSION_LSS_HIGH_THRESHOLD（7.5）。
+  const lessonStress = Boolean(input.lessonMetrics) && lss >= SESSION_LSS_HIGH_THRESHOLD;
 
-  const paceMode: LearnerLearningControlState['paceMode'] = overloaded || lessonStress
+  // 2026-11-23 复核（push 出口的导数陷阱）：只用 recentTrend='improving'（斜率）会把
+  // 「一直稳在高位」的学习者永久锁在 steady——高位平线必然是 stable，只有「先砸再反弹」才 improving。
+  // 升档资格改为「趋势不降 + 恢复良好 + 基座成熟且够厚」。
+  // 「够厚」不能只看 ktl≥6：PMC 日负荷刻度下 ktl 稳态≈日均负荷（单节课/天约 2.5），
+  // 旧标定的绝对 6 几乎不可达。故补一条与刻度无关的掌握证据（≥2 个已掌握概念，
+  // 与 accelerate 闸门同源）——真正的「高位学霸」必然有学成产出。
+  const masteredEvidenceCount = (knowledgeMemory.globalSignals.masteredConcepts || []).length;
+  const stableHighPerformer = dynamicState.recentTrend === 'stable'
+    && globalVerdict.mature
+    && globalVerdict.recovered
+    && (dynamicState.metrics.ktl >= LOAD_VERDICT_THRESHOLDS.minKtlForAccelerate
+      || masteredEvidenceCount >= MIN_MASTERED_FOR_ACCELERATE);
+  const pushEligible = lessonVerdict.recovered
+    && lss <= 4
+    && (dynamicState.recentTrend === 'improving' || stableHighPerformer);
+
+  const distressRecover = input.distressRecover === true;
+  const distressAt = input.distressRecoverAt ? new Date(input.distressRecoverAt) : null;
+  const distressRecoverAt = distressAt && Number.isFinite(distressAt.getTime())
+    ? distressAt.toISOString()
+    : undefined;
+  const paceMode: LearnerLearningControlState['paceMode'] = distressRecover || overloaded || lessonStress
     ? 'recover'
-    : dynamicState.recentTrend === 'improving' && lessonVerdict.recovered && lss <= 4
+    : pushEligible
       ? 'push'
       : 'steady';
 
-  const conceptLoad: LearnerLearningControlState['conceptLoad'] = overloaded || lessonStress
+  const conceptLoad: LearnerLearningControlState['conceptLoad'] = distressRecover || overloaded || lessonStress
     ? 'low'
-    : dynamicState.recentTrend === 'improving' && globalVerdict.recovered && prerequisiteGapCount === 0
+    : pushEligible && globalVerdict.recovered && prerequisiteGapCount === 0
       ? 'high'
       : 'medium';
 
@@ -115,11 +154,15 @@ export function deriveLearningControlState(input: {
       ? 'medium'
       : 'low';
 
-  const checkpointNeed: LearnerLearningControlState['checkpointNeed'] = dynamicState.recentTrend === 'declining' || severeStrugglingCount > 0 || strugglingCount > 1
-    ? 'high'
-    : paceMode === 'push'
-      ? 'low'
-      : 'medium';
+  // 2026-11-23 复核：recover 期需要低压力巩固与脚手架，不是高频考测——checkpointNeed 降为 low。
+  // 契约闸门（缺独立证据强制出题）仍由代码控制、不受本字段影响；本条只消除「recover 却催考」的语义矛盾。
+  const checkpointNeed: LearnerLearningControlState['checkpointNeed'] = paceMode === 'recover'
+    ? 'low'
+    : dynamicState.recentTrend === 'declining' || severeStrugglingCount > 0 || strugglingCount > 1
+      ? 'high'
+      : paceMode === 'push'
+        ? 'low'
+        : 'medium';
 
   return {
     paceMode,
@@ -127,9 +170,19 @@ export function deriveLearningControlState(input: {
     reviewPriority,
     challengeLevelCap: paceMode === 'recover' ? 'low' : paceMode === 'push' ? 'high' : 'medium',
     checkpointNeed,
+    // 语义边界（2026-11-23）：仅表示「优先巩固旧知、放低新概念密度」，不是「禁止覆盖本课
+    // 契约必需内容」。目前无运行时读者（prompt 只读 reviewPriority/challengeLevelCap/paceMode），
+    // 不得据此跳过新任务的核心 KC。
     shouldAvoidNewConcepts: conceptLoad === 'low',
     shouldPreferConsolidation: reviewPriority === 'high',
-    shouldOfferBreak: lessonVerdict.fatigueRisk === 'high' || dynamicState.fatigueRisk === 'high',
+    ...(distressRecover
+      ? {
+          controlFlags: {
+            distressRecover: true,
+            ...(distressRecoverAt ? { distressRecoverAt } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -446,10 +499,13 @@ export class LearnerSnapshotService {
       ...knowledgeMemory,
       ...(currentPath ? { currentPath } : {}),
     };
+    const recentDistress = await loadRecentDistressSignal(input.userId);
     const learningControlState = deriveLearningControlState({
       dynamicState,
       knowledgeMemory: finalKnowledgeMemory,
       lessonMetrics,
+      distressRecover: Boolean(recentDistress),
+      distressRecoverAt: recentDistress?.occurredAt ?? null,
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,
@@ -576,10 +632,13 @@ export class LearnerSnapshotService {
       ...knowledgeMemory,
       ...(currentPath ? { currentPath } : {}),
     };
+    const recentDistress = await loadRecentDistressSignal(input.userId);
     const learningControlState = deriveLearningControlState({
       dynamicState,
       knowledgeMemory: finalKnowledgeMemory,
       lessonMetrics,
+      distressRecover: Boolean(recentDistress),
+      distressRecoverAt: recentDistress?.occurredAt ?? null,
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,

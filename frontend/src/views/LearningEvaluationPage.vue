@@ -172,9 +172,17 @@
 
         <section id="sec-transcript" class="evaluation-transcript-card">
           <div class="evaluation-transcript-card__head">
-            <div>
+            <div class="evaluation-transcript-card__intro">
               <p class="evaluation-transcript-card__kicker">本次学习</p>
-              <h2>当堂对话</h2>
+              <h2>课堂回看</h2>
+              <p v-if="transcriptEntries.length" class="evaluation-transcript-card__sub">
+                按时间顺序完整回放老师讲解、你的作答、白板更新与小测。
+              </p>
+              <div v-if="transcriptEntries.length" class="evaluation-transcript-card__stats">
+                <span>{{ transcriptTotalCount }} 条对话</span>
+                <span v-if="transcriptBoardCount">白板更新 {{ transcriptBoardCount }} 次</span>
+                <span v-if="transcriptCheckpointCount">小测 {{ transcriptCheckpointCount }} 道</span>
+              </div>
             </div>
             <!-- 折叠触发器进卡头（2026-11-06 走查）：原来卡头是一颗静态「56 条记录」胶囊，
                  卡片里又单摆一根 100% 满宽、亮蓝描边的长条按钮——比页面任何按钮都抢戏，
@@ -200,6 +208,10 @@
 
           <div v-if="transcriptEntries.length" class="evaluation-transcript-list">
             <template v-for="(entry, index) in visibleTranscriptEntries" :key="entry.key">
+              <div v-if="entry.stage" class="evaluation-transcript-stage">
+                <span class="evaluation-transcript-stage__dot" aria-hidden="true"></span>
+                <span class="evaluation-transcript-stage__label">{{ entry.stage }}</span>
+              </div>
               <article
                 v-if="entry.kind === 'message'"
                 class="evaluation-transcript-item"
@@ -209,40 +221,54 @@
                 ]"
                 :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
               >
-                <div class="evaluation-transcript-item__meta">
-                  <strong>{{ entry.message.peer === true ? (entry.message.role === 'user' ? '你 · 伴学' : '伴学') : getMessageRoleLabel(entry.message.role) }}</strong>
-                  <span v-if="entry.message.timestamp">{{ formatMessageTime(entry.message.timestamp) }}</span>
-                </div>
-                <div class="evaluation-transcript-item__body">
-                  <MarkdownRenderer :content="entry.message.content" />
-                  <!-- 2026-11-04 走查：当堂对话此前只回放文字，课堂里老师真出过的结构图
-                       （mermaid）与白板图（figure）全部丢失——回看时讲解引用「图里/左栏」
-                       同样找不到所指。与学习页同款双通道内联渲染。 -->
-                  <TeachingDiagram
-                    v-for="(d, di) in (entry.message.diagrams || [])"
-                    :key="'d' + index + '-' + di"
-                    :code="d.code"
-                    :caption="d.caption"
-                  />
-                  <TeachingFigure
-                    v-for="(f, fi) in (entry.message.figures || [])"
-                    :key="'f' + index + '-' + fi"
-                    :figure="f"
-                  />
-                </div>
-                <!-- 伴学插话（2026-11-20 走查）：课堂里伴学会在老师回合旁插一句，
-                     存成 assistant.peerMessage；当堂对话此前只回放老师主文，回看时这段互动直接消失。 -->
-                <aside
-                  v-if="entry.message.peerMessage && entry.message.peer !== true"
-                  class="evaluation-transcript-peer"
-                >
-                  <div class="evaluation-transcript-peer__meta">
-                    <strong>伴学</strong>
+                <div
+                  class="evaluation-transcript-avatar"
+                  :class="[
+                    `evaluation-transcript-avatar--${entry.message.role}`,
+                    { 'evaluation-transcript-avatar--peer': entry.message.peer === true }
+                  ]"
+                  aria-hidden="true"
+                >{{ entry.message.peer === true ? '伴' : entry.message.role === 'assistant' ? '师' : '你' }}</div>
+                <div class="evaluation-transcript-item__main">
+                  <div class="evaluation-transcript-item__meta">
+                    <strong>{{ entry.message.peer === true ? (entry.message.role === 'user' ? '你 · 伴学' : '伴学') : getMessageRoleLabel(entry.message.role) }}</strong>
+                    <span v-if="entry.message.timestamp">{{ formatMessageTime(entry.message.timestamp) }}</span>
                   </div>
-                  <div class="evaluation-transcript-peer__body">
-                    <MarkdownRenderer :content="entry.message.peerMessage" />
+                  <div class="evaluation-transcript-item__body">
+                    <MarkdownRenderer :content="entry.message.content" />
+                    <!-- 2026-11-04 走查：当堂对话此前只回放文字，课堂里老师真出过的结构图
+                         （mermaid）与白板图（figure）全部丢失——回看时讲解引用「图里/左栏」
+                         同样找不到所指。与学习页同款双通道内联渲染。 -->
+                    <TeachingDiagram
+                      v-for="(d, di) in (entry.message.diagrams || [])"
+                      :key="'d' + index + '-' + di"
+                      :code="d.code"
+                      :caption="d.caption"
+                    />
+                    <div v-if="entry.message.figures?.length" class="evaluation-transcript-board-label">
+                      <span>白板更新</span>
+                      <span>课堂里这一轮摆出的图</span>
+                    </div>
+                    <TeachingFigure
+                      v-for="(f, fi) in (entry.message.figures || [])"
+                      :key="'f' + index + '-' + fi"
+                      :figure="f"
+                    />
                   </div>
-                </aside>
+                  <!-- 伴学插话（2026-11-20 走查）：课堂里伴学会在老师回合旁插一句，
+                       存成 assistant.peerMessage；当堂对话此前只回放老师主文，回看时这段互动直接消失。 -->
+                  <aside
+                    v-if="entry.message.peerMessage && entry.message.peer !== true"
+                    class="evaluation-transcript-peer"
+                  >
+                    <div class="evaluation-transcript-peer__meta">
+                      <strong>伴学</strong>
+                    </div>
+                    <div class="evaluation-transcript-peer__body">
+                      <MarkdownRenderer :content="entry.message.peerMessage" />
+                    </div>
+                  </aside>
+                </div>
               </article>
               <!-- 小测回放卡（2026-11-04 走查）：题面/选项/学生选择/对错都在
                    teachingState.checkpointHistory（服务端已剥答案键），此前评估页完全不回放。
@@ -252,30 +278,33 @@
                 class="evaluation-transcript-item evaluation-transcript-item--checkpoint"
                 :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
               >
-                <div class="evaluation-transcript-item__meta">
-                  <strong>小测</strong>
-                  <span v-if="entry.checkpoint.submittedAt">{{ formatMessageTime(entry.checkpoint.submittedAt) }}</span>
-                </div>
-                <div class="evaluation-transcript-checkpoint">
-                  <p class="evaluation-transcript-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title }}</p>
-                  <ul v-if="entry.checkpoint.options && entry.checkpoint.options.length" class="evaluation-transcript-checkpoint__options">
-                    <li
-                      v-for="opt in entry.checkpoint.options"
-                      :key="opt.id"
-                      class="evaluation-transcript-checkpoint__opt"
-                      :class="{ 'is-picked': (entry.checkpoint.selectedOptionIds || []).includes(opt.id) }"
+                <div class="evaluation-transcript-avatar evaluation-transcript-avatar--checkpoint" aria-hidden="true">题</div>
+                <div class="evaluation-transcript-item__main">
+                  <div class="evaluation-transcript-item__meta">
+                    <strong>小测</strong>
+                    <span v-if="entry.checkpoint.submittedAt">{{ formatMessageTime(entry.checkpoint.submittedAt) }}</span>
+                  </div>
+                  <div class="evaluation-transcript-checkpoint">
+                    <p class="evaluation-transcript-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title }}</p>
+                    <ul v-if="entry.checkpoint.options && entry.checkpoint.options.length" class="evaluation-transcript-checkpoint__options">
+                      <li
+                        v-for="opt in entry.checkpoint.options"
+                        :key="opt.id"
+                        class="evaluation-transcript-checkpoint__opt"
+                        :class="{ 'is-picked': (entry.checkpoint.selectedOptionIds || []).includes(opt.id) }"
+                      >
+                        <span class="evaluation-transcript-checkpoint__opt-id">{{ opt.id }}</span>
+                        <span class="evaluation-transcript-checkpoint__opt-text">{{ opt.text }}</span>
+                      </li>
+                    </ul>
+                    <p
+                      v-if="typeof entry.checkpoint.passed === 'boolean'"
+                      class="evaluation-transcript-checkpoint__verdict"
+                      :class="entry.checkpoint.passed ? 'is-pass' : 'is-fail'"
                     >
-                      <span class="evaluation-transcript-checkpoint__opt-id">{{ opt.id }}</span>
-                      <span class="evaluation-transcript-checkpoint__opt-text">{{ opt.text }}</span>
-                    </li>
-                  </ul>
-                  <p
-                    v-if="typeof entry.checkpoint.passed === 'boolean'"
-                    class="evaluation-transcript-checkpoint__verdict"
-                    :class="entry.checkpoint.passed ? 'is-pass' : 'is-fail'"
-                  >
-                    {{ entry.checkpoint.passed ? '通过' : '未通过' }}
-                  </p>
+                      {{ entry.checkpoint.passed ? '通过' : '未通过' }}
+                    </p>
+                  </div>
                 </div>
               </article>
             </template>
@@ -449,8 +478,8 @@ const transcriptCheckpoints = computed<TranscriptCheckpoint[]>(() => {
 });
 
 type TranscriptEntry =
-  | { kind: 'message'; key: string; ts: number; message: (typeof mainDialogueMessages.value)[number] }
-  | { kind: 'checkpoint'; key: string; ts: number; checkpoint: TranscriptCheckpoint };
+  | { kind: 'message'; key: string; ts: number; stage?: string; message: (typeof mainDialogueMessages.value)[number] }
+  | { kind: 'checkpoint'; key: string; ts: number; stage?: string; checkpoint: TranscriptCheckpoint };
 
 const toTs = (value: unknown): number => {
   const t = typeof value === 'string' ? Date.parse(value) : NaN;
@@ -553,18 +582,41 @@ const transcriptEntries = computed<TranscriptEntry[]>(() => {
     merged.push(entry);
   }
   merged.push(...fallbackEntries.slice(fallbackCursor));
-  return merged;
+
+  /* 课堂回看的阶段锚点（2026-11-24）：回放此前只有一条条消息，读起来像聊天记录导出；
+     这里给「开场 / 白板出现 / 检查点 / 收束」四个真实节点加分隔，和课堂页的节奏对齐。
+     只标第一次出现的位置，不按每条消息重复；没有对应节点时自然不出现。 */
+  const stageAt = new Map<number, string>();
+  if (merged.length) stageAt.set(0, '开场');
+  const firstVisual = merged.findIndex((entry) => entry.kind === 'message'
+    && ((entry.message.figures?.length || 0) > 0 || (entry.message.diagrams?.length || 0) > 0));
+  if (firstVisual > 0) stageAt.set(firstVisual, '白板出现');
+  const firstCheckpoint = merged.findIndex((entry) => entry.kind === 'checkpoint');
+  if (firstCheckpoint > 0) stageAt.set(firstCheckpoint, '课堂检查点');
+  const lastIndex = merged.length - 1;
+  if (lastIndex > 0 && merged[lastIndex].kind === 'message') stageAt.set(lastIndex, '收束');
+
+  return merged.map((entry, index) => (
+    stageAt.has(index) ? { ...entry, stage: stageAt.get(index) } : entry
+  ));
 });
 /* 计数同源（2026-11-06 修 bug）：卡头此前报 mainDialogueMessages.length（只有 user/assistant
    消息），而展开按钮报 transcriptEntries.length - 2（消息 + 小测回放卡），于是出现过
    「47 条消息 / 展开更早的 54 条」这种总数小于分项的自相矛盾。现在两边都读 transcriptEntries，
    卡头也就是这一条时间线的总条数。 */
 const transcriptTotalCount = computed(() => transcriptEntries.value.length);
+/** 回看卡头的两个真实读数：白板只在版本变化时计一次（transcriptEntries 已去重），
+    小测按时间线里的回放卡计。不用消息总数去凑。 */
+const transcriptBoardCount = computed(() => transcriptEntries.value.filter((entry) => (
+  entry.kind === 'message'
+  && ((entry.message.figures?.length || 0) > 0 || (entry.message.diagrams?.length || 0) > 0)
+)).length);
+const transcriptCheckpointCount = computed(() => transcriptEntries.value.filter((entry) => entry.kind === 'checkpoint').length);
 const visibleTranscriptEntries = computed(() => (
   transcriptExpanded.value ? transcriptEntries.value : []
 ));
 const transcriptToggleLabel = computed(() => (
-  transcriptExpanded.value ? '收起记录' : `展开 ${transcriptTotalCount.value} 条对话`
+  transcriptExpanded.value ? '收起课堂回看' : `展开 ${transcriptTotalCount.value} 条对话`
 ));
 /** 导出前展开全部对话（返回是否临时展开，便于导出后恢复用户原本的折叠状态） */
 const expandTranscriptForExport = async () => {
@@ -1610,6 +1662,37 @@ onUnmounted(() => {
   color: var(--ink);
 }
 
+.evaluation-transcript-card__intro {
+  min-width: 0;
+}
+
+.evaluation-transcript-card__sub {
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.evaluation-transcript-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.evaluation-transcript-card__stats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--blue) 16%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  color: var(--blue-deep);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
 .evaluation-transcript-list {
   display: grid;
   /* minmax(0,1fr)（2026-11-05 UX 审计 P0）：缺省 auto 轨道按 max-content 取宽，讲解消息里的
@@ -1618,6 +1701,31 @@ onUnmounted(() => {
      表格自身的 display:block+overflow:auto 随即在容器内横向滚动而不是撑破页面。 */
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+}
+
+/* 课堂阶段锚点：只在开场/白板出现/检查点/收束四个真实节点出现，避免每条消息都加标签 */
+.evaluation-transcript-stage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 -2px 42px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.evaluation-transcript-stage__dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 10%, transparent);
+}
+
+.evaluation-transcript-stage__label {
+  font-weight: 700;
+  color: var(--blue-deep);
+  letter-spacing: 0.03em;
 }
 
 /* 折叠开关（2026-11-06 走查）：此前是卡内一根 100% 满宽、亮蓝描边的长条按钮——比页面任何
@@ -1664,34 +1772,87 @@ onUnmounted(() => {
   display: none;
 }
 
+/* 课堂回看的消息行（2026-11-24）：从「整块卡片列表」改成双人对话结构——
+   头像在气泡外、教师靠左、学生靠右；气泡本身才承载底色与描边。这样长讲解仍是
+   通栏宽度，学生短答也不会被拉成一整张卡。 */
 .evaluation-transcript-item {
-  /* 860px 上限撤除（2026-11-06 走查）：报告宽 1080、卡内可用 ~1024，AI 讲解与小测卡被
-     卡在 860 就在右侧空出近 200px（更宽的屏上接近半屏），长文读起来像贴左挤压。
-     现在讲解/小测卡吃满卡宽，只有用户气泡保留收窄（见 --user）。 */
-  max-width: 100%;
-  padding: 16px 18px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  display: grid;
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .evaluation-transcript-item--assistant {
   justify-self: start;
-  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
 }
 
 .evaluation-transcript-item--user {
   justify-self: end;
-  max-width: min(100%, 620px);
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  border-color: color-mix(in srgb, var(--blue) 22%, transparent);
+  flex-direction: row-reverse;
+  max-width: min(100%, 720px);
 }
 
-/* 伴学单独发言（peer 标记行）：和老师/学员气泡区分开，回看时能认出这是伴学说的 */
-.evaluation-transcript-item--peer {
+/* 伴学单独发言（peer 标记行）：气泡换成蓝底，头像也标“伴”，回看时能认出这是伴学说的 */
+.evaluation-transcript-item--peer .evaluation-transcript-item__main {
   background: color-mix(in srgb, var(--blue) 6%, var(--surface));
   border-color: color-mix(in srgb, var(--blue) 20%, var(--line));
+}
+
+.evaluation-transcript-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin-top: 17px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--blue) 16%, var(--line));
+}
+
+.evaluation-transcript-avatar--user {
+  color: var(--accent-ink, var(--blue-deep));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.evaluation-transcript-avatar--peer {
+  background: color-mix(in srgb, var(--blue) 7%, var(--surface));
+}
+
+.evaluation-transcript-avatar--checkpoint {
+  color: var(--green, #16a34a);
+  background: color-mix(in srgb, var(--green, #16a34a) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--green, #16a34a) 20%, var(--line));
+}
+
+.evaluation-transcript-item__main {
+  display: grid;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px 16px 16px 16px;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
+}
+
+.evaluation-transcript-item--user .evaluation-transcript-item__main {
+  border-radius: 16px 4px 16px 16px;
+  border-color: color-mix(in srgb, var(--blue) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.evaluation-transcript-item--checkpoint .evaluation-transcript-item__main {
+  border-radius: 16px;
+  border-color: color-mix(in srgb, var(--green, #16a34a) 22%, var(--line));
 }
 
 /* 伴学在老师回合里的插话：挂在老师主文下方，不另起一条对话计数 */
@@ -1752,6 +1913,25 @@ onUnmounted(() => {
   line-height: 1.8;
   color: var(--muted);
   min-width: 0; /* article 单轨 grid：子项 min-width:auto 会让表格 max-content 顶破轨道（走查 2026-11-05） */
+}
+
+/* 白板更新提示：图和正文同列，先给一个小标签再落图，和座舱/课堂页同一读法 */
+.evaluation-transcript-board-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.evaluation-transcript-board-label span:first-child {
+  font-weight: 700;
+  color: var(--blue-deep);
+}
+
+.evaluation-transcript-board-label span:last-child {
+  color: var(--faint);
 }
 
 /* 小测回放卡（只读）：高亮学生所选 + 通过/未通过判定；正确答案服务端不下发，不展示 */
@@ -1903,7 +2083,11 @@ onUnmounted(() => {
 
   .evaluation-transcript-item {
     max-width: 100%;
-    padding: 14px 14px;
+    padding: 0;
+  }
+
+  .evaluation-transcript-item__main {
+    padding: 12px 14px;
   }
 
   .evaluation-transcript-item__meta {
@@ -2147,9 +2331,20 @@ onUnmounted(() => {
 
   .evaluation-transcript-item {
     max-width: 100%;
+    padding: 0;
+    gap: 8px;
+  }
+
+  .evaluation-transcript-item__main {
     padding: 10px 12px;
-    gap: 6px;
     border-radius: 12px;
+  }
+
+  .evaluation-transcript-avatar {
+    width: 28px;
+    height: 28px;
+    margin-top: 15px;
+    font-size: 11px;
   }
 
   /* 说话人 + 时间在 390/320 下都放得下一行（≤640 的竖排是白占一行 × 每条消息） */

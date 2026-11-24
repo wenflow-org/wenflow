@@ -76,8 +76,18 @@ export interface MaterialPack {
    * 仅当未传 userId 或入库失败时为 null（此时保持旧的 sourceUrl 引用形态）。
    */
   materialId?: string | null;
+  /**
+   * 来源权威分级（2026-11-23）：upload=用户显式上传/挂载（权威锚定，任务可要求长在资料上）；
+   * web=联网采集（参考/补充，不得反客为主把学科主线绑架成资料摘要）。缺省按 sourceUrl 推断。
+   */
+  origin?: 'upload' | 'web' | null;
   /** 抓取/组装时间（ISO 8601） */
   fetchedAt: string;
+  /**
+   * 页面发布时间（ISO，可空；2026-11-23 切口④）：搜索 Provider 给了才填，
+   * 与 fetchedAt（抓取时间）严格分立——不冒充，供时效判定与来源展示。
+   */
+  publishedAt?: string | null;
   license: string | null;
   tldr: string;
   sections: MaterialSection[];

@@ -215,6 +215,55 @@ describe('条件规则接线（真实编译产物）', () => {
     expect(payload.conditionalRules).toContain('不得因为简介短就自行编造材料');
   });
 
+  it('scenario.studentLinkMaterial / linkStatus 存在时，链接规则进入载荷且键落尾部', async () => {
+    // 2026-11-23 学生贴链接通道：预抓成果与失败降级都是逐回合变化键，必须与 auxiliary 同纪律
+    // 提取到载荷尾部（留在 scenario 会打断首键 KV 前缀缓存）。
+    const { payload } = await capture({
+      ...INPUT,
+      scenario: {
+        ...INPUT.scenario,
+        studentLinkMaterial: { url: 'https://learn.microsoft.com/sql/t-sql', title: 'T-SQL 官方文档', excerpt: 'STRING_AGG 用法……' },
+      },
+    } as never);
+    expect(payload.studentLinkMaterial).toEqual({
+      url: 'https://learn.microsoft.com/sql/t-sql',
+      title: 'T-SQL 官方文档',
+      excerpt: 'STRING_AGG 用法……',
+    });
+    expect((payload.scenario as Record<string, unknown>).studentLinkMaterial).toBeUndefined();
+    expect(payload.conditionalRules).toContain('scenario.studentLinkMaterial');
+
+    const failed = await capture({
+      ...INPUT,
+      scenario: {
+        ...INPUT.scenario,
+        linkStatus: { status: 'login-required', url: 'https://mp.weixin.qq.com/s/abc' },
+      },
+    } as never);
+    expect(failed.payload.linkStatus).toEqual({ status: 'login-required', url: 'https://mp.weixin.qq.com/s/abc' });
+    expect((failed.payload.scenario as Record<string, unknown>).linkStatus).toBeUndefined();
+    expect(failed.payload.conditionalRules).toContain('scenario.linkStatus');
+  });
+
+  it('scenario.supplementStatus 存在时，诚实回执规则进入载荷且键落尾部（不进 scenario 稳定体）', async () => {
+    // 2026-11-22 切口 C：补充槽诚实回执——pending=在途承接、expired=坦白没查到。
+    // 键是逐回合变化项，必须与 supplementaryMaterial 同纪律提取到载荷尾部，
+    // 否则会打断 scenario 首键的 KV 前缀缓存。
+    const { payload } = await capture({
+      ...INPUT,
+      scenario: {
+        ...INPUT.scenario,
+        supplementStatus: { status: 'expired', topic: 'CPA 各科分值构成' },
+      },
+    } as never);
+    // 回执键落在载荷顶层（尾部），scenario 稳定体内不再携带
+    expect(payload.supplementStatus).toEqual({ status: 'expired', topic: 'CPA 各科分值构成' });
+    expect((payload.scenario as Record<string, unknown>).supplementStatus).toBeUndefined();
+    // 真实编译产物里的条件规则随输入注入（过期→必须诚实交代，不再复诺）
+    expect(payload.conditionalRules).toContain('scenario.supplementStatus');
+    expect(payload.conditionalRules).toContain('不得再次承诺');
+  });
+
   it('scenario.lessonContract 存在时，契约/支线规则进入本轮载荷', async () => {
     // 2026-11-19 全面改造：契约与支线规则的条件键必须与 buildTeachingTurnInput 的装配一致，
     // 否则规则整段被剥离，自由需求又会回到“全靠模型自觉”。

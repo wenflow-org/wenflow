@@ -97,10 +97,15 @@ export interface UserPmcSeries {
  * - `until`：把序列**延伸到该日期**（该日及之前，缺日以 0 参与）——这是**空闲回落**的关键：
  *   学习者停课后以 `asOf` 读取时，必须把"最后一节课之后到今天"的空闲日补进序列，
  *   KTL/LF 才会按 λ^d 回落（否则读到的永远是最后一节课那天的值）。缺省 = 不延伸。
- * - `seedFromFirstRow`（缺省 false）：**生产读侧应从 0 起步**——已提交行就是全量历史，
- *   从 0 重放即可还原真实 PMC（日负荷求和的累加才会真正发生）。设为 true 时用首日的旧模型值
- *   **反解**前值（stepPmc(prior,load0)==old0），仅供审计脚本做"同一前值下的增量差异"比对——
- *   它会让首日输出等于旧值，**不是**生产口径。
+ * - `seedFromFirstRow`（缺省 false）：审计脚本专用——用首日的旧模型值**反解**前值
+ *   （stepPmc(prior,load0)==old0），仅供审计脚本做"同一前值下的增量差异"比对。
+ * - `bootstrapFromFirstLoad`（生产读侧，2026-11-23）：用**首日负荷**作为慢性基线播种
+ *   （下限 PMC_BOOTSTRAP_FLOOR），而不是从 0 起步。原因（数值可达性验证实锤）：
+ *   KTL λ=0.95 与 LF λ=0.70 从 0 起步时收敛错配——一个每天 1 节常规课的学习者 40 天
+ *   ktl 只到 2.96，永远跨不过 ACWR 有效性门 ktl≥3；连肝 5 天高负荷也只有 ktl 1.54，
+ *   长时调节与恢复全是死分支。用首日负荷当基线后，比值从第 1 天就有意义，
+ *   重负荷能触发 recover、停学能回到 recovered（见 reachability-check 脚本）。
+ *   与 `seed` / `seedFromFirstRow` 互斥（优先级：seed > seedFromFirstRow > bootstrap）。
  * - `seed`（架构优化批 2b，2026-10-24）：从**滚动 checkpoint**（该日收盘态）继续重放——
  *   `dayKey` 及之前的行已被吸收进种子，必须剔除（本函数防御性再滤一次）；序列从
  *   `dayKey+1` 起铺（空日以 0 参与 = 延续空闲回落），latestLesson 回退到种子携带值。
@@ -115,9 +120,16 @@ export interface PmcReplaySeed {
   latestLessonAt?: Date | null;
 }
 
+/**
+ * 冷启动慢性基线下限（负荷单位，与 LSS 同刻度）。
+ * 取 low 档代表值 2.5（session-evaluation-scale）：低于此值的首日课不足以代表慢性负荷，
+ * 直接拿它当基线会让后续常规课被误判成"负荷陡增"。
+ */
+export const PMC_BOOTSTRAP_FLOOR = 2.5;
+
 export function replayDailyPmc(
   rows: ReadonlyArray<PmcSourceRow>,
-  options: { seedFromFirstRow?: boolean; until?: Date; seed?: PmcReplaySeed } = {},
+  options: { seedFromFirstRow?: boolean; bootstrapFromFirstLoad?: boolean; until?: Date; seed?: PmcReplaySeed } = {},
 ): UserPmcSeries {
   const byDay = new Map<string, { load: number; lessons: number; oldKtl: number; oldLf: number }>();
   // 跨家族去重（teaching-wrapup 权威行优先于 task-completion 占位行）——否则一节课被计两次，日负荷翻倍
@@ -193,6 +205,11 @@ export function replayDailyPmc(
       ktl: Math.max(0, (first.oldKtl - (1 - PMC_KTL_LAMBDA) * first.load) / PMC_KTL_LAMBDA),
       lf: Math.max(0, (first.oldLf - (1 - PMC_LF_LAMBDA) * first.load) / PMC_LF_LAMBDA),
     };
+  } else if (options.bootstrapFromFirstLoad) {
+    // 2026-11-23 可达性修复：首日负荷作为慢性基线（下限 FLOOR），避免从 0 起步的
+    // KTL/LF 收敛错配把 ACWR 调节锁死（详见函数头注释与 reachability-check 脚本）。
+    const firstLoad = Math.max(PMC_BOOTSTRAP_FLOOR, byDay.get(keys[0])!.load);
+    prior = { ktl: firstLoad, lf: firstLoad };
   }
   const pmc = replayDailySeries(series.map((s) => s.load), prior);
   const daily: DailyPmcRow[] = series.map((s) => {
@@ -243,7 +260,7 @@ export async function computeUserPmcSeries(
     select: { calculatedAt: true, lss: true, ktl: true, lf: true, sourceKey: true, taskId: true },
     orderBy: { calculatedAt: 'asc' },
   });
-  return replayDailyPmc(rows, { until: asOf });
+  return replayDailyPmc(rows, { until: asOf, bootstrapFromFirstLoad: true });
 }
 
 export const learningLoadPmcService = { replayDailyPmc, computeUserPmcSeries };

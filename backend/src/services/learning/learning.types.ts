@@ -23,28 +23,14 @@ export interface GeneratePathData {
   userProfile?: {
     skillLevel?: string;
     currentSkillLevel?: string;
-    learningStyle?: string;
     timePerDay?: string;
     learningGoal?: string;
-    cognitiveProfile?: {
-      metacognition_level?: string;
-      thinking_style?: string;
-      prior_knowledge_structure?: string;
-      confusion_pattern?: string;
-      self_assessment_accuracy?: string;
-    };
-    emotionalProfile?: {
-      motivation_trigger?: string;
-      urgency_level?: string;
-      confidence_level?: string;
-    };
     problemContext?: any;
     priorKnowledge?: any[];
     daysPerWeek?: number;
     totalWeeks?: number;
     structuredData?: any;
     confirmedProposal?: any;
-    confidenceScores?: any;
     conversationHistory?: Array<{ role: string; content: string }>;
     normalizedInput?: any;
     goalFinalPayload?: GoalToPathHandoffSnapshot;
@@ -236,6 +222,8 @@ export interface GoalToPathHandoffSnapshot {
   prerequisiteCheckResults?: Array<{ probeId?: string; targetConcept?: string; userAnswer?: string; isCorrect?: boolean }> | null;
   /** goal→path 配置式值流转字段（持久化以支持异步生成/重试/重生成） */
   goalHandoffFields?: Record<string, any> | null;
+  /** 澄清契约（2026-11-24）：重试/重生成沿用原契约，避免退回无契约旧轨 */
+  clarification?: any | null;
 }
 
 export interface PathCognitiveConcept {

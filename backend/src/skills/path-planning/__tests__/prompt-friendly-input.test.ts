@@ -150,4 +150,36 @@ describe('path-planning 输入构造：学习证据必须真正进入提示词',
     const invalid = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base, pathTopologyHint: 'builder' }));
     expect(Object.prototype.hasOwnProperty.call(invalid.normalizedInput, 'pathTopologyHint')).toBe(false);
   });
+
+  it('clarification 必须真正进入提示词（rationale 的唯一引用来源）', () => {
+    // 2026-11-24：投影白名单漏 clarification，模型被要求引用一份看不到的契约 ⇒
+    // rationale 审计连续失败（Case 2 实测）。
+    const built = asPromptFriendly(
+      buildPromptFriendlyNormalizedInput({
+        ...base,
+        clarification: {
+          core: { question: '诊断与讲解调节怎么串成一条链', evidence: ['想把诊断弄懂'] },
+          baseline: { known: ['基础一般'], unknown: [], misconceptions: [], evidence: ['自评基础一般'] },
+          stopping: {
+            kind: 'do',
+            scope: 'instance',
+            evidence: 'platform',
+            statement: '能对一条真实交互记录说出卡点来源并给出讲解改法',
+          },
+          constraints: { timePerSessionMin: 30 },
+          assumptions: [],
+          blockingNeed: 'none',
+          unknowns: [],
+        },
+      }),
+    );
+
+    const clarification = built.normalizedInput.clarification as any;
+    expect(clarification?.stopping?.statement).toBe('能对一条真实交互记录说出卡点来源并给出讲解改法');
+    expect(clarification?.constraints?.timePerSessionMin).toBe(30);
+    expect(clarification?.core?.evidence).toEqual(['想把诊断弄懂']);
+
+    const without = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base }));
+    expect(Object.prototype.hasOwnProperty.call(without.normalizedInput, 'clarification')).toBe(false);
+  });
 });

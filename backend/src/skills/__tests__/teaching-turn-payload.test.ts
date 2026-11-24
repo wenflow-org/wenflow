@@ -309,7 +309,7 @@ describe('teaching-turn interactionProfile（认知负荷量测 · 前端情报�
     }, MINIMAL_INPUT)
 
     expect(normalized.analysis.loadIndex).toBe(1)
-    expect(normalized.analysis.loadBasis).toBe('absent')
+    expect(normalized.analysis.loadBasis).toBe('semantic')
   })
 
   it('normalizeOutput keeps valid loadIndex and loadBasis from model', async () => {

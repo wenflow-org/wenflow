@@ -82,6 +82,38 @@ function teachingSessionRow(overrides: Record<string, unknown> = {}) {
       },
       sources: { summary: 'model' },
       generatedAt: '2026-08-12T15:00:00.000Z',
+      /* 2026-11-24 运营可见性：评估/落库/控制态/影子此前被 wrapupView 裁掉，这里钉住透出形状 */
+      evaluation: {
+        sessionLss: 6.2,
+        sessionKtl: 7.1,
+        sessionLf: 4.3,
+        confidence: 0.78,
+        evaluationSource: 'model',
+        metricTiers: { sessionLss: 'mid', sessionKtl: 'high', sessionLf: 'low' },
+        reasoning: '多数回合能独立完成，末段略有疲劳。',
+      },
+      stateUpdate: { lss: 6.0, ktl: 6.5, lf: 4.4, lsb: -0.2, timestamp: '2026-08-12T15:00:00.000Z' },
+      controlStateSnapshot: {
+        paceMode: 'recover',
+        challengeLevelCap: 'low',
+        conceptLoad: 'low',
+        reviewPriority: 'high',
+        checkpointNeed: 'low',
+        shouldAvoidNewConcepts: true,
+        shouldPreferConsolidation: true,
+        controlFlags: { distressRecover: true, distressRecoverAt: '2026-08-11T09:00:00.000Z' },
+      },
+      shadowDeterministic: {
+        formulaVersion: 'session-eval-det-v2',
+        recordedAt: '2026-08-12T15:00:01.000Z',
+        deterministic: {
+          lss: 6.1, ktl: 6.8, lf: 4.2, confidence: 0.72, basis: 'per-turn-observations',
+          turnCount: 6,
+          hardSignals: { checkpointSamples: 4, independentPasses: 3, firstAttemptPasses: 2, attempts: 5 },
+        },
+        llm: { lss: 6.2, ktl: 7.1, lf: 4.3, confidence: 0.78, tiers: { sessionLss: 'mid', sessionKtl: 'high', sessionLf: 'low' } },
+        delta: { lss: -0.1, ktl: -0.3, lf: -0.1 },
+      },
       extensionObservability: {
         kind: 'extension', phase: 'observation', turnCount: 3, sessionLss: 6, sessionLf: 2.5, learnedConcepts: ['作用域'],
       },
@@ -238,6 +270,20 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     expect(data.teaching.wrapup.summary.learningEvaluation).toContain('通过');
     // 延伸课观测必须透出：视图裁剪曾把它砍掉，座舱「延伸学观测」条对真实会话不可达
     expect(data.teaching.wrapup.extensionObservability).toMatchObject({ turnCount: 3, sessionLss: 6, sessionLf: 2.5 });
+    // 评估与控制态（2026-11-24）：LLM 档位/落库状态/收束控制态/影子对比都要对运营可见
+    expect(data.teaching.wrapup.evaluation).toMatchObject({
+      sessionLss: 6.2, sessionKtl: 7.1, sessionLf: 4.3, confidence: 0.78,
+    });
+    expect(data.teaching.wrapup.evaluation.tiers).toEqual({ sessionLss: 'mid', sessionKtl: 'high', sessionLf: 'low' });
+    expect(data.teaching.wrapup.stateUpdate).toMatchObject({ lss: 6, ktl: 6.5, lf: 4.4, lsb: -0.2 });
+    expect(data.teaching.wrapup.controlState).toMatchObject({
+      paceMode: 'recover', challengeLevelCap: 'low', conceptLoad: 'low', checkpointNeed: 'low',
+      controlFlags: { distressRecover: true, distressRecoverAt: '2026-08-11T09:00:00.000Z' },
+    });
+    expect(data.teaching.wrapup.shadowDeterministic.deterministic.hardSignals).toMatchObject({
+      checkpointSamples: 4, independentPasses: 3,
+    });
+    expect(data.teaching.wrapup.shadowDeterministic.delta).toEqual({ lss: -0.1, ktl: -0.3, lf: -0.1 });
     // 延伸进行中：实时回合进度从 teachingState 透出（真人延伸课座舱「延伸中」条）
     expect(data.stageResults.teaching.extensionRuntime).toEqual({ active: true, turns: 2, maxTurns: 5 });
     expect(data.teaching.extensionRuntime).toEqual({ active: true, turns: 2, maxTurns: 5 });
@@ -417,6 +463,29 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     expect(teachingEntries[2].title).toBe('学习者消息');
   });
 
+  it('侧表消息带 figures/diagrams → 控制台原样透传，座舱能回放老师当时摆的板', async () => {
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue(teachingSessionRow({ messages: null, status: 'discarded' }));
+    mockPrisma.goal_conversations.findFirst.mockResolvedValue(goalConversationRow());
+    mockPrisma.learning_paths.findUnique.mockResolvedValue(null);
+    mockPrisma.milestones.findMany.mockResolvedValue([]);
+    mockPrisma.subtasks.findUnique.mockResolvedValue(null);
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
+    const figure = { engine: 'svg', kind: 'matrix', spec: { rowLabels: ['06-16'], colLabels: ['15:00'], cells: [] } };
+    const diagram = { engine: 'mermaid', code: 'graph TD; A-->B' };
+    mockPrisma.teaching_session_messages.findMany.mockResolvedValue([
+      { id: 1, payload: JSON.stringify({ role: 'assistant', content: '片段在板上。', timestamp: '2026-08-12T14:00:05.000Z', figures: [figure], diagrams: [diagram] }) },
+    ]);
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'ts_real_1' } }, res);
+    const data = res.json.mock.calls[0][0].data;
+
+    expect(data.teaching.messages[0].figures).toEqual([figure]);
+    expect(data.teaching.messages[0].diagrams).toEqual([diagram]);
+    expect(data.conversations.learning.messages[0].figures).toEqual([figure]);
+  });
+
   // 2026-10-17：session_load 此前是「写了没人看」的死仓（全库 118 行、零运行时读取方）。
   // 控制台总结页成为它的第一个消费者；本用例钉住 API 侧的映射口径（无行 → null，不造 0）。
   it('本节课负荷聚合：有 session_load 行 → teaching.sessionLoad 带均值/峰值/依据分布/轮数', async () => {
@@ -428,7 +497,7 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
     mockPrisma.learning_metrics.findUnique.mockResolvedValue({
       value: 0.264,
-      metadata: JSON.stringify({ max: 0.4, basisDist: { semantic: 7 }, perTurnCount: 7, scale: '0-1' }),
+      metadata: JSON.stringify({ max: 0.4, basisDist: { semantic: 7 }, bandDist: { flow: 5, hint: 1, unknown: 1 }, perTurnCount: 7, scale: '0-1' }),
     });
 
     const handler = getRouteHandler('/:sessionId', 'get');
@@ -444,6 +513,7 @@ describe('GET /api/admin/session-console/:sessionId', () => {
       mean: 0.264,
       max: 0.4,
       basisDist: { semantic: 7 },
+      bandDist: { flow: 5, hint: 1, unknown: 1 },
       perTurnCount: 7,
     });
   });

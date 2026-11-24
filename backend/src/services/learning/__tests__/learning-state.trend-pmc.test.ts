@@ -25,7 +25,8 @@ describe('getStateTrendWindow：趋势与 current 同走 PMC', () => {
   it('趋势点用 PMC 重放值，而不是落库行的旧 EWMA 值', async () => {
     const service = new LearningStateService();
     const now = new Date();
-    // 落库行故意写成旧模型的高值（display 90/20/70）；PMC 从 0 重放应得到 2.5/15/-12.5。
+    // 落库行故意写成旧模型的高值（display 90/20/70）；PMC 用首日负荷(5)作慢性基线重放
+    // → 内部 ktl=lf=5 → display 50/50/0（2026-11-23 起趋势与 current 同走 bootstrap 口径）。
     const row = {
       lss: 5,
       ktl: 9,
@@ -46,10 +47,10 @@ describe('getStateTrendWindow：趋势与 current 同走 PMC', () => {
     const win = await service.getStateTrendWindow('u', { days: 7, mode: 'recent' });
     const last = win.trends[win.trends.length - 1];
 
-    expect(last.ktl).toBeCloseTo(2.5, 5);
-    expect(last.lf).toBeCloseTo(15, 5);
-    expect(last.lsb).toBeCloseTo(-12.5, 5);
-    expect(last.mature).toBe(false);
+    expect(last.ktl).toBeCloseTo(50, 5);
+    expect(last.lf).toBeCloseTo(50, 5);
+    expect(last.lsb).toBeCloseTo(0, 5);
+    expect(last.mature).toBe(true);
     // 旧口径（落库行）会把 ktl 显示成 90——回归必须拦住。
     expect(last.ktl).not.toBeCloseTo(90, 5);
   });

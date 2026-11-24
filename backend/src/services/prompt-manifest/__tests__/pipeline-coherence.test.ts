@@ -21,7 +21,7 @@ describe('teaching-turn 契约收口', () => {
   const rules = rulesOf('teaching-turn');
 
   it('看图指代只由 boardContext 决定，不再保留“文本自足是有条件的”旧分叉', () => {
-    const rule15 = rules[14];
+    const rule15 = rules[17]; // 2026-11-23 再增 2 条条件规则（studentLinkMaterial/linkStatus）→ 编号 16→18，索引 15→17
     expect(rule15).toContain('boardContext');
     expect(rule15).toContain('文本自足与看图指代');
     expect(rule15).not.toContain('文本自足是有条件的');
@@ -55,12 +55,12 @@ describe('teaching-turn 契约收口', () => {
 });
 
 describe('path-planning 里程碑口径', () => {
-  it('targetMilestones 存在时是强制值，不再是“建议值”', () => {
+  it('key_stages 不再锁定阶段数：按自然盲区收敛，不要求等值', () => {
     const rule = rulesOf('path-planning').find((r) => r.includes('里程碑数量的最终口径'));
     expect(rule).toBeTruthy();
-    expect(rule).toContain('强制值');
-    expect(rule).toContain('只有它缺失时');
-    expect(rule).not.toContain('只是**建议值**');
+    expect(rule).toContain('契约收窄');
+    expect(rule).toContain('自然收敛');
+    expect(rule).toContain('不要求等于 Goal 的 key_stages 数量');
   });
 });
 
@@ -84,10 +84,11 @@ describe('path-task-design 默认值与交付物口径', () => {
 });
 
 describe('goal-conversation 时间模型', () => {
-  it('废弃时间字段禁止输出，不再允许模型“顺手保留”', () => {
+  it('时间降维后不再输出总学时/总周数/objectiveScopeHours', () => {
     const core = readCore('goal-conversation');
     const text = JSON.stringify(core.fields || []);
-    expect(text).toContain('禁止输出');
+    expect(text).toContain('不再输出');
+    expect(text).toContain('objectiveScopeHours');
     expect(text).not.toContain('可以保留原字段名与原形态用于平台审计');
     // 旧值不由后端补算：prompt 不能再承诺一个代码里不存在的计算（2026-10-29 核查）。
     expect(text).not.toContain('后端 TypeScript 从新三元组确定性计算');

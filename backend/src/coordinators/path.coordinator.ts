@@ -17,7 +17,7 @@ import {
 import { readMaterial, readRecord, type MaterialRecord } from '../services/materials/material-store';
 import { materialRecordHasPhraseHit, selectMaterialsRanked } from '../services/materials/material-selection.service';
 import { applyMaterialRerankGate } from '../services/materials/material-rerank.service';
-import { partitionMaterialNeeds, deriveMaterialNeedsFromGoalText, mergeDeclaredAndDerivedNeeds } from '../services/materials/material-need-origin';
+import { partitionMaterialNeeds } from '../services/materials/material-need-origin';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/path-material-brief.service';
@@ -45,7 +45,7 @@ import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../servi
 import { normalizeSchoolAnchorShape, normalizeSkillNature, normalizePlatformJudgment } from '../services/learning/goal-path-visible-summary';
 import { normalizeDeadlineDate } from '../services/learning/deadline-date';
 import { isDeadlineExplicitlyUnspecified, deriveRelativeDeadline, parseAbsoluteDeadline } from '../services/learning/deadline-text';
-import { resolveCapacity } from '../services/learning/capacity-authority';
+import { resolveCapacity, clampSessionLength } from '../services/learning/capacity-authority';
 import type { MaterialNeed, MaterialPackResult } from '../skills/path-material-collect/types';
 
 const COORDINATOR_ID = 'path-agent';
@@ -219,6 +219,10 @@ interface NormalizedPathInputV1 {
     learningSignal: string | null;
     goalOrientation: string | null;
     constraintsAndBoundaries: string[];
+    /** 目标学科（2026-11-23 槽位拆分）：真正要学的学科/知识体系，下游学科锚与命名以此为准 */
+    targetDiscipline?: string | null;
+    /** 应用背景：只进例子/任务场景，不替代目标学科 */
+    applicationContext?: string | null;
   };
   problemSpace: {
     realProblem: string | null;
@@ -331,8 +335,6 @@ export interface GoalPathRequest {
    * 写进 normalizedInput.triage，由 derivePlanningHints 消费。缺失时不注入、行为不变。
    */
   triageHint?: TriageHint | null;
-  /** goal 层置信度评分（goal-conversation skill 产出；仅透传，供 path-planning 参考） */
-  confidenceScores?: any;
   /** 澄清契约（2026-11-20 Phase 2）：Goal 的第一性产物，Path 直接读它而不是身份标签 */
   clarification?: ClarificationContract | null;
   /**
@@ -420,7 +422,7 @@ class PathCoordinator {
       totalWeeks: num(raw.totalWeeks),
       estimatedHours: num(raw.estimatedHours),
       sessionsPerWeek: num(raw.sessionsPerWeek),
-      sessionsLengthMin: num(raw.sessionsLengthMin) ?? num(raw.sessionLengthMin),
+      sessionsLengthMin: clampSessionLength(num(raw.sessionsLengthMin) ?? num(raw.sessionLengthMin)),
       sessionsLengthSource: sessionSource(raw.sessionsLengthSource ?? raw.sessionLengthSource),
       totalSessions: num(raw.totalSessions),
       calendarCapacityHours: num(raw.calendarCapacityHours),
@@ -478,14 +480,19 @@ class PathCoordinator {
         // path-reviewer / path-task-design 区分「起步路径」与完整路径。
         ...(visibleSummary?.entryState ? { entryState: visibleSummary.entryState } : {}),
         ...(visibleSummary?.intentType ? { intentType: visibleSummary.intentType } : {}),
+        // 目标学科 / 应用背景（2026-11-23 槽位拆分）：学科锚与命名认 targetDiscipline，
+        // applicationContext 只做例子/场景——不再让应用背景抢学习目标的主语。
+        ...(this.normalizeString(visibleSummary?.targetDiscipline)
+          ? { targetDiscipline: this.normalizeString(visibleSummary?.targetDiscipline) }
+          : {}),
+        ...(this.normalizeString(visibleSummary?.applicationContext)
+          ? { applicationContext: this.normalizeString(visibleSummary?.applicationContext) }
+          : {}),
         // 技能性质（2026-10-26）：决定 AI 能否替学习者代跑核心动作。无值时整键不出现，
         // 下游按通用口径处理（不强制任何一档）。
         ...(normalizeSkillNature(pick('understanding.skill_nature') ?? visibleSummary?.skillNature)
           ? {
               skillNature: normalizeSkillNature(pick('understanding.skill_nature') ?? visibleSummary?.skillNature)!,
-              skillNatureEvidence: this.normalizeString(
-                str('understanding.skill_nature_evidence', visibleSummary?.skillNatureEvidence),
-              ) || null,
             }
           : {}),
         // 平台可判定性（2026-10-26 二拆）：与 skillNature 独立——决定「平台能不能判学习者做对了」。
@@ -495,17 +502,6 @@ class PathCoordinator {
               platformJudgment: normalizePlatformJudgment(
                 pick('understanding.platform_judgment') ?? visibleSummary?.platformJudgment,
               )!,
-              platformJudgmentEvidence: this.normalizeString(
-                str('understanding.platform_judgment_evidence', visibleSummary?.platformJudgmentEvidence),
-              ) || null,
-              ...(Array.isArray(pick('understanding.sensor_readouts') ?? visibleSummary?.sensorReadouts)
-                ? {
-                    sensorReadouts: (pick('understanding.sensor_readouts') ?? visibleSummary?.sensorReadouts as unknown[])
-                      .map((v: unknown) => this.normalizeString(v))
-                      .filter((v: string | null): v is string => !!v)
-                      .slice(0, 8),
-                  }
-                : {}),
             }
           : {}),
         currentBaseline: {
@@ -614,6 +610,73 @@ class PathCoordinator {
   }
 
   /**
+   * 冷采宽化（2026-11-23 带宽审计）：采集链的 LLM pack 被提示词钳在 ≤5 章节 / ≤6 要点，
+   * 而同一份资料入库后走「库优先」是由 buildPackFromMaterial 从 Markdown 标题确定性重建
+   * 的 ≤24 / ≤24——同一份资料第一次生成薄、第二次厚。这里在采集返回后立刻用同一套重建
+   * 加宽 pack，保留采集链的 status / coverage / notes（缺口诚实不被覆盖），使两条路同口径。
+   */
+  private async widenCollectedWebPacks(userId: string, results: MaterialPackResult[]): Promise<MaterialPackResult[]> {
+    if (!userId || results.length === 0) return results;
+    const widened = await Promise.all(results.map((result) => this.widenCollectedWebPack(userId, result)));
+    return widened.map((result) => this.admitCollectedWebPack(result));
+  }
+
+  /**
+   * 采集准入（2026-11-23 契约收紧）：partial 且**缺口多于已覆盖**的联网包按未命中丢弃。
+   * 判据只看采集链自己的 coverage 台账（不猜主题、不做词面匹配）：Case 1 实证——2015 单年残卷
+   * covered=2 / missing=3，连采集器自己都标了「仅单一年份、部分题型」，却仍被当成主教材撑起
+   * 5 节排表课。零星局部的 partial 不进入路径；覆盖较完整的 partial 保留（缺口由 completeness 透传）。
+   */
+  private admitCollectedWebPack(result: MaterialPackResult): MaterialPackResult {
+    if (!result?.pack || result.status !== 'partial') return result;
+    const covered = Array.isArray(result.coverage?.covered) ? result.coverage.covered.length : 0;
+    const missing = Array.isArray(result.coverage?.missing) ? result.coverage.missing.length : 0;
+    if (covered > 0 && missing > covered) {
+      return {
+        status: 'not_found',
+        pack: null,
+        provenance: [],
+        coverage: result.coverage,
+        notes: [
+          ...(result.notes || []),
+          `采集仅覆盖零星局部（covered=${covered} / missing=${missing}），按未命中丢弃，不进入路径`,
+        ],
+      };
+    }
+    return result;
+  }
+
+  private async widenCollectedWebPack(userId: string, result: MaterialPackResult): Promise<MaterialPackResult> {
+    const materialId = typeof result?.pack?.materialId === 'string' ? result.pack.materialId : '';
+    if (!materialId) return result;
+    const rebuilt = await this.buildWebRecordPackQuietly({ id: materialId, userId });
+    if (!rebuilt?.pack) return result;
+    return {
+      ...result,
+      pack: {
+        // 以入库正文重建的宽包为主体（章节/要点都是可逐字核对的原文片段）
+        ...rebuilt.pack,
+        // 采集链判定过的书目字段优先：搜索结果的书名/来源分级/发布时间比入库记录更完整
+        title: result.pack?.title || rebuilt.pack.title,
+        publisher: result.pack?.publisher ?? rebuilt.pack.publisher,
+        sourceTier: result.pack?.sourceTier ?? rebuilt.pack.sourceTier,
+        sourceUrl: result.pack?.sourceUrl || rebuilt.pack.sourceUrl,
+        publishedAt: result.pack?.publishedAt ?? rebuilt.pack.publishedAt ?? null,
+        license: result.pack?.license ?? rebuilt.pack.license,
+        tldr: result.pack?.tldr || rebuilt.pack.tldr,
+      },
+      // 引文台账跟随宽化后的要点（一一对应，逐字引文）
+      provenance: rebuilt.provenance?.length ? rebuilt.provenance : result.provenance,
+      // 覆盖缺口以采集链的 coverage.missing 为准（重建包恒为空，不能拿它冒充覆盖完整）
+      coverage: result.coverage,
+      notes: [
+        ...(result.notes || []),
+        `资料包已按入库正文重建章节树（sections=${rebuilt.pack.sections.length}，keyPoints=${rebuilt.pack.keyPoints.length}；采集摘要保留为 tldr）`,
+      ],
+    };
+  }
+
+  /**
    * 资料采集（goal→path 接线缝，最小侵入 + fail-open）：
    *   - 开关：`MATERIAL_COLLECTION_DISABLED=1` 关闭；未声明 needsMaterial 时**零调用**（连模块都不 import）；
    *   - 库优先（活的 path 批次 A）：need 对应的联网资料已在用户库（标题归一匹配）→ 直接用库打包，
@@ -704,12 +767,18 @@ class PathCoordinator {
     const controller = new AbortController();
     const startedAt = Date.now();
     try {
-      const collected = await withTimeout(
+      const collectedRaw = await withTimeout(
         collector.collectMaterialForGoal(pendingNeeds, { signal: controller.signal, userId: collectorUserId || undefined }),
         timeoutMs,
         () => controller.abort()
       );
-      const merged = [...results, ...(Array.isArray(collected) ? collected : [])];
+      // 首采与库优复用同口径（见 widenCollectedWebPacks）：否则同一份资料第一次生成只有
+      // 5 章节/6 要点，第二次却能看到 24/24——路径质量取决于缓存状态而非资料本身。
+      const collected = await this.widenCollectedWebPacks(
+        collectorUserId,
+        Array.isArray(collectedRaw) ? collectedRaw : []
+      );
+      const merged = [...results, ...collected];
       return merged.length > 0 ? merged : null;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -780,9 +849,11 @@ class PathCoordinator {
         return;
       }
       if (!Array.isArray(collected)) return;
+      // 后台回填同样宽化（与同步链路同口径）：否则异步路径回填进 template 的仍是 5 章节/6 要点。
+      const widened = await this.widenCollectedWebPacks(userId, collected);
       // not_found 也要回填：否则 pending 占位永远停在「资料采集中」，
       // 学习者与后续分析都无法区分「还在采」与「没采到」。
-      const patches = collected
+      const patches = widened
         .map((result, index) => ({ needTitle: String(needs[index]?.title || '').trim(), result }))
         .filter((patch) => patch.needTitle);
       if (patches.length === 0) {
@@ -898,47 +969,15 @@ class PathCoordinator {
 
     // goal→path 资料采集：goal 声明了 needsMaterial 才触发（缺省零调用）；采集失败 fail-open。
     // 来源优先配置式 handoff（若后续登记路由），否则 visibleSummary 白名单透传（understanding.needsMaterial）。
-    let needsMaterial = (goalFinalPayload.goalHandoffFields as any)?.['understanding.needsMaterial']
+    // 2026-11-23 契约收紧：**path 不再自行从目标文本派生采集需求**。此前
+    // deriveMaterialNeedsFromGoalText 会在 goal 明确判定「不需要资料」后，用正则+前 24 字切片
+    // 偷偷发起公网搜索（Case 2 实证：一句 learningDirection 被截成「这条路径先聚焦一件事：让模型从学」
+    // 当检索词，抓回一篇大模型训练技术文，整条教育心理学路径被绑架）。联网备课的唯一触发权威
+    // 是 goal 显式产出的 needsMaterial（或用户显式挂载的资料）；path 侧不再有第二判断。
+    const needsMaterial = (goalFinalPayload.goalHandoffFields as any)?.['understanding.needsMaterial']
       ?? (goalFinalPayload.goalHandoffFields as any)?.needsMaterial
       ?? (visibleSummary as any)?.needsMaterial
       ?? null;
-    // path 阶段「思考触发」兜底（2026-11-12 实证：goal 承诺「都是公开日志能查到的」却没登记
-    // needsMaterial → 采集整链未触发 → 路径按"真实"措辞生成而材料为空）。path 拿着全量 goal
-    // 文本，声明缺失但出现真实材料承诺/文档依赖信号时，自动派生采集需求走同一条链——
-    // 两道闸：goal 声明是主通道（有对话上下文、queries 更准、async 下与规划并行），
-    // 这里是承受交货压力的 path 自己的第二道判断。
-    // 2026-11-13 20 用户实证：goal 只声明私有材料（本人的劳动合同）时，旧链路整段跳过派生，
-    // 连带漏掉「法定上限/法规原文」这类公开依赖，路径零出处。改为始终派生，再由
-    // mergeDeclaredAndDerivedNeeds 决定是否补公开 need（已声明 public → 以 goal 为准）。
-    {
-      const finalVisible = (goalFinalPayload as any)?.finalUserVisible;
-      const keyStagesArray = (Array.isArray(finalVisible?.key_stages) && finalVisible.key_stages)
-        || (Array.isArray((visibleSummary as any)?.keyStages) && (visibleSummary as any).keyStages)
-        || null;
-      const derivedNeeds = deriveMaterialNeedsFromGoalText({
-        surfaceGoal: (goalFinalPayload as any)?.understanding?.surface_goal
-          ?? (visibleSummary as any)?.surfaceGoal
-          // 2026-11-13 u02/u03 实证：visibleSummary 缺 surfaceGoal 时落到原始诉求/确认方向，
-          // 否则语料为空、研究价值闸无从判断（租房合同/采购合同都因此零采集）。
-          ?? (goalFinalPayload as any)?.rawGoal
-          ?? (visibleSummary as any)?.confirmedProposal?.goal,
-        realProblem: (goalFinalPayload as any)?.understanding?.real_problem,
-        learningDirection: (typeof finalVisible?.learning_direction === 'string' ? finalVisible.learning_direction : null)
-          ?? (visibleSummary as any)?.learningDirection
-          ?? (visibleSummary as any)?.confirmedProposal?.learningDirection,
-        keyStages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]).join(' ') : null,
-        stages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]) : null,
-      });
-      const mergedNeeds = mergeDeclaredAndDerivedNeeds(needsMaterial, derivedNeeds, MATERIAL_COLLECTION_MAX_NEEDS);
-      if (mergedNeeds !== needsMaterial) {
-        logger.info('[path-coordinator] goal 未声明公开材料但文本命中材料依赖信号，已合并派生采集需求（思考触发兜底）', {
-          userId: typeof input.userId === 'string' ? input.userId : null,
-          hadDeclared: !!needsMaterial,
-          derived: derivedNeeds.map((need) => need.title),
-        });
-        needsMaterial = mergedNeeds;
-      }
-    }
     // 附件理解摘要（path-material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——
     // path-planning 拿到 brief 的 naturalDivisions/目录后才知道「这一堆怎么切分学习」。
     // fail-open：生成失败/超时的附件照常以 pack 进路径（brief=null），下次生成再补。
@@ -1039,9 +1078,11 @@ class PathCoordinator {
       uploadedPacks.map((pack) => pack.pack?.materialId).filter((id): id is string => !!id)
     );
     // 联网采集只用于补信息（goal 声明 needsMaterial 才触发）。
-    // 批次 A 起联网正文会入库：若采集到的记录已在库里（URL 去重命中既有记录），
-    // 附件列表里那份（带 brief、全文可取回）优先，丢弃本次采集的重复 pack。
-    const collectedPacks = (await this.resolveMaterialPacks(input.userId, needsMaterial, collectionMode) || []).filter(
+    // 显式挂载（materialIds 数组，含 []）时**不触发联网采集**：列表即本次路径的资料全集，
+    // 否则用户明确“只学这两章”仍会被外部检索结果顶掉/混入（2026-11-24 真数据回测实证）。
+    const collectedPacks = (explicitMaterialIds === null
+      ? (await this.resolveMaterialPacks(input.userId, needsMaterial, collectionMode) || [])
+      : []).filter(
       (pack) => !(pack.pack?.materialId && uploadedMaterialIds.has(pack.pack.materialId))
     );
     const materialPacks = [...uploadedPacks, ...collectedPacks];
@@ -1087,7 +1128,9 @@ class PathCoordinator {
       || normalizedInputV1.problemSpace.realProblem
       || normalizedInputV1.learnerProfile.surfaceGoal
       || goalFinalPayload.rawGoal;
-    const subject = this.pickFirstDefined(source, config.normalizedInput.subjectSources);
+    // 目标学科优先（2026-11-23 槽位拆分）：subject 是路径的学科身份，不能被子目标/应用背景顶替
+    const subject = this.normalizeString(visibleSummary?.targetDiscipline)
+      || this.pickFirstDefined(source, config.normalizedInput.subjectSources);
     const skillLevel = this.pickFirstDefined(source, config.normalizedInput.skillLevelSources)
       || normalizedInputV1.learnerProfile.currentBaseline.level
       || 'beginner';
@@ -1170,12 +1213,10 @@ class PathCoordinator {
         skillLevel,
         currentSkillLevel: skillLevel,
         timePerDay: availableTime,
-        // structuredData/confidenceScores 的 routings 声明 handoff:[path]（goal-agent 行），
+        // structuredData 的 routings 声明 handoff:[path]（goal-agent 行），
         // 配置式交接取用优先、旧直连字段回退——与同函数内 needsMaterial 同款取用顺序。
-        // 此前这两行只读直连字段，声明为交接的 handoff 值无人消费（审计 #178）。
         structuredData: (goalFinalPayload.goalHandoffFields as any)?.['structuredData'] ?? input.structuredData ?? null,
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
-        confidenceScores: (goalFinalPayload.goalHandoffFields as any)?.['confidenceScores'] ?? input.confidenceScores ?? null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
         normalizedInput: framedNormalizedInput,
         goalFinalPayload: {

@@ -42,6 +42,11 @@ export interface IngestWebMaterialInput {
   title: string;
   /** 抓取到的正文（markdown 或纯文本）。 */
   text: string;
+  /**
+   * 页面发布时间（ISO，可空；2026-11-23 切口④）：搜索 Provider 拿到才填，
+   * **绝不拿抓取时间冒充发布时间**。
+   */
+  publishedAt?: string | null;
 }
 
 export interface IngestWebMaterialResult {
@@ -178,6 +183,8 @@ export async function ingestWebMaterial(input: IngestWebMaterialInput): Promise<
     origin: 'web',
     sourceUrl: url,
     fetchedAt: new Date().toISOString(),
+    // 发布时间与抓取时间严格分立（切口④）：Provider 没给就留空，不冒充
+    publishedAt: input.publishedAt ?? null,
   };
   writeMaterial(record, parsed.markdown);
   // 后台预热向量索引（失败静默；联网资料与附件同享语义召回）

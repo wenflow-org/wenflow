@@ -78,3 +78,25 @@ describe('perStageFromHours：按单课分钟反推，不再写死 1h/任务', (
     expect(hints.capacityDeficit).toBeNull();
   });
 });
+
+describe('key_stages 契约：阶段数不被节奏上限静默砍站（2026-11-23）', () => {
+  it('确认了 6 站 → targetMilestones 保 6（pacing 的 5 段上限不生效）', () => {
+    const hints = derivePlanningHints(
+      null, '每天约两小时', null, null,
+      ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'],
+      { objectiveScopeHours: 24, sessionsLengthMin: 60, sessionsLengthSource: 'explicit', timeModelVersion: 2 },
+      null,
+    );
+    expect(hints.targetMilestones).toBe(6);
+    expect(hints.milestoneRange[1]).toBeGreaterThanOrEqual(6);
+  });
+
+  it('没有 key_stages 时仍走原兜底（契约锁定只对已确认阶段生效）', () => {
+    const hints = derivePlanningHints(
+      null, '每天约两小时', null, null, [],
+      { objectiveScopeHours: 24, sessionsLengthMin: 60, sessionsLengthSource: 'explicit', timeModelVersion: 2 },
+      null,
+    );
+    expect(hints.targetMilestones).not.toBe(6);
+  });
+});

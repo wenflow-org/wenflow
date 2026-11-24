@@ -381,6 +381,58 @@ export function validateScopeBinding(parsed: any, scope: SubjectScope | null) {
 }
 
 /** 导出以便回归测试（§3.19 P0①：learnerLearningContext 必须真正进入提示词） */
+/**
+ * 澄清契约投影（2026-11-24）：path-planning 的 prompt 载荷此前是白名单重建，
+ * `clarification` 被静默裁掉，但 rationale 审计又要求引用 core/baseline/stopping
+ * ——模型被要求引用一份自己看不到的契约（c02 两次 CLARIFICATION_RATIONALE_NOT_SATISFIED 的直接原因）。
+ * 这里按契约结构显式投影，无值时不出现该键。
+ */
+function buildPromptFriendlyClarification(clarification: any) {
+  if (!clarification || typeof clarification !== 'object') return null;
+  const core = clarification.core && typeof clarification.core === 'object' ? clarification.core : {};
+  const baseline = clarification.baseline && typeof clarification.baseline === 'object' ? clarification.baseline : {};
+  const stopping = clarification.stopping && typeof clarification.stopping === 'object' ? clarification.stopping : {};
+  const constraints = clarification.constraints && typeof clarification.constraints === 'object' ? clarification.constraints : null;
+  return {
+    core: {
+      question: normalizePromptString(core.question),
+      evidence: normalizePromptStringArray(core.evidence),
+    },
+    baseline: {
+      known: normalizePromptStringArray(baseline.known),
+      unknown: normalizePromptStringArray(baseline.unknown),
+      misconceptions: normalizePromptStringArray(baseline.misconceptions),
+      evidence: normalizePromptStringArray(baseline.evidence),
+    },
+    stopping: {
+      kind: normalizePromptString(stopping.kind),
+      scope: normalizePromptString(stopping.scope),
+      evidence: normalizePromptString(stopping.evidence),
+      statement: normalizePromptString(stopping.statement),
+    },
+    ...(constraints
+      ? {
+          constraints: {
+            timePerSessionMin: Number.isFinite(constraints.timePerSessionMin) ? constraints.timePerSessionMin : null,
+            totalBudgetHours: Number.isFinite(constraints.totalBudgetHours) ? constraints.totalBudgetHours : null,
+            deadline: normalizePromptString(constraints.deadline),
+            environment: normalizePromptStringArray(constraints.environment),
+          },
+        }
+      : {}),
+    assumptions: normalizePromptStringArray(clarification.assumptions),
+    blockingNeed: normalizePromptString(clarification.blockingNeed),
+    unknowns: Array.isArray(clarification.unknowns)
+      ? clarification.unknowns.map((item: any) => ({
+          id: normalizePromptString(item?.id),
+          question: normalizePromptString(item?.question),
+          planImpact: normalizePromptString(item?.planImpact),
+          discriminates: normalizePromptStringArray(item?.discriminates),
+        }))
+      : [],
+  };
+}
+
 export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
   if (!normalizedInput || typeof normalizedInput !== 'object') return null;
 
@@ -402,6 +454,7 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
   const planningHints = normalizedInput.planningHints && typeof normalizedInput.planningHints === 'object'
     ? normalizedInput.planningHints
     : null;
+  const clarification = buildPromptFriendlyClarification(normalizedInput.clarification);
   return {
     normalizedInput: {
       version: normalizePromptString(normalizedInput.version) || '1.0',
@@ -410,6 +463,8 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
       ...(normalizedInput.pathTopologyHint === 'exam' || normalizedInput.pathTopologyHint === 'exploratory'
         ? { pathTopologyHint: normalizedInput.pathTopologyHint }
         : {}),
+      // 澄清契约：prompt 里的 rationale 规则必须以它为依据（2026-11-24 补投影）。
+      ...(clarification ? { clarification } : {}),
       learnerProfile: {
         surfaceGoal: normalizePromptString(learnerProfile.surfaceGoal),
         motivation: normalizePromptString(learnerProfile.motivation),
@@ -448,13 +503,11 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         currentPainPoint: normalizePromptString(problemSpace.currentPainPoint),
       },
       resources: {
-        timeBudget: normalizePromptString(resources.timeBudget),
-        timeBudgetCadence: normalizePromptString(resources.timeBudgetCadence),
-        timePerWeek: normalizePromptString(resources.timePerWeek),
+        // 时间降维（2026-11-24）：总可投入时长/周节奏不再进入生成提示词——用户自估总时长是
+        // 规划谬误，且会诱导模型按小时容器注水。生成只认两条物理边界：单次坐姿上限与外部截止。
         timePerSession: normalizePromptString(resources.timePerSession),
-        timeHorizon: normalizePromptString(resources.timeHorizon),
         deadlineText: normalizePromptString(resources.deadlineText),
-        // R8：绝对截止日（与 timeDimensions.deadlineDate 同源），供提示词直接读。
+        // 绝对截止日（与 timeDimensions.deadlineDate 同源），供提示词直接读。
         deadlineDate: normalizePromptString(resources.deadlineDate),
         // 资料包（用户附件在前、联网采集在后）：**必须进提示词**，否则规则"路径必须长在资料上"
         // 永远拿不到资料（2026-09-22 实测：装配层送达了、投影层却把它裁掉 ⇒ 模型看不见）。
@@ -474,24 +527,17 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         outOfScope: normalizePromptStringArray(confirmedProposal.outOfScope),
       } : null,
       planningHints: planningHints ? {
-        paceSignal: planningHints.paceSignal === 'compact' || planningHints.paceSignal === 'standard' || planningHints.paceSignal === 'extended'
-          ? planningHints.paceSignal
-          : null,
+        // 时间降维（2026-11-24）：以下字段仍由代码计算用于内部容量护栏，但**不再进入提示词**：
+        // paceSignal / subtasksPerStageRange / maxWeeks / targetMilestones / targetSubtasksPerStage /
+        // targetTotalHours / targetHoursPerMilestone / targetMinutesPerTask。
+        // 模型只看内容体量档与自然阶段区间；课数/阶段数由认知闭环决定。
         scopeSize: planningHints.scopeSize === 'micro' || planningHints.scopeSize === 'small' || planningHints.scopeSize === 'medium' || planningHints.scopeSize === 'large'
           ? planningHints.scopeSize
           : null,
         milestoneRange: Array.isArray(planningHints.milestoneRange) ? planningHints.milestoneRange : null,
         conceptRange: Array.isArray(planningHints.conceptRange) ? planningHints.conceptRange : null,
-        subtasksPerStageRange: Array.isArray(planningHints.subtasksPerStageRange) ? planningHints.subtasksPerStageRange : null,
+        // 单次坐姿上限（物理盒）：只约束单节不要塞满，不参与阶段数/课数配额。
         subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
-        maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
-        maxWeeksSource: typeof planningHints.maxWeeksSource === 'string' ? planningHints.maxWeeksSource : null,
-        targetMilestones: typeof planningHints.targetMilestones === 'number' ? planningHints.targetMilestones : null,
-        targetSubtasksPerStage: typeof planningHints.targetSubtasksPerStage === 'number' ? planningHints.targetSubtasksPerStage : null,
-        // R8：守恒规则已引用这三个锚，但此前投影漏字段 ⇒ 死引用；必须进提示词。
-        targetTotalHours: typeof planningHints.targetTotalHours === 'number' ? planningHints.targetTotalHours : null,
-        targetHoursPerMilestone: typeof planningHints.targetHoursPerMilestone === 'number' ? planningHints.targetHoursPerMilestone : null,
-        targetMinutesPerTask: typeof planningHints.targetMinutesPerTask === 'number' ? planningHints.targetMinutesPerTask : null,
       } : null,
       prerequisiteCheckResults: Array.isArray(normalizedInput.prerequisiteCheckResults)
         ? normalizedInput.prerequisiteCheckResults.map((item: any) => ({
@@ -503,15 +549,10 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         : null,
       timeDimensions: normalizedInput.timeDimensions && typeof normalizedInput.timeDimensions === 'object'
         ? {
-            totalWeeks: Number.isFinite(normalizedInput.timeDimensions.totalWeeks) ? normalizedInput.timeDimensions.totalWeeks : null,
-            estimatedHours: Number.isFinite(normalizedInput.timeDimensions.estimatedHours) ? normalizedInput.timeDimensions.estimatedHours : null,
-            sessionsPerWeek: Number.isFinite(normalizedInput.timeDimensions.sessionsPerWeek) ? normalizedInput.timeDimensions.sessionsPerWeek : null,
+            // 时间降维（2026-11-24）：只保留两条物理边界。旧时间字段（totalWeeks / estimatedHours /
+            // sessionsPerWeek / totalSessions / calendarCapacityHours / scopeAnchorHours /
+            // objectiveScopeHours）不再进入提示词，避免模型按小时容器配平。
             sessionsLengthMin: Number.isFinite(normalizedInput.timeDimensions.sessionsLengthMin) ? normalizedInput.timeDimensions.sessionsLengthMin : null,
-            totalSessions: Number.isFinite(normalizedInput.timeDimensions.totalSessions) ? normalizedInput.timeDimensions.totalSessions : null,
-            calendarCapacityHours: Number.isFinite(normalizedInput.timeDimensions.calendarCapacityHours) ? normalizedInput.timeDimensions.calendarCapacityHours : null,
-            scopeAnchorHours: Number.isFinite(normalizedInput.timeDimensions.scopeAnchorHours) ? normalizedInput.timeDimensions.scopeAnchorHours : null,
-            // R8 权威字段：必须进提示词，否则 path LLM 看不到内容体量锚 / 截止日。
-            objectiveScopeHours: Number.isFinite(normalizedInput.timeDimensions.objectiveScopeHours) ? normalizedInput.timeDimensions.objectiveScopeHours : null,
             deadlineDate: typeof normalizedInput.timeDimensions.deadlineDate === 'string' ? normalizedInput.timeDimensions.deadlineDate : null,
             timeModelVersion: Number.isFinite(normalizedInput.timeDimensions.timeModelVersion) ? normalizedInput.timeDimensions.timeModelVersion : null,
           }
@@ -901,10 +942,6 @@ export const pathAgentDefinition: AgentDefinition = {
         type: 'object',
         description: '用户确认的方案轮廓'
       },
-      confidenceScores: {
-        type: 'object',
-        description: '置信度评分'
-      },
       conversationHistory: {
         type: 'array',
         description: '完整对话历史'
@@ -1044,6 +1081,13 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
     ? framingNormalizedInput.learnerProfile.currentBaseline.level.trim()
     : null;
   
+  // 学科身份（2026-11-23 槽位拆分）：subject 是路径的学科身份，认 learnerProfile.targetDiscipline，
+  // 不再用 input.goal 原文（实测上传手册案 subject 被写成「我有一份公司内部的产品手册…」）。
+  const disciplineSubject = typeof framingNormalizedInput?.learnerProfile?.targetDiscipline === 'string'
+    && framingNormalizedInput.learnerProfile.targetDiscipline.trim()
+    ? framingNormalizedInput.learnerProfile.targetDiscipline.trim()
+    : String(input.goal || '学习目标');
+
   if (structuredData) {
     logger.info('使用结构化数据', {
       learner: structuredData.learner,
@@ -1061,11 +1105,11 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
     }
     
     return {
-      subject: input.goal,
+      subject: disciplineSubject,
       level: framingLevel || structuredData.learner?.skill_level || input.currentLevel || 'beginner',
       focus: framingPainPoints.length > 0 ? framingPainPoints : (structuredData.end_user?.pain_points || []),
       context: framingContext || structuredData.end_user?.identity || '',
-      confidence: input.confidenceScores?.understanding || 0.8,
+      confidence: 0.8,
       scenario,
       structuredData,
       confirmedProposal,
@@ -1080,7 +1124,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   // 主流程有 normalizedInput/structuredData 时不调用，fallback 输出也被 framing 覆盖，2026-08 去 LLM 化）
   void userId;
   const parsed = {
-    subject: String(input.goal || '学习目标'),
+    subject: disciplineSubject,
     level: ['beginner', 'intermediate', 'advanced'].includes(input.currentLevel as string)
       ? input.currentLevel as string
       : 'beginner',
@@ -1154,10 +1198,8 @@ async function generatePath(
         : [];
   const observableResult = framingNormalizedInput?.successCriteria?.observableResult || null;
   const acceptanceCheck = framingNormalizedInput?.successCriteria?.acceptanceCheck || null;
-  // 强制里程碑数量：优先取 framing planningHints.targetMilestones（由 keyStages 直接得出），
-  // 其次用已确认 keyStages 数量推导；均缺失时为 null（validator 跳过数量校验）
-  // 里程碑数量：方案乙——优先用规划的**权威区间**（LLM 在区间内自定数量）；
-  // 无区间时回退到「确认阶段数」组成的单点区间（replan 等路径）。
+  // 2026-11-24 契约收窄：key_stages 只是方向切口，不再锁定阶段数。
+  // 数量只按 planningHints.milestoneRange 校验；无 targetMilestones 时 validator 不做精确等值。
   const framingMilestoneRange = (framingNormalizedInput?.planningHints as any)?.milestoneRange;
   const expectedMilestoneRange: [number, number] | null =
     Array.isArray(framingMilestoneRange)
@@ -1165,16 +1207,13 @@ async function generatePath(
     && framingMilestoneRange.every((n: any) => Number.isInteger(n))
       ? [framingMilestoneRange[0], framingMilestoneRange[1]]
       : (confirmedStages.length > 0
-          ? [Math.min(8, Math.max(2, confirmedStages.length)), Math.min(8, Math.max(2, confirmedStages.length))]
+          // 旧数据/重规划兜底：围绕方向数给 ±1 的自然区间，不把方向数当等值契约。
+          ? [Math.max(2, Math.min(8, confirmedStages.length - 1)), Math.max(2, Math.min(8, confirmedStages.length + 1))]
           : null);
-  const forcedMilestones: number | null = Number.isInteger(
-    (framingNormalizedInput?.planningHints as any)?.targetMilestones
-  )
-    ? (framingNormalizedInput?.planningHints as any).targetMilestones
-    : null;
-  const expectedMilestones: number | null = forcedMilestones ?? (confirmedStages.length > 0
-    ? Math.min(8, Math.max(2, confirmedStages.length))
-    : null);
+  // 2026-11-24 契约收窄：即使 hints 里还带着内部软建议 targetMilestones，也不作为精确契约；
+  // 数量只按 milestoneRange 校验，避免把 Goal 的方向数重新变成阶段数硬锁。
+  const forcedMilestones: number | null = null;
+  const expectedMilestones: number | null = forcedMilestones;
   const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
   // 学习范围：叙事里没有「该学什么」，这里按考试范围/学科文本解析出权威清单。
@@ -1193,15 +1232,12 @@ async function generatePath(
 目标水平：${analysis.level}
 ${analysis.context ? `具体应用场景：${analysis.context}` : ''}
 ${analysis.focus.length > 0 ? `学习重点：${analysis.focus.join('、')}` : ''}
-${input.metadata?.availableTime ? `可用时间：${input.metadata.availableTime}` : ''}
-${input.metadata?.totalWeeks ? `总学习周期（周）：${input.metadata.totalWeeks}` : ''}
 
 ${confirmedProposal || framingConfirmedProposal ? `用户确认的方案轮廓：
 - 学习方向：${confirmedLearningDirection || '--'}
 - 首个产出：${confirmedFirstDeliverable || '--'}
 - 关键阶段：${confirmedStages.join('、') || '--'}
 - 暂不纳入范围：${confirmedOutOfScope.join('、') || '--'}
-- 学习方式：${confirmedProposal?.learning_style || confirmedProposal?.learningStyle || '--'}
 
 【重要】请基于用户确认的方案轮廓设计路径阶段，保持方向一致。` : ''}
 
@@ -1211,7 +1247,8 @@ ${JSON.stringify(promptFriendlySceneFraming, null, 2)}
 【重要】如果提供了这份清洗结果，请把它视为上游已整理好的正式输入：
 - 优先依据其中的 normalizedInput.problemSpace.realProblem、normalizedInput.successCriteria、normalizedInput.confirmedProposal 设计路径
 - 第一阶段必须直接服务于 normalizedInput.confirmedProposal.firstDeliverable（若存在）
-- 不要把 confirmedProposal.keyStages 直接抄成 coreConcept；keyStages 是阶段提示，不是隐藏概念名称。` : ''}
+- 不要把 confirmedProposal.keyStages 直接抄成 coreConcept；keyStages 是阶段提示，不是隐藏概念名称。
+- 每个 milestone 的 rationale 必须逐条引用 normalizedInput.clarification 的 core/baseline/stopping/constraints；最后一个 milestone 的 rationale.serves 必须是 stopping，evidence 对上 stopping.statement。` : ''}
 
 ${conversationHistory && conversationHistory.length > 0 ? `
 完整对话历史（用于验证关键信息）：
@@ -1221,13 +1258,14 @@ ${conversationHistory.map((m: any) => `${m.role}: ${m.content}`).join('\n')}
 
 ${replan ? renderReplanSection(replan) : ''}
 
-【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
-- 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称
-- 每个里程碑的标题必须体现"${analysis.context || input.goal}"的具体阶段
-- 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景${scopeSection}
+【强制要求】以下所有生成内容必须紧密围绕"${analysis.subject}"这个学科对象展开：
+- 路径名称必须包含"${analysis.subject}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称
+- 每个里程碑的标题必须体现"${analysis.subject}"的具体学科阶段
+- 应用背景/迁移场景（applicationContext、scenario，如「学习类 AI 讲解优化」「门店排班」）只用于例子、任务场景与迁移设计，**不得写进 milestone 标题，也不得替代学科主语**；学习时段/地点（停车午休、睡前、周末）只允许出现在 summary，禁止作为 milestone 标题前缀
+- 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.subject}"相关场景${scopeSection}
 
 重要要求：
-1. 所有里程碑标题、描述、goal 都要具体化到"${analysis.context || input.goal}"场景，不要使用泛泛的通用描述
+1. 所有里程碑标题、描述、goal 都要具体化到"${analysis.subject}"的学科内容，不要使用泛泛的通用描述
 
 （名称口径不在此处复述：**唯一源是系统提示里的"路径名称"规则**（结果/场景名、禁交付口径水平词）。
 此处曾硬编码一份"核心主题/技能 + 水平词、beginner 必须写入门/基础/从零开始"的规则，

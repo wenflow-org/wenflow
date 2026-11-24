@@ -40,9 +40,15 @@ describe('留痕序列化', () => {
 describe('metricReasonsFromState（与判定器同阈值、同层级）', () => {
   it('有本路径状态 → 复算路径级理由', () => {
     expect(metricReasonsFromState({
-      pathState: { lss: 7.2, ktl: 3.7, lf: 2.4, lsb: 1.3 },
+      pathState: { lss: 8.2, ktl: 3.7, lf: 2.4, lsb: 1.3 },
       globalLf: 3, globalLsb: 1,
     })).toEqual(['lesson_stress_high']);
+
+    // 2026-11-23 复核：mid 档数值 7.2 不再算高压（同一阈值 7.5）
+    expect(metricReasonsFromState({
+      pathState: { lss: 7.2, ktl: 3.7, lf: 2.4, lsb: 1.3 },
+      globalLf: 3, globalLsb: 1,
+    })).toEqual([]);
 
     expect(metricReasonsFromState({
       pathState: { lss: 2, ktl: 4, lf: 5, lsb: -1 }, // form<0 且 ktl≥3（基座成熟）→ 失衡
@@ -81,8 +87,8 @@ describe('evaluateAdjustmentEffect', () => {
   it('同类理由仍成立 → still_triggered，并指出是哪条', () => {
     const effect = evaluateAdjustmentEffect({
       record: record(),
-      nextState: { metrics: { lss: 7.2, ktl: 3.7, lf: 2.4, lsb: 1.3 }, taskId: 't2', calculatedAt: new Date() },
-      nextPathState: { lss: 7.2, ktl: 3.7, lf: 2.4, lsb: 1.3 },
+      nextState: { metrics: { lss: 8.2, ktl: 3.7, lf: 2.4, lsb: 1.3 }, taskId: 't2', calculatedAt: new Date() },
+      nextPathState: { lss: 8.2, ktl: 3.7, lf: 2.4, lsb: 1.3 },
       globalLfAtNextState: 3,
       globalKtlAtNextState: 3,
       globalLsbAtNextState: 0.5,

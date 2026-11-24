@@ -34,6 +34,8 @@ export interface ChatSupplement {
   title: string;
   topic: string;
   sourceUrl?: string | null;
+  /** 页面发布时间（ISO，可空；2026-11-23 切口④）：Provider 给了才显示「发布于 X」，不拿抓取时间冒充。 */
+  publishedAt?: string | null;
   excerpt: string;
 }
 

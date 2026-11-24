@@ -36,3 +36,25 @@ describe('buildGoalPathVisibleSummary：entry_state / intent_type 透传', () =>
     expect(visible.intentType).toBeNull();
   });
 });
+
+describe('buildGoalPathVisibleSummary：targetDiscipline / applicationContext 槽位', () => {
+  it('目标学科与应用背景分别透传，互不替代', () => {
+    const visible = buildGoalPathVisibleSummary({
+      understanding: {
+        surface_goal: '每天开车通勤，想学点教育心理学，偏 AI 开发能用的',
+        targetDiscipline: '教育心理学',
+        applicationContext: '学习类 AI 讲解优化',
+      },
+    });
+    expect(visible.targetDiscipline).toBe('教育心理学');
+    expect(visible.applicationContext).toBe('学习类 AI 讲解优化');
+  });
+
+  it('缺失/空白 → null（旧会话行为不变）', () => {
+    const visible = buildGoalPathVisibleSummary({
+      understanding: { surface_goal: 'x', targetDiscipline: '  ', applicationContext: undefined },
+    });
+    expect(visible.targetDiscipline).toBeNull();
+    expect(visible.applicationContext).toBeNull();
+  });
+});

@@ -105,13 +105,23 @@ export interface GoalPathVisibleSummary {
    */
   needsMaterial?: MaterialNeed | MaterialNeed[] | null;
   /**
+   * 目标学科（hidden，2026-11-23 槽位拆分）：用户真正要学的学科/知识体系
+   * （「教育心理学」「专升本教育学」）。path-planning 的学科基准锚与路径命名以此为准；
+   * 缺省 = 旧会话，下游按 surfaceGoal 推断。
+   */
+  targetDiscipline?: string | null;
+  /**
+   * 应用背景（hidden）：用户要在哪个场景里用（「学习类 AI 讲解优化」）。
+   * 只进例子/任务场景，**不得替代 targetDiscipline**；缺省 = null。
+   */
+  applicationContext?: string | null;
+  /**
    * 技能性质（hidden，goal→path 教学策略缝，2026-10-26 外部评审实证）。
    * 决定「AI 能否替学习者代跑核心动作」：工具操作型可以，内化训练型绝对不行
    * （实证：英语长难句路径让 AI 代跑拆句，学习者到独立阅读照样懵）。
    * 未声明 = null，下游按通用口径处理，不强制任何一档。
    */
   skillNature?: SkillNature | null;
-  skillNatureEvidence?: string | null;
   /**
    * 平台可判定性（hidden，2026-10-26 用户纠偏「乐器、运动…不能指导去具体画画」）。
    *
@@ -129,13 +139,6 @@ export interface GoalPathVisibleSummary {
    * 把身体技能降级成口头描述，学习者练不到手，平台也没真判到）。
    */
   platformJudgment?: PlatformJudgment | null;
-  /** 可判定性判据（一句，说明凭什么这么判；如「有功率计读数」/「只能靠自述」） */
-  platformJudgmentEvidence?: string | null;
-  /**
-   * 客观读数来源（judgeable_sensor 时填，如「功率计」「心率带」「录音」「配速表」）。
-   * 无传感器时为空——下游据此决定能不能把身体动作转成可判数据。
-   */
-  sensorReadouts?: string[] | null;
   successCriteria: {
     observableResult: string | null;
     acceptanceCheck: string | null;
@@ -273,17 +276,12 @@ export function buildGoalPathVisibleSummary(params: {
   const scenario = buildScenario(understanding, backgroundExperience, realProblem);
   const currentBaseline = buildCurrentBaseline(understanding);
   const needsMaterial = normalizeNeedsMaterial(understanding?.needsMaterial);
+  // 目标学科 / 应用背景（2026-11-23 槽位拆分）：只做归一化透传，不猜、不互相顶替
+  const targetDiscipline = normalizeString(understanding?.targetDiscipline);
+  const applicationContext = normalizeString(understanding?.applicationContext);
   const schoolAnchor = normalizeSchoolAnchorShape(understanding?.school_anchor);
   const skillNature = normalizeSkillNature(understanding?.skill_nature);
-  const skillNatureEvidence = normalizeString(understanding?.skill_nature_evidence) || null;
   const platformJudgment = normalizePlatformJudgment(understanding?.platform_judgment);
-  const platformJudgmentEvidence = normalizeString(understanding?.platform_judgment_evidence) || null;
-  const sensorReadouts = Array.isArray(understanding?.sensor_readouts)
-    ? (understanding.sensor_readouts as unknown[])
-        .map((v) => normalizeString(v))
-        .filter((v): v is string => !!v)
-        .slice(0, 8)
-    : null;
 
   const hasResources = !!(timeBudget || timePerSession || timeHorizon || deadlineText || deadlineDate);
   const observableResult = normalizeString(understanding?.success_criteria?.observable_result);
@@ -338,11 +336,10 @@ export function buildGoalPathVisibleSummary(params: {
       : null,
     timeDimensions,
     needsMaterial,
+    targetDiscipline,
+    applicationContext,
     skillNature,
-    skillNatureEvidence,
     platformJudgment,
-    platformJudgmentEvidence,
-    sensorReadouts,
   };
 }
 

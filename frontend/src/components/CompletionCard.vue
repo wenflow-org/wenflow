@@ -341,7 +341,10 @@ const sanitizeKnowledgeEvidence = (text: string) => text
   .replace(/unchangedMastered/gi, '已学会')
   .replace(/mastered/gi, '已学会')
   .replace(/avgUnderstanding/gi, '课堂理解度')
-  .replace(/\bstatus\b/gi, '当前表现');
+  /* 2026-11-23 真人测试实锤：裸 \bstatus\b 会把学员 SQL 证据里的列名一起翻译
+     （"AND status = 'paid'" → "AND 当前表现 = 'paid'"，DB 原文是对的、页面被改写）。
+     只翻「字段名姿态」的 status（后接冒号），SQL 比较/列引用保持原样。 */
+  .replace(/\bstatus\b(?=\s*[:：])/gi, '当前表现');
 
 const knowledgeItems = computed(() => (summary.value?.knowledgeItems || []).map((item) => ({
   ...item,

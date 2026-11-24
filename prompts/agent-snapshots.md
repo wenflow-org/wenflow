@@ -45,12 +45,9 @@
 | `understanding.support_need` | string | goal-agent |
 | `understanding.school_anchor` | object | goal-agent |
 | `understanding.skill_nature` | string | goal-agent, path |
-| `understanding.skill_nature_evidence` | string | path |
 | `understanding.platform_judgment` | string | goal-agent, path |
-| `understanding.platform_judgment_evidence` | string | path |
 | `understanding.intent_type` | string | goal-agent, path |
 | `understanding.entry_state` | string | goal-agent, path |
-| `understanding.sensor_readouts` | array<string> | path |
 | `understanding.needsMaterial` | object | path |
 | `confirmedProposal.prerequisiteDiagnostics` | array<object> | goal-agent |
 | `understanding.prerequisiteCheckResults` | array<object> | goal-agent |
@@ -67,7 +64,6 @@
 | `core.stage` | string | goal-agent |
 | `core.confidence` | number | — |
 | `core.isCompleted` | boolean | goal-agent |
-| `confidenceScores` | object | goal-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
@@ -77,7 +73,6 @@ sandbox:goal-agent.collectedData.history
 sandbox:goal-agent.collectedData.latestMessage
 sandbox:goal-agent.collectedData.state
 sandbox:goal-agent.collectedData.understanding
-sandbox:goal-agent.confidenceScores
 sandbox:goal-agent.confirmedProposal.first_deliverable
 sandbox:goal-agent.confirmedProposal.key_stages
 sandbox:goal-agent.confirmedProposal.learning_direction

@@ -682,42 +682,25 @@ export function derivePlanningHints(
   const capacity = resolveCapacity({ timeDimensions, timePerSession, timeBudget });
 
   const HARD_MILESTONE_CAP = 8;
-  const scopeMilestoneFloor = scopeConfig ? scopeConfig.milestoneRange[0] : 2;
-  // 方案丙：goal 的 scope_size 改为**自由描述**（不再选档），代码不再按枚举映射 ⇒ 正常情况下 scope=null。
-  // 那时上界只由**节奏（时间）**给：min(硬上限 8, paceCap)。历史数据/重规划若仍传来合法枚举，沿用乙口径（兼容）。
-  const milestoneCap = scope
-    ? (scope === 'micro'
-        ? scopeConfig!.milestoneRange[1]
-        : Math.min(HARD_MILESTONE_CAP, Math.max(scopeConfig!.milestoneRange[1], paceConfig.milestoneRange[1])))
-    : Math.min(HARD_MILESTONE_CAP, paceConfig.milestoneRange[1]);
   // 口径（2026-10-29 收口）：**targetMilestones 存在时是强制值**（prompt 规则 46 与
   // path-planning validator 同口径）；区间是 target 缺失时的边界，用于防压小/防撑大。
   //   为什么仍保留区间：keyStages / 学时信号都缺失时没有可信的精确数，只能给边界让 LLM 定；
   //   一旦有 target，就按 target 精确校验，避免「prompt 写强制、validator 按区间放行」的双源。
-  let milestoneRange: [number, number] = [scopeMilestoneFloor, milestoneCap];
-  // 学时早估（仅用于 keyStages 缺失时的里程碑兜底；与后文 estimatedHoursTotal 同源不同时机）
-  const earlyHoursEstimate: number | null = (() => {
-    // R8：keyStages 缺失时，优先用客观内容体量反推里程碑数，而不是旧的 estimatedHours/totalSessions。
-    if (objectiveScopeHoursNum !== null) return objectiveScopeHoursNum;
-    const td: Record<string, unknown> | null | undefined = timeDimensions;
-    const est = Number(td?.estimatedHours);
-    if (Number.isFinite(est) && est > 0) return est;
-    const sessions = Number(td?.totalSessions);
-    const lenMin = Number(td?.sessionsLengthMin) || Number(td?.sessionLengthMin);
-    if (Number.isFinite(sessions) && sessions > 0 && Number.isFinite(lenMin) && lenMin > 0) {
-      return (sessions * lenMin) / 60;
-    }
-    return null;
-  })();
+  // 2026-11-24 契约收窄：阶段区间只由**内容颗粒度**决定，不再由时间节奏（pace）给上界。
+  // 有 scope 标签时用标签区间；无标签时给自然范围 [3,6]，硬顶 8。截止日只裁内容范围，不压阶段数。
+  let milestoneRange: [number, number] = scopeConfig
+    ? [scopeConfig.milestoneRange[0], Math.min(HARD_MILESTONE_CAP, scopeConfig.milestoneRange[1])]
+    : [3, Math.min(HARD_MILESTONE_CAP, 6)];
+  // 2026-11-24 契约收窄：targetMilestones 只保留为**内部软建议**（供预算/容量护栏参考），
+  // 不再投影进提示词、也不再作为 validator 的精确数量契约。Path 的实际阶段数由
+  // cognitiveCore 的自然盲区 + milestoneRange 决定；用户可在路径页调整。
+  const keyStageLocked = keyStageCount >= 3 && scope !== 'micro';
   let targetMilestones: number | null = keyStageCount > 0
-    ? Math.min(milestoneCap, Math.max(scopeMilestoneFloor, keyStageCount))
-    : earlyHoursEstimate !== null && earlyHoursEstimate > 0
-      // 2026-09-27 横向扩测（heavy-fp#4）：提案缺 key_stages ⇒ targetMilestones=null ⇒ 整条锚链塌光
-      // （subtasksPerStageRange 落 [4,6]、subtaskMinutesRange 落 [15,30]），490h 预算被写成 12.8h。
-      // keyStages 缺失但有学时信号时按学时分档反推兜底（分档与 goal 层 key_stages 折算公式同源）；
-      // keyStages 存在时本分支永不生效。
-      ? Math.min(milestoneCap, Math.max(2, Math.round(earlyHoursEstimate / (earlyHoursEstimate > 200 ? 45 : 12))))
-      : (scope ? scopeMilestoneFloor : null);
+    ? keyStageLocked
+      ? Math.min(HARD_MILESTONE_CAP, keyStageCount)
+      : Math.min(milestoneRange[1], Math.max(milestoneRange[0], keyStageCount))
+    // 无方向信号时用内容区间下界做内部容量护栏（不读学时）；仍不投影进提示词。
+    : milestoneRange[0];
 
   // 每阶段任务数同理（含 micro 的特殊处理）：否则"每阶段 2 个任务"的塌缩不变。
   let subtasksPerStageRange: [number, number] = scope === 'micro'
@@ -851,6 +834,7 @@ export function derivePlanningHints(
       // 紧预算必须同时收紧「精确目标」：scope 已知时 effectiveMilestoneRange 恒为 [target,target]，
       // 只改 milestoneRange 的话下调永远到不了输出（255 例扫测发现的空转）；
       // 且下游 path-planning 对里程碑数是**阻断级精确匹配**，这里不收 target 就等于紧预算对体量零影响。
+      // 预算是物理约束（用户真没有那些时间），优先于 key_stages 契约——但删掉的站必须显式披露。
       if (targetMilestones !== null) {
         targetMilestones = Math.min(targetMilestones, milestoneRange[1]);
       }
@@ -898,13 +882,16 @@ export function derivePlanningHints(
   // 词表兼容：Goal 产出的是 oneoff（goal-conversation.yaml），历史/回放数据用 once，
   // 两者语义相同；此前只认 once 导致真实 Goal 输出永远命中不了「一节课」钳制。
   const isOneOff = triage?.recurrence === 'once' || triage?.recurrence === 'oneoff';
+  let oneSittingLocked = false;
   if (triage && triage.transferable === false && isOneOff) {
+    oneSittingLocked = true;
     const cap = ONE_SITTING_BOUNDS;
     milestoneRange = [...cap.milestoneRange];
     conceptRange = [...cap.conceptRange];
     subtasksPerStageRange = [...cap.subtasksPerStageRange];
     subtaskMinutesRange = [...cap.subtaskMinutesRange];
     maxWeeks = Math.min(maxWeeks, cap.maxWeeks);
+    // 一次坐下 / 一次性操作是**物理容器**上限，优先于 key_stages 契约：0.8h 的目标不可能分 3 站
     if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, cap.milestoneRange[1]);
   }
 
@@ -933,12 +920,14 @@ export function derivePlanningHints(
   const tightButLarge = isTightAvailabilitySignal
     && objectiveScopeHoursNum !== null && objectiveScopeHoursNum > 2;
   if (lessThanOneLesson || (isTightAvailabilitySignal && !tightButLarge)) {
+    oneSittingLocked = true;
     const cap = ONE_SITTING_BOUNDS;
     milestoneRange = [...cap.milestoneRange];
     conceptRange = [...cap.conceptRange];
     subtasksPerStageRange = [...cap.subtasksPerStageRange];
     subtaskMinutesRange = [...cap.subtaskMinutesRange];
     maxWeeks = Math.min(maxWeeks, cap.maxWeeks);
+    // 一次坐下 / 一次性操作是**物理容器**上限，优先于 key_stages 契约：0.8h 的目标不可能分 3 站
     if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, cap.milestoneRange[1]);
   } else if (isTightAvailabilitySignal) {
     // 时间紧但内容大：只把单课压到 25 分钟以内，阶段/任务/总学时不动。
@@ -1165,7 +1154,7 @@ export function derivePlanningHints(
   const needsCapacityExpansion = neededLessonCount !== null && perStageAnchorMin !== null
     ? neededLessonCount > subtasksPerStageRange[1] && perStageAnchorMin > capacityMin
     : false;
-  if (needsCapacityExpansion && neededLessonCount !== null) {
+  if (needsCapacityExpansion && neededLessonCount !== null && !oneSittingLocked) {
     // 只加「课数」，不放大「单课时长」：单课仍受用户单次坐姿校准。
     // needed 超过 5 时封顶 5，剩余缺口交给 capacityDeficit，不用同质任务硬凑。
     subtasksPerStageRange = [
@@ -1479,12 +1468,13 @@ export function derivePlannedOutline(confirmedProposal: any): {
   // 让 derivePlanningHints 自己解析；先 normalize 成枚举会把自由文本洗成 null，
   // 预览就吃不到颗粒度钳制（实测：预览 3 段 vs 生成 2 段的失配）。
   const hints = derivePlanningHints(null, null, null, null, stages, null, typeof scopeSizeRaw === 'string' ? scopeSizeRaw : scopeSize);
-  const planned = typeof hints?.targetMilestones === 'number' ? hints.targetMilestones : null;
   const hasSignal = stages.length > 0 || scopeSize !== null;
   const range = hasSignal && Array.isArray(hints?.milestoneRange) && hints.milestoneRange.length === 2
     ? ([hints.milestoneRange[0], hints.milestoneRange[1]] as [number, number])
     : null;
-  return { plannedMilestones: planned, milestoneRange: range, stages };
+  // 2026-11-24 契约收窄：key_stages 只是方向切口，预览不再承诺「最终几个阶段」。
+  // 前端用方向数展示大纲；实际阶段数由 Path 按认知盲区收敛。
+  return { plannedMilestones: null, milestoneRange: range, stages };
 }
 
 /**
@@ -1577,20 +1567,14 @@ export function buildFramedNormalizedInput(input: any): any {
   // 此前只读顶层 ⇒ 读不到，再由下方 else 整键删除，该字段从未通过定帧层。值无法归一也留痕。
   const rawSkillNature = learnerProfile.skillNature ?? input.skillNature;
   const rawPlatformJudgment = learnerProfile.platformJudgment ?? input.platformJudgment;
-  const rawSensorReadouts = learnerProfile.sensorReadouts ?? input.sensorReadouts;
   // skill_nature / platform_judgment 是「能力物理属性」（AI 能否代跑核心动作、平台能否判对错），
   // 不是 entryState/intentType 那类身份分型——2026-11-22 起契约下照常透传：
   // 若在契约下置空，path-task-design 会按「字段缺失 → cognitive_internalized」兜底，
   // 工具操作型目标（Excel/SQL/批量处理）的「AI 代跑三段式」对所有新会话静默失效（实害已复现）。
   // 退场名单只收身份标签：entryState / intentType（上方已置 null）。
   const skillNature = normalizeSkillNature(rawSkillNature);
-  const skillNatureEvidence = normalizeString(learnerProfile.skillNatureEvidence ?? input.skillNatureEvidence) || null;
   // 平台可判定性（2026-10-26 二拆）：not_judgeable 时任务形态只能是「训练计划 + 复盘归因」，不得编自查卡假装可判定。
   const platformJudgment = normalizePlatformJudgment(rawPlatformJudgment);
-  const platformJudgmentEvidence = normalizeString(learnerProfile.platformJudgmentEvidence ?? input.platformJudgmentEvidence) || null;
-  const sensorReadouts = Array.isArray(rawSensorReadouts)
-    ? (rawSensorReadouts as unknown[]).map((v) => normalizeString(v)).filter((v): v is string => !!v).slice(0, 8)
-    : null;
   if (rawSkillNature != null && !skillNature) console.warn(`[path-framing] skillNature 无法归一，按缺失处理：${String(rawSkillNature).slice(0, 80)}`);
   if (rawPlatformJudgment != null && !platformJudgment) console.warn(`[path-framing] platformJudgment 无法归一，按缺失处理：${String(rawPlatformJudgment).slice(0, 80)}`);
   // 校内锚：LLM 抽取口径（2026-09-30 用户拍板「不要走正则，走大模型自身的推理理解」）。
@@ -1692,21 +1676,15 @@ export function buildFramedNormalizedInput(input: any): any {
   // （path/stage 两处 prompt 都已引用它，不必新增顶层契约）。
   if (skillNature) {
     framed.learnerProfile.skillNature = skillNature;
-    if (skillNatureEvidence) framed.learnerProfile.skillNatureEvidence = skillNatureEvidence;
   } else {
     delete framed.learnerProfile.skillNature;
-    delete framed.learnerProfile.skillNatureEvidence;
   }
   // 平台可判定性（2026-10-26 二拆）：下游 path-task-design 据此决定任务形态——not_judgeable 时只能给
   // 「训练计划 + 复盘归因」，禁止把身体技能降级成写自查卡。
   if (platformJudgment) {
     framed.learnerProfile.platformJudgment = platformJudgment;
-    if (platformJudgmentEvidence) framed.learnerProfile.platformJudgmentEvidence = platformJudgmentEvidence;
-    if (sensorReadouts?.length) framed.learnerProfile.sensorReadouts = sensorReadouts;
   } else {
     delete framed.learnerProfile.platformJudgment;
-    delete framed.learnerProfile.platformJudgmentEvidence;
-    delete framed.learnerProfile.sensorReadouts;
   }
   return framed;
 }

@@ -15,6 +15,12 @@ import { normalizeForKeywordMatch, resolveUnderstandingReading } from '../../ser
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
 import type { ChatContentPart, ChatMessageContent } from '../../gateway/api-gateway/types';
 import { normalizeVisionImages, MAX_VISION_IMAGES_PER_MESSAGE } from '../../utils/vision-content';
+import {
+  LOAD_BAND_INDEX,
+  isLoadBand,
+  resolveLoadBand,
+  type LoadBand,
+} from '../../services/learning/load-band';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -144,8 +150,32 @@ export interface TeachingTurnInput {
       title: string;
       topic: string;
       sourceUrl?: string | null;
+      /** 页面发布时间（ISO，可空；切口④）：时效判定与来源展示用，与抓取时间分立 */
+      publishedAt?: string | null;
       excerpt: string;
     } | null;
+    /**
+     * 教师补充槽**诚实回执**（2026-11-22 切口 C）：上一轮 control.supplement 的采集结果状态。
+     * pending=仍在采集途中（承接一句、照常推进主线）；expired=采集失败/超期（诚实交代、不再复诺）。
+     * 逐回合变化 → 载荷尾部（与 supplementaryMaterial 同纪律）。
+     */
+    supplementStatus?: { status: 'pending' | 'expired'; topic: string } | null;
+    /**
+     * 学生贴链接·回合前预抓成果（2026-11-23）：学生消息里的 URL 已在模型调用前抓取清洗。
+     * 引用时要向学生说明「我看了你发的那篇文章」，不占 control.supplement 的每课 1 次配额。
+     * excerpt 是抓取的公开网页正文——当数据不当指令（同 supplementaryMaterial 围栏）。
+     */
+    studentLinkMaterial?: {
+      url: string;
+      title: string;
+      excerpt: string;
+    } | null;
+    /**
+     * 学生链接读取状态（2026-11-23）：closed-mode=闭卷模式未抓（请学生贴正文）；
+     * login-required=需登录；timeout/unreadable/unsafe=打不开或地址可疑——按降级链自然引导，
+     * 不提「系统/状态」等内部词。逐回合变化 → 载荷尾部。
+     */
+    linkStatus?: { status: string; url: string } | null;
     /**
      * 当前任务 materialRefs 的**章节原文窗口**（material-sections 取回，≤2×4K 字，2026-09-24）。
      * 讲到哪章就能看到那章原文；无引用/取回失败时为 null。
@@ -257,7 +287,7 @@ export interface TeachingTurnInput {
       successRate?: number | null;
       relearnSuggestions?: Array<{ conceptKey?: string; label?: string; consecutiveAgain?: number; reason?: string }>;
     } | null;
-    /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadIndex */
+    /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadBand */
     interactionProfile?: {
       current?: Record<string, number> | null;
       history?: Array<{
@@ -420,6 +450,9 @@ export interface TeachingTurnOutput {
     studentNeed?: typeof ALLOWED_STUDENT_NEEDS[number];
     engagement: number;
     emotionalState: string;
+    /** 权威档位（2026-11-23）：under|flow|hint|overload|unknown；numeric loadIndex 由它派生 */
+    loadBand?: LoadBand;
+    /** 兼容字段：新模型不再输出 0-1 浮点，由 loadBand 映射 */
     loadIndex: number;
     loadBasis: string;
   };
@@ -900,12 +933,38 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
       emotionalState: (typeof analysis.emotionalState === 'string' && (ALLOWED_EMOTIONAL_STATES as readonly string[]).includes(analysis.emotionalState))
         ? analysis.emotionalState
         : 'neutral',
-      loadIndex: Number.isFinite(analysis.loadIndex)
-        ? Math.max(0, Math.min(1, Number(analysis.loadIndex)))
-        : 0.5,
-      loadBasis: (typeof analysis.loadBasis === 'string' && (ALLOWED_LOAD_BASIS as readonly string[]).includes(analysis.loadBasis))
-        ? analysis.loadBasis
-        : 'absent',
+      // 2026-11-23 P1-5：档位为权威，数值只做兼容映射。
+      // - 模型显式给 loadBand → 用档位中点（消灭回合级伪精确）；
+      // - 只有 legacy numeric → 原样保留（旧会话/旧夹具行为不变），档位由阈值反推；
+      // - 两者都缺 → unknown（0.5），loadBasis 必须是 absent。
+      ...(() => {
+        const rawLoadBand = (analysis as { loadBand?: unknown }).loadBand;
+        const explicitBand = isLoadBand(rawLoadBand);
+        // legacy「无证据」契约：loadIndex=0.5 + loadBasis=absent。没有显式档位时，
+        // 这条必须落 unknown，而不是被 numeric 反推成 flow——否则"没看见"会变成"正常"。
+        const explicitAbsent = analysis.loadBasis === 'absent';
+        const loadBand = !explicitBand && explicitAbsent
+          ? 'unknown'
+          : resolveLoadBand(rawLoadBand, analysis.loadIndex);
+        const legacyNumeric = Number.isFinite(analysis.loadIndex)
+          ? Math.max(0, Math.min(1, Number(analysis.loadIndex)))
+          : null;
+        const rawBasis = typeof analysis.loadBasis === 'string'
+          && (ALLOWED_LOAD_BASIS as readonly string[]).includes(analysis.loadBasis)
+          && analysis.loadBasis !== 'absent'
+          ? analysis.loadBasis
+          : null;
+        return {
+          loadBand,
+          loadIndex: explicitBand
+            ? LOAD_BAND_INDEX[loadBand]
+            : explicitAbsent
+              ? LOAD_BAND_INDEX.unknown
+              : (legacyNumeric ?? LOAD_BAND_INDEX[loadBand]),
+          // 不变量：unknown ⇔ absent；有档位但没给依据时按文本语义（semantic）兜底。
+          loadBasis: loadBand === 'unknown' ? 'absent' : (rawBasis ?? 'semantic'),
+        };
+      })(),
     },
     knowledge: {
       currentPoint: resolvedCurrentPoint,
@@ -3194,6 +3253,11 @@ function buildPromptInput(input: TeachingTurnInput) {
     priorMisconceptions: scenarioPriorMisconceptions,
     // 尾部已单独注入 supplementaryMaterial，scenario 体内不再重复携带
     supplementaryMaterial: scenarioSupplementaryMaterial,
+    // 诚实回执（2026-11-22 切口 C）：与 supplementaryMaterial 同为逐回合变化子键 → 同纪律提取到尾部
+    supplementStatus: scenarioSupplementStatus,
+    // 学生贴链接（2026-11-23）：预抓成果与读取状态同为逐回合变化子键 → 同纪律提取到尾部
+    studentLinkMaterial: scenarioStudentLinkMaterial,
+    linkStatus: scenarioLinkStatus,
     // 缓存追踪实测（2026-09-28）：memoryWarmup 是漏网的第 7 个逐回合变化子键——温故点被消费后
     // 逐回合合并回计划（teaching-warmup.ts），留在 scenario（system 消息）会让消费温故的回合
     // 整段 KV 缓存归零。提取到载荷尾部，模板引用路径同步改为顶层键名（core yaml 已同步）。
@@ -3264,6 +3328,11 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(input.boardContext ? { boardContext: input.boardContext } : {}),
       // 教师补充材料（逐回合变化 → 同样放载荷尾部）：上一轮 control.supplement 的入库成果
       ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
+      // 教师补充槽诚实回执（逐回合变化 → 载荷尾部）：pending=在途承接；expired=坦白没查到
+      ...(scenarioSupplementStatus ? { supplementStatus: scenarioSupplementStatus } : {}),
+      // 学生贴链接（逐回合变化 → 载荷尾部）：预抓成果 / 读取失败降级提示
+      ...(scenarioStudentLinkMaterial ? { studentLinkMaterial: scenarioStudentLinkMaterial } : {}),
+      ...(scenarioLinkStatus ? { linkStatus: scenarioLinkStatus } : {}),
       // 温故计划（逐回合被消费合并 → 载荷尾部；模板引用路径已同步为顶层 memoryWarmup）
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
       // 课堂契约支线（逐回合变化 → 载荷尾部）：预算、停车区、本轮指令
@@ -3280,6 +3349,9 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
       ...(scenarioBranchState ? { branchState: scenarioBranchState } : {}),
       ...(scenarioBranchDirective ? { branchDirective: scenarioBranchDirective } : {}),
+      ...(scenarioSupplementStatus ? { supplementStatus: scenarioSupplementStatus } : {}),
+      ...(scenarioStudentLinkMaterial ? { studentLinkMaterial: scenarioStudentLinkMaterial } : {}),
+      ...(scenarioLinkStatus ? { linkStatus: scenarioLinkStatus } : {}),
     },
     knowledge: input.knowledge,
     learner: input.learner,
@@ -3303,7 +3375,7 @@ function buildAnalysisOnlyPayload(input: TeachingTurnInput) {
   return {
     ...buildPromptInput(input),
     _analysisOnlyDirective:
-      '【本次调用为认知判定阶段】只输出 analysis 对象（含 cognitiveLevel/levelScore/understanding/confusionPoints/engagement/emotionalState/loadIndex/loadBasis），'
+      '【本次调用为认知判定阶段】只输出 analysis 对象（含 cognitiveLevel/levelScore/understanding/confusionPoints/engagement/emotionalState/loadBand/loadBasis），'
       + '不输出 reply/knowledge/pedagogy/control。所有判定必须基于输入证据，无证据时按规则取默认值。',
   };
 }

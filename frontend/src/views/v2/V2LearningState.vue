@@ -78,10 +78,10 @@
                          用户不需要知道状态是怎么算出来的，只需要知道落在哪一档 -->
                     <li><b class="dot dot--green"></b>整体状态：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
                     <li><b class="dot dot--blue"></b>数据积累期显示「积累中」，暂不定档</li>
-                    <!-- 三种尺度（2026-11-22 UI 走查）：同屏并排的 −5.75 / 1.15 / 6.9 / 23 分别是
-                         相对量、0-10、0-100、0-100，用户拿整体状态的 <20 图例去套 6.9 分的疲劳
-                         会得出「该休息」的误读——补一行尺度说明 -->
-                    <li><b class="dot dot--purple"></b>四项尺度不同：整体状态 −100~+100，训练负荷 0–10，压力/疲劳 0–100——别跨指标比数值大小</li>
+                    <!-- 三种尺度（2026-11-22 UI 走查，2026-11-23 补单位）：同屏并排的 −5.75 / 1.15 / 6.9 / 23
+                         分别是相对量、0-10、0-100、0-100。tooltip 已给每个数带单位；图例只提示
+                         「看趋势、不横向比」，不再让用户拿 <20 的整体状态图例去套 6.9 分的疲劳。 -->
+                    <li><b class="dot dot--purple"></b>各指标刻度不同（整体状态 −100~+100、训练负荷 0–10、压力/疲劳 0–100），看曲线趋势即可，不必横向比数值大小</li>
                     <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
                   </ul>
                 </details>
@@ -269,9 +269,9 @@
                 <b>{{ displayDay.label }}</b>
                 <span v-if="displayDay.date <= todayKey">时长 {{ !sessionsOk ? '未读取' : `${displayDay.minutes} 分钟` }}</span>
                 <template v-if="displayDay.ktl !== null || displayDay.lf !== null || displayDay.lsb !== null">
-                  <span class="ff-info__fitness">负荷 {{ displayDay.ktl ?? '—' }}</span>
-                  <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }}</span>
-                  <span v-if="displayDay.lsb !== null">状态 {{ displayDay.lsb }}（{{ displayDay.zone?.label || '暂不定档' }}）</span>
+                  <span class="ff-info__fitness">负荷 {{ displayDay.ktl ?? '—' }} / 10</span>
+                  <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }} / 100</span>
+                  <span v-if="displayDay.lsb !== null">状态 {{ displayDay.lsb }}（{{ displayDay.zone?.label || '暂不定档' }}，−100~100）</span>
                 </template>
                 <span v-else>该日暂无状态记录</span>
               </div>

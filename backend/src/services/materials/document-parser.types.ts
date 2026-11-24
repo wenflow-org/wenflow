@@ -28,7 +28,7 @@ export const SUPPORTED_DOCUMENT_EXTS = [...OFFICE_DOCUMENT_EXTS, ...PLAIN_TEXT_E
 /** legacy 二进制格式：不支持，提示另存。 */
 export const LEGACY_DOCUMENT_EXTS = ['.doc', '.ppt', '.xls'] as const;
 
-/** 文本层闸门：平均每页字符数低于此值即判「无文本层」（扫描件/图片型 PDF）。 */
+/** 文本层闸门：平均每页字符数低于此值即判「无文本层」（扫描件/图片型 PDF；**仅 PDF 走页均口径**）。 */
 export const MIN_CHARS_PER_PAGE = 100;
 
 /** 文本层闸门：整篇字符数绝对下限（页数未知时也生效）。 */
@@ -134,6 +134,7 @@ export function rejectMessageFor(reason: DocumentRejectReason): string {
 /**
  * 文本层闸门（纯函数，单测锚点）：判断抽取结果是否够得上「文本型」。
  * 未知页数（docx 等）时只按绝对下限判定——**未知不等于最小**，不额外收紧。
+ * 页均口径的适用格式由 gatePageCountForFormat 决定（本函数只认传入的 pageCount）。
  */
 export function evaluateTextLayer(input: {
   charCount: number;
@@ -146,6 +147,23 @@ export function evaluateTextLayer(input: {
     return { ok: false, reason: 'no_text_layer' };
   }
   return { ok: true };
+}
+
+/**
+ * 页均字符闸门的格式分档（纯函数，单测锚点；2026-11-22 外部评审切口 A）：
+ * 只有 PDF 把真实页数交给页均闸门（扫描件误判的主战场）；pptx/xlsx 的「页」是
+ * 幻灯片/工作表——教学课件一页常只有标题+3~5 个短要点，页均 40~80 字非常常见，
+ * 拿 100/页去卡会成批误杀合法文件，故不参与页均口径，回退 null（只按整篇下限判）。
+ */
+export function gatePageCountForFormat(input: {
+  ext: string;
+  pageCount: number | null;
+  slideCount: number;
+  sheetCount: number;
+}): number | null {
+  const pageCount = Number(input.pageCount || 0);
+  if (String(input.ext || '').toLowerCase() === '.pdf' && pageCount > 0) return pageCount;
+  return null;
 }
 
 /** 「像正文」判定的最短长度（剥掉 markdown 记号后剩下的文字）。 */

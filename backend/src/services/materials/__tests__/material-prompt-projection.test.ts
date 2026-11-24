@@ -60,6 +60,36 @@ describe('buildPromptFriendlyMaterials', () => {
     expect(STAGE_MATERIAL_LIMITS.maxSections).toBeLessThan(PATH_MATERIAL_LIMITS.maxSections);
   });
 
+  it('采集不完整（partial）→ 投影带 completeness；完整资料不带该键', () => {
+    const partial = pack() as Record<string, any>;
+    partial.status = 'partial';
+    partial.coverage = { covered: ['章节1'], missing: ['社会领域', '科学领域'] };
+    const result = buildPromptFriendlyMaterials([partial], PATH_MATERIAL_LIMITS)!;
+    expect(result[0].completeness).toEqual({ status: 'partial', missing: ['社会领域', '科学领域'] });
+
+    // ok 资料保持零变化（不给路径层新增载荷）
+    const ok = buildPromptFriendlyMaterials([pack()], PATH_MATERIAL_LIMITS)!;
+    expect(ok[0]).not.toHaveProperty('completeness');
+  });
+
+  it('来源权威分级：上传=upload、联网=web（旧包按 sourceUrl 推断）', () => {
+    const upload = buildPromptFriendlyMaterials([pack()], PATH_MATERIAL_LIMITS)!;
+    expect(upload[0].origin).toBe('upload');
+
+    const web = buildPromptFriendlyMaterials(
+      [pack({ sourceUrl: 'https://example.com/article' })],
+      PATH_MATERIAL_LIMITS
+    )!;
+    expect(web[0].origin).toBe('web');
+
+    // 显式 origin 优先（库优先复用 web 记录时由 builder 写入）
+    const explicit = buildPromptFriendlyMaterials(
+      [pack({ sourceUrl: 'https://example.com/article', origin: 'upload' })],
+      PATH_MATERIAL_LIMITS
+    )!;
+    expect(explicit[0].origin).toBe('upload');
+  });
+
   it('无资料 / 空数组 / 只有 not_found 包 → null', () => {
     expect(buildPromptFriendlyMaterials(null)).toBeNull();
     expect(buildPromptFriendlyMaterials([])).toBeNull();

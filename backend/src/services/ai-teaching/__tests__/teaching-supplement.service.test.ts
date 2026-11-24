@@ -6,7 +6,16 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { promoteSupplementSlot, type SupplementSlot } from '../teaching-supplement.service';
+import {
+  promoteSupplementSlot,
+  supplementStatusForScenario,
+  supplementSyncPlan,
+  fetchSupplementMaterialSync,
+  planStudentLinkRead,
+  readStudentLink,
+  STUDENT_LINK_MAX_PER_LESSON,
+  type SupplementSlot,
+} from '../teaching-supplement.service';
 
 let root = '';
 
@@ -113,6 +122,207 @@ describe('promoteSupplementSlot 状态机', () => {
     const { slot: next, payload } = promoteSupplementSlot(slot, userId, 3);
     expect(next?.status).toBe('delivered');
     expect(payload?.materialId).toBe(materialId);
+  });
+});
+
+describe('supplementStatusForScenario · 诚实回执注入判定（2026-11-22 切口 C）', () => {
+  it('采集在途（requested、无载荷）→ pending（等待期每轮承接，不装失忆）', () => {
+    const slot: SupplementSlot = {
+      status: 'requested', topic: '复利公式', query: '复利公式',
+      requestedAt: new Date().toISOString(), requestedTurn: 2,
+    };
+    const status = supplementStatusForScenario({ slot, payload: null }, slot);
+    expect(status).toEqual({ status: 'pending', topic: '复利公式' });
+  });
+
+  it('刚翻转 expired（对象引用 ≠ artifacts 旧槽位）→ expired（一次性坦白）', () => {
+    const oldSlot: SupplementSlot = {
+      status: 'requested', topic: '一直没采到', query: '一直没采到',
+      requestedAt: new Date().toISOString(), requestedTurn: 10,
+    };
+    const flipped: SupplementSlot = { ...oldSlot, status: 'expired' };
+    const status = supplementStatusForScenario({ slot: flipped, payload: null }, oldSlot);
+    expect(status).toEqual({ status: 'expired', topic: '一直没采到' });
+  });
+
+  it('已是旧槽位的 expired（引用相同）→ 不注（避免后续轮次反复道歉）', () => {
+    const expiredSlot: SupplementSlot = {
+      status: 'expired', topic: '一直没采到', query: '一直没采到',
+      requestedAt: new Date().toISOString(), requestedTurn: 10,
+    };
+    expect(supplementStatusForScenario({ slot: expiredSlot, payload: null }, expiredSlot)).toBeNull();
+  });
+
+  it('payload 就绪（delivered）→ 不注（走 supplementaryMaterial 载荷）', () => {
+    const slot: SupplementSlot = {
+      status: 'delivered', topic: '费曼学习法', query: '费曼学习法',
+      requestedAt: new Date().toISOString(), requestedTurn: 2, deliveredTurn: 3,
+    };
+    expect(supplementStatusForScenario({ slot, payload: { excerpt: '…' } }, slot)).toBeNull();
+  });
+
+  it('无槽位 → 不注', () => {
+    expect(supplementStatusForScenario({ slot: null, payload: null }, undefined)).toBeNull();
+  });
+});
+
+describe('supplementSyncPlan · 同轮复调触发判定（2026-11-23）', () => {
+  const request = { topic: '复利公式', query: '复利公式' };
+
+  it('正常请求 + 无旧槽位 + 未闭卷 → 尝试同步采集', () => {
+    expect(supplementSyncPlan(request, undefined, {})).toBe(true);
+  });
+
+  it('无请求 / topic 空 → 不试（没有触发就没有复调）', () => {
+    expect(supplementSyncPlan(null, undefined, {})).toBe(false);
+    expect(supplementSyncPlan({ topic: '  ' }, undefined, {})).toBe(false);
+  });
+
+  it('已有旧槽位（在途/已交付/已过期）→ 不试（每 session ≤1 次纪律不变）', () => {
+    const slot: SupplementSlot = {
+      status: 'requested', topic: '旧的', query: '旧的',
+      requestedAt: new Date().toISOString(), requestedTurn: 1,
+    };
+    expect(supplementSyncPlan(request, slot, {})).toBe(false);
+  });
+
+  it('闭卷模式（allowWebSupplement === false）→ 不试（引擎闸第一道）', () => {
+    expect(supplementSyncPlan(request, undefined, { allowWebSupplement: false })).toBe(false);
+    // 缺省/true = 允许
+    expect(supplementSyncPlan(request, undefined, { allowWebSupplement: true })).toBe(true);
+    expect(supplementSyncPlan(request, undefined, undefined)).toBe(true);
+  });
+});
+
+describe('fetchSupplementMaterialSync · 带硬预算同步采集（2026-11-23）', () => {
+  it('采集成功 → 透传 outcome + durationMs', async () => {
+    const deps = {
+      searchWeb: (async () => ({ results: [] })) as never,
+      fetchWeb: (async () => ({})) as never,
+      ingestWebMaterial: (async () => ({})) as never,
+      findWebRecordByTitle: (() => ({ id: 'm_sync', sourceUrl: 'https://example.com/a' })) as never,
+    };
+    const outcome = await fetchSupplementMaterialSync('user_sync1', '话题', '查询', deps as never);
+    expect(outcome.ok).toBe(true);
+    expect(outcome.materialId).toBe('m_sync');
+    expect(outcome.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('采集卡死超预算 → ok=false（sync-budget-exceeded），永不抛错', async () => {
+    // 预算下限 2000ms（防呆）；2000 预算 vs 3s 挂死 → 超预算胜出
+    process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS = '2000';
+    try {
+      const deps = {
+        searchWeb: (async () => new Promise((_, reject) => setTimeout(() => reject(new Error('hang')), 3000))) as never,
+        fetchWeb: (async () => ({})) as never,
+        ingestWebMaterial: (async () => ({})) as never,
+        findWebRecordByTitle: (() => null) as never,
+      };
+      const outcome = await fetchSupplementMaterialSync('user_sync2', '话题', '查询', deps as never);
+      expect(outcome.ok).toBe(false);
+      expect(outcome.error).toBe('sync-budget-exceeded');
+      expect(outcome.durationMs).toBeGreaterThanOrEqual(2000);
+      expect(outcome.durationMs).toBeLessThan(4000);
+    } finally {
+      delete process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS;
+    }
+  });
+
+  it('采集抛错 → ok=false 带原因，永不向上抛', async () => {
+    const deps = {
+      searchWeb: (async () => { throw new Error('provider down'); }) as never,
+      fetchWeb: (async () => ({})) as never,
+      ingestWebMaterial: (async () => ({})) as never,
+      findWebRecordByTitle: (() => null) as never,
+    };
+    const outcome = await fetchSupplementMaterialSync('user_sync3', '话题', '查询', deps as never);
+    expect(outcome.ok).toBe(false);
+    expect(String(outcome.error)).toContain('provider down');
+  });
+});
+
+describe('planStudentLinkRead · 学生贴链接回合前判定（2026-11-23）', () => {
+  it('有 URL + 未闭卷 + 配额未满 → read 首条', () => {
+    const plan = planStudentLinkRead('老师看这个 https://learn.microsoft.com/sql/t-sql', {}, 0);
+    expect(plan).toEqual({ action: 'read', url: 'https://learn.microsoft.com/sql/t-sql' });
+  });
+
+  it('无 URL → skip no-url（零开销：没链接就不走抓取）', () => {
+    expect(planStudentLinkRead('这句话没有任何链接', {}, 0)).toEqual({ action: 'skip', reason: 'no-url' });
+  });
+
+  it('闭卷模式 → skip closed-book（不抓但带 url，老师据此让学生贴正文）', () => {
+    const plan = planStudentLinkRead(
+      '看这个 https://mp.weixin.qq.com/s/abc',
+      { allowWebSupplement: false },
+      0
+    );
+    expect(plan).toEqual({ action: 'skip', reason: 'closed-book', url: 'https://mp.weixin.qq.com/s/abc' });
+  });
+
+  it('SSRF 闸：localhost/内网地址 → skip unsafe-url（不抓）', () => {
+    expect(planStudentLinkRead('http://192.168.1.10/admin 看看', {}, 0))
+      .toEqual({ action: 'skip', reason: 'unsafe-url', url: 'http://192.168.1.10/admin' });
+  });
+
+  it('每课独立配额：第 N 条超上限 → skip quota-exhausted（不与 supplement 配额混用）', () => {
+    const url = 'https://example.com/doc';
+    expect(planStudentLinkRead(`看 ${url}`, {}, STUDENT_LINK_MAX_PER_LESSON - 1)).toEqual({ action: 'read', url });
+    expect(planStudentLinkRead(`看 ${url}`, {}, STUDENT_LINK_MAX_PER_LESSON))
+      .toEqual({ action: 'skip', reason: 'quota-exhausted', url });
+  });
+});
+
+describe('readStudentLink · 带预算读学生链接（2026-11-23）', () => {
+  it('抓到正文 → 章节窗口截 ≤1200 字 + 标题', async () => {
+    const deps = {
+      fetchWeb: (async () => ({
+        results: [{ url: 'https://example.com/a', finalUrl: 'https://example.com/a', title: 'STRING_AGG 官方文档', text: '正文内容足够长可以成为摘录。'.repeat(200), provider: 'tavily' }],
+        errors: [],
+        provider: 'tavily',
+        attempts: ['tavily'],
+        latencyMs: 10,
+      })) as never,
+    };
+    const outcome = await readStudentLink('user_link1', 'https://example.com/a', deps as never);
+    expect(outcome.ok).toBe(true);
+    expect(outcome.title).toBe('STRING_AGG 官方文档');
+    expect(outcome.excerpt!.length).toBeLessThanOrEqual(1200);
+    expect(outcome.excerpt!.length).toBeGreaterThan(0);
+  });
+
+  it('401/403 → login-required（公众号/飞书私有文档的登录墙降级）', async () => {
+    const deps = {
+      fetchWeb: (async () => ({
+        results: [],
+        errors: [{ url: 'https://mp.weixin.qq.com/s/abc', message: 'HTTP 403 Forbidden' }],
+        provider: 'tavily',
+        attempts: ['tavily'],
+        latencyMs: 10,
+      })) as never,
+    };
+    const outcome = await readStudentLink('user_link2', 'https://mp.weixin.qq.com/s/abc', deps as never);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe('login-required');
+  });
+
+  it('无可读正文 → unreadable；超预算 → timeout；永不抛错', async () => {
+    const unreadable = await readStudentLink('user_link3', 'https://example.com/empty', {
+      fetchWeb: (async () => ({ results: [], errors: [], provider: 'tavily', attempts: ['tavily'], latencyMs: 5 })) as never,
+    } as never);
+    expect(unreadable.ok).toBe(false);
+    expect(unreadable.code).toBe('unreadable');
+
+    process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS = '2000';
+    try {
+      const hanging = await readStudentLink('user_link4', 'https://example.com/hang', {
+        fetchWeb: (async () => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout exceeded')), 3500))) as never,
+      } as never);
+      expect(hanging.ok).toBe(false);
+      expect(['timeout', 'unreadable']).toContain(hanging.code);
+    } finally {
+      delete process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS;
+    }
   });
 });
 

@@ -546,6 +546,7 @@
                 <!-- 里程碑名独占一行（2026-10-31 外部评审）：原与标题同行 baseline 排列，
                      长里程碑名被挤成两行短字；作副标题独立成行读感正常 -->
                 <span v-if="viewedLesson.milestone" class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
+                <span v-if="learnTimeline.length" class="cp-lesson-head__count">完整对话 · {{ learnTimeline.length }} 条</span>
               </div>
               <!-- 加载态用骨架，禁止纯文字（T2 硬约束；2026-10-06 审核 #47） -->
               <MkSkeleton v-if="teachingDetailLoading" variant="rows" :count="3" :h="12" :radius="4" />
@@ -553,30 +554,41 @@
                    本列只放课堂对话；要总结去总结页点对应课。 -->
               <template v-if="learnTimeline.length">
                 <template v-for="entry in learnTimeline" :key="entry.key">
+                  <div v-if="learnStageByKey.get(entry.key)" class="cp-stage">
+                    <span class="cp-stage__dot" aria-hidden="true"></span>
+                    <span class="cp-stage__label">{{ learnStageByKey.get(entry.key) }}</span>
+                  </div>
                   <article v-if="entry.message" class="cp-transcript__message" :class="entry.message.role === 'assistant' ? 'is-teacher' : (isRealMode ? 'is-learner is-real-learner' : 'is-learner')">
-                    <header class="cp-msg__head">
-                      <span>{{ entry.message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-                      <time
-                        v-if="entry.at"
-                        class="cp-msg__time"
-                        :datetime="new Date(entry.at).toISOString()"
-                        :title="msgStamp(entry.at)"
-                      >{{ msgClock(entry.at) }}</time>
-                    </header>
-                    <div v-if="entry.message.content" class="cp-transcript__content" v-html="renderAiMessageHtml(entry.message.content)"></div>
-                    <!-- 课堂视觉产物：与学习者侧同一套确定性渲染（mermaid + 多图型 SVG），
-                         运营在座舱里能直接看到老师当时摆的图，而不是只看到「见图」二字。 -->
-                    <TeachingDiagram
-                      v-for="(diagram, di) in entry.message.diagrams"
-                      :key="`${entry.key}-d${di}`"
-                      :code="String(diagram.code || '')"
-                      :caption="diagram.caption || null"
-                    />
-                    <TeachingFigure
-                      v-for="(figure, fi) in entry.message.figures"
-                      :key="`${entry.key}-f${fi}`"
-                      :figure="figure"
-                    />
+                    <span class="cp-msg__avatar" aria-hidden="true">{{ entry.message.role === 'assistant' ? '师' : isRealMode ? '学' : '虚' }}</span>
+                    <div class="cp-msg__body">
+                      <header class="cp-msg__head">
+                        <span>{{ entry.message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                        <time
+                          v-if="entry.at"
+                          class="cp-msg__time"
+                          :datetime="new Date(entry.at).toISOString()"
+                          :title="msgStamp(entry.at)"
+                        >{{ msgClock(entry.at) }}</time>
+                      </header>
+                      <div v-if="entry.message.content" class="cp-transcript__content" v-html="renderAiMessageHtml(entry.message.content)"></div>
+                      <!-- 课堂视觉产物：与学习者侧同一套确定性渲染（mermaid + 多图型 SVG），
+                           运营在座舱里能直接看到老师当时摆的图，而不是只看到「见图」二字。 -->
+                      <div v-if="entry.message.figures?.length" class="cp-board-update">
+                        <span class="cp-board-update__label">白板更新</span>
+                        <span class="cp-board-update__hint">课堂里这一轮摆出的图</span>
+                      </div>
+                      <TeachingDiagram
+                        v-for="(diagram, di) in entry.message.diagrams"
+                        :key="`${entry.key}-d${di}`"
+                        :code="String(diagram.code || '')"
+                        :caption="diagram.caption || null"
+                      />
+                      <TeachingFigure
+                        v-for="(figure, fi) in entry.message.figures"
+                        :key="`${entry.key}-f${fi}`"
+                        :figure="figure"
+                      />
+                    </div>
                   </article>
                   <!-- 检查点：题目/作答/判分。题目走结构化通道、不进聊天逐字稿，所以按时间插回
                        它发生的那一回合（2026-10-19 用户走查「不符合课堂阅读顺序」）；
@@ -669,6 +681,18 @@
                 <span v-if="sessionLoadView" class="cp-wrapup-stats__item" :title="sessionLoadTitle">本轮负荷 {{ sessionLoadView }}</span>
                 <span v-if="wrapupSourceBadge" class="mk-badge" :class="wrapupSourceBadge === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ wrapupSourceBadge }}</span>
                 <span v-if="wrapupStatusBadge" class="mk-badge" :class="wrapupStatusBadge === 'complete' ? 'mk-badge--ok' : 'mk-badge--warn'">{{ wrapupStatusBadge === 'complete' ? '总结完整' : '降级总结' }}</span>
+              </div>
+            </div>
+            <!-- 评估与控制态（2026-11-24）：本课 LLM 判定 → 池化落库 → 下一节控制面，运营同屏可查 -->
+            <div v-if="wrapupStateRows.length" class="cp-state">
+              <div class="cp-state__head">
+                <span class="cp-state__title">评估与控制态</span>
+                <span class="cp-state__hint">本课判定 → 池化落库 → 下节课控制面</span>
+              </div>
+              <div v-for="row in wrapupStateRows" :key="row.label" class="cp-state__row">
+                <span class="cp-state__label">{{ row.label }}</span>
+                <span class="cp-state__value">{{ row.value }}</span>
+                <span v-if="row.note" class="cp-state__note">{{ row.note }}</span>
               </div>
             </div>
             <div class="cp-wrapup-cards" v-if="wrapupFieldCards.length">
@@ -1786,6 +1810,22 @@ const checkpointGroups = computed<Array<{ cp: CockpitCheckpoint; attempts: numbe
 const learnTimeline = computed<Array<Omit<LearnTimelineEntry, 'checkpoint'> & { checkpoint?: CockpitCheckpoint }>>(() =>
   mergeLearnTimeline(learnConversationMessages.value, checkpointGroups.value.map((g) => ({ ...g.cp, attempts: g.attempts })))
 )
+/** 课堂回看的阶段锚点（2026-11-24）：和总结页同一套「开场 / 白板出现 / 检查点 / 收束」，
+    只在真实节点出现一次；座舱里长转录不再是一串无节奏的气泡。 */
+const learnStageByKey = computed(() => {
+  const map = new Map<string, string>()
+  const list = learnTimeline.value
+  if (!list.length) return map
+  map.set(list[0].key, '开场')
+  const firstVisual = list.findIndex((entry) => !!entry.message
+    && ((entry.message.figures?.length || 0) > 0 || (entry.message.diagrams?.length || 0) > 0))
+  if (firstVisual > 0) map.set(list[firstVisual].key, '白板出现')
+  const firstCheckpoint = list.findIndex((entry) => !!entry.checkpoint)
+  if (firstCheckpoint > 0) map.set(list[firstCheckpoint].key, '检查点')
+  const last = list.length - 1
+  if (last > 0 && list[last].message) map.set(list[last].key, '收束')
+  return map
+})
 const CHECKPOINT_TYPE_LABEL: Record<string, string> = {
   short_answer: '简答', single_choice: '单选', multiple_choice: '多选', choice: '选择', true_false: '判断'
 }
@@ -2310,7 +2350,7 @@ const pathReadinessText = computed(() => {
 })
 
 const {
-  hasWrapup, wrapupSections, wrapupFieldCards,
+  hasWrapup, wrapupObject, wrapupSections, wrapupFieldCards,
   wrapupSourceBadge, wrapupStatusBadge, wrapupEmptyHint
 } = useCockpitWrapup(stageResults, stageStatus, isRealMode)
 
@@ -2570,20 +2610,142 @@ const realTeachingBlock = computed(() => asRecord(isRealMode.value ? session.val
 const sessionLoadBlock = computed(() => asRecord(realTeachingBlock.value.sessionLoad))
 const sessionLoadView = computed(() => {
   const mean = sessionLoadBlock.value.mean
-  if (typeof mean !== 'number' || !Number.isFinite(mean)) return ''
-  const pct = (v: number) => `${Math.round(v * 100)}%`
-  const parts = [`均值 ${pct(mean)}`]
-  if (typeof sessionLoadBlock.value.max === 'number') parts.push(`峰值 ${pct(sessionLoadBlock.value.max as number)}`)
+  const hasMean = typeof mean === 'number' && Number.isFinite(mean)
+  const bands = loadBandParts(sessionLoadBlock.value.bandDist)
+  // 无档位也无均值 → 整项不渲染（旧会话不造「0 轮」假读数）
+  if (!bands.length && !hasMean) return ''
+  const parts: string[] = []
+  if (bands.length) parts.push(`档位 ${bands.join(' / ')}`)
+  if (hasMean) {
+    const pct = (v: number) => `${Math.round(v * 100)}%`
+    parts.push(`均值 ${pct(mean as number)}`)
+    if (typeof sessionLoadBlock.value.max === 'number') parts.push(`峰值 ${pct(sessionLoadBlock.value.max as number)}`)
+  }
   if (typeof sessionLoadBlock.value.perTurnCount === 'number') parts.push(`${sessionLoadBlock.value.perTurnCount} 轮`)
   return parts.join(' · ')
 })
+const LOAD_BAND_TEXT: Record<string, string> = { under: '不足', flow: '适中', hint: '偏难', overload: '过载', unknown: '无证据' }
+/** bandDist → 百分比摘要（只在有有效计数时返回，避免 0 计数刷屏）。 */
+function loadBandParts(raw: unknown): string[] {
+  const dist = asRecord(raw)
+  const entries = Object.entries(dist).filter(([, n]) => typeof n === 'number' && n > 0) as Array<[string, number]>
+  const total = entries.reduce((sum, [, n]) => sum + n, 0)
+  if (!entries.length || total <= 0) return []
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, n]) => `${LOAD_BAND_TEXT[key] || key} ${Math.round((n / total) * 100)}%`)
+}
 const sessionLoadTitle = computed(() => {
   const dist = asRecord(sessionLoadBlock.value.basisDist)
   const basis = Object.entries(dist)
     .filter(([, n]) => typeof n === 'number')
     .map(([key, n]) => `${key} ${n}`)
     .join(' / ')
-  return basis ? `负荷判定依据分布：${basis}` : 'AI 对每轮作答的认知负荷估计（0-1）'
+  const bands = loadBandParts(sessionLoadBlock.value.bandDist)
+  const bandText = bands.length ? `负荷档位分布：${bands.join(' / ')}` : ''
+  const basisText = basis ? `判定依据分布：${basis}` : ''
+  return [bandText, basisText].filter(Boolean).join('；') || 'AI 对每轮作答的认知负荷估计'
+})
+
+/* 评估与控制态（2026-11-24 运营可见性）：后端 wrapupView 已透出 evaluation/controlState/
+   shadowDeterministic，但本页此前只渲染 summary 文本。运营排查「这节课判了什么档、池化后
+   落了什么值、下一节为什么被压到 recover」时，必须能在同一页看到这条链路，而不是只看负荷行。 */
+const TIER_ZH: Record<string, string> = { low: '低', mid: '中', high: '高' }
+const PACING_ZH: Record<string, string> = { recover: '降压恢复', steady: '按序推进', push: '放开推进' }
+const LEVEL_ZH: Record<string, string> = { low: '低', medium: '中', high: '高' }
+const score1 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(1) : null)
+const wrapupStateRows = computed<Array<{ label: string; value: string; note: string }>>(() => {
+  const w = wrapupObject.value
+  const rows: Array<{ label: string; value: string; note: string }> = []
+
+  // 1) 本节 LLM 评估：分数 + 档位 + 置信度（档位是判定口径，分数只是档内代表值）
+  const ev = asRecord(w.evaluation)
+  const tiers = asRecord(ev.tiers)
+  const evalParts = ([['sessionLss', 'LSS'], ['sessionKtl', 'KTL'], ['sessionLf', 'LF']] as const)
+    .map(([key, label]) => {
+      const value = score1(ev[key])
+      if (!value) return ''
+      const tier = TIER_ZH[String(tiers[key] || '')]
+      return `${label} ${value}${tier ? `（${tier}）` : ''}`
+    })
+    .filter(Boolean)
+  if (evalParts.length) {
+    const conf = typeof ev.confidence === 'number' && Number.isFinite(ev.confidence) ? Math.round(ev.confidence * 100) : null
+    const source = firstText(ev.evaluationSource)
+    rows.push({
+      label: '本节评估',
+      value: evalParts.join(' · '),
+      note: [conf !== null ? `置信度 ${conf}%` : '', source ? `来源 ${source}` : ''].filter(Boolean).join(' · ') || 'LLM 档位判定',
+    })
+  }
+
+  // 2) 平台落库状态：与本节评估分开——这是加了历史先验、写进 learning_metrics 的值
+  const st = asRecord(w.stateUpdate)
+  const stateParts = [['lss', 'LSS'], ['ktl', 'KTL'], ['lf', 'LF'], ['lsb', 'LSB']]
+    .map(([key, label]) => {
+      const value = score1(st[key])
+      return value ? `${label} ${value}` : ''
+    })
+    .filter(Boolean)
+  if (stateParts.length) {
+    const at = firstText(st.timestamp)
+    rows.push({
+      label: '落库状态',
+      value: stateParts.join(' · '),
+      note: `同量纲池化（历史先验 + 本节观测）${at ? ` · ${formatTime(at)}` : ''}`,
+    })
+  }
+
+  // 3) 收束时生效的控制态：这就是下一节课实际读到的 paceMode/cap
+  const cs = asRecord(w.controlState)
+  if (Object.keys(cs).length) {
+    const flags = asRecord(cs.controlFlags)
+    const parts = [
+      cs.paceMode ? `节奏 ${PACING_ZH[String(cs.paceMode)] || String(cs.paceMode)}` : '',
+      cs.challengeLevelCap ? `难度≤${LEVEL_ZH[String(cs.challengeLevelCap)] || String(cs.challengeLevelCap)}` : '',
+      cs.conceptLoad ? `概念${LEVEL_ZH[String(cs.conceptLoad)] || String(cs.conceptLoad)}` : '',
+      cs.checkpointNeed ? `考测${LEVEL_ZH[String(cs.checkpointNeed)] || String(cs.checkpointNeed)}` : '',
+      cs.reviewPriority ? `巩固${LEVEL_ZH[String(cs.reviewPriority)] || String(cs.reviewPriority)}` : '',
+    ].filter(Boolean)
+    const distressAt = firstText(flags.distressRecoverAt)
+    const distressText = flags.distressRecover === true
+      ? `弃课锁生效${distressAt ? `（${formatTime(distressAt)} 触发，最长 72h）` : ''}`
+      : ''
+    rows.push({
+      label: '控制态',
+      value: parts.join(' · ') || '—',
+      note: [distressText, distressText ? '' : '本节收束时生效，驱动下一节课堂'].filter(Boolean).join(' · '),
+    })
+  }
+
+  // 4) 影子对比：LLM vs 确定性聚合 + 硬事件（只观测，不参与生产）
+  const shadow = asRecord(w.shadowDeterministic)
+  const det = asRecord(shadow.deterministic)
+  const llm = asRecord(shadow.llm)
+  const shadowScoreLine = (src: Record<string, unknown>) => {
+    const values = ['lss', 'ktl', 'lf'].map((key) => score1(src[key])).filter(Boolean)
+    return values.length === 3 ? values.join(' / ') : ''
+  }
+  const detLine = shadowScoreLine(det)
+  if (detLine) {
+    const delta = asRecord(shadow.delta)
+    const deltaText = ['lss', 'ktl', 'lf']
+      .map((key) => (typeof delta[key] === 'number' && Number.isFinite(delta[key]) ? `${key.toUpperCase()} ${Math.abs(delta[key] as number).toFixed(1)}` : ''))
+      .filter(Boolean)
+      .join(' · ')
+    const hard = asRecord(det.hardSignals)
+    const hardText = typeof hard.checkpointSamples === 'number' && hard.checkpointSamples > 0
+      ? `硬事件 独立 ${hard.independentPasses ?? 0}/${hard.checkpointSamples}（首答 ${hard.firstAttemptPasses ?? 0}/${hard.checkpointSamples}，作答 ${hard.attempts ?? 0} 次）`
+      : ''
+    const formula = firstText(shadow.formulaVersion)
+    const llmLine = shadowScoreLine(llm)
+    rows.push({
+      label: '影子对比',
+      value: llmLine ? `LLM ${llmLine} · 确定性 ${detLine}` : `确定性 ${detLine}`,
+      note: [deltaText ? `|Δ| ${deltaText}` : '', hardText, formula].filter(Boolean).join(' · ') || '仅观测，不参与生产判定',
+    })
+  }
+  return rows
 })
 const KNOWLEDGE_STATUS_TEXT: Record<string, string> = { mastered: '已掌握', learning: '学习中', review: '待复习', pending: '未开始' }
 const knowledgeRows = computed<Array<{ name: string; value: string; statusLabel: string; statusTone: string }>>(() => {
@@ -4012,10 +4174,32 @@ async function copyRawJson() {
 }
 .cp-transcript summary { cursor: pointer; font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted); }
 .cp-transcript__message {
-  display: grid; gap: 3px; padding: 8px 10px; border-left: 3px solid var(--mk-line); border-radius: var(--mk-radius-sm); background: var(--mk-surface-2);
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 10px; border-left: 3px solid var(--mk-line); border-radius: var(--mk-radius-sm); background: var(--mk-surface-2);
 }
 .cp-transcript__message.is-teacher { border-left-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: rgba(45, 212, 191, 0.1); }
+/* 头像 + 气泡正文：头像固定在说话人一侧，正文列独立成网格，长文/表格不再顶破整行 */
+.cp-transcript__message .cp-msg__avatar {
+  flex: 0 0 auto; width: 26px; height: 26px; margin-top: 15px; border-radius: 8px;
+  display: grid; place-items: center; font-size: var(--mk-fs-micro); font-weight: 800; line-height: 1;
+  color: var(--mk-blue-text); background: var(--mk-blue-bg-strong); border: 1px solid var(--mk-line);
+}
+.cp-transcript__message.is-learner .cp-msg__avatar {
+  color: var(--mk-teal-text, var(--mk-teal)); background: rgba(45, 212, 191, 0.16);
+}
+.cp-msg__body { display: grid; gap: 3px; flex: 1; min-width: 0; }
+/* 课堂阶段锚点：与总结页同口径，只在开场/白板/检查点/收束出现 */
+.cp-stage { display: flex; align-items: center; gap: 7px; margin: 6px 0 0 3px; }
+.cp-stage__dot {
+  width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%;
+  background: var(--mk-blue); box-shadow: 0 0 0 3px var(--mk-blue-bg);
+}
+.cp-stage__label { font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: 0.04em; color: var(--mk-blue-text); }
+/* 白板更新提示：图本身由 TeachingFigure 渲染，这里只标出“这一轮摆板了” */
+.cp-board-update { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
+.cp-transcript__message .cp-board-update__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-teal-text, var(--mk-teal)); }
+.cp-transcript__message .cp-board-update__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
 /* 2026-11-09 微调（图4 学习阶段课堂对话流）：真实模式（session-real）学习者消息卡向右缩进
    12% + 深蓝底，与左侧教师卡拉开区分度。仅给真实模式的「学习者」卡加 is-real-learner 修饰类，
    虚拟控制台（同用 .cp-transcript__message.is-learner）不受影响；教师卡保持原样。
@@ -4027,6 +4211,7 @@ async function copyRawJson() {
   margin-left: auto;
   width: auto;
   max-width: 78%;
+  flex-direction: row-reverse;
   background: var(--mk-blue-bg-strong);
   border-left-color: var(--mk-blue);
 }
@@ -4430,6 +4615,11 @@ async function copyRawJson() {
 .cp-lesson-head__main strong { font-size: var(--mk-fs-body); }
 /* 里程碑副标题独立一行（2026-10-31 外部评审）：不再与标题抢同一行 */
 .cp-lesson-head__ms { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.cp-lesson-head__count {
+  justify-self: start; margin-top: 4px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--mk-line); background: var(--mk-surface);
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted);
+}
 .cp-lesson-head__state { padding: 2px 9px; border-radius: var(--mk-radius-xs); font-size: var(--mk-fs-micro); font-weight: 800; background: var(--mk-surface-2); color: var(--mk-muted); }
 .cp-lesson-head__state[data-state='done'] { background: var(--mk-green-bg); color: var(--mk-green); }
 .cp-lesson-head__state[data-state='active'] { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
@@ -4497,6 +4687,28 @@ async function copyRawJson() {
 .cp-wrapup-stats__badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cp-wrapup-stats__item { display: inline-flex; align-items: baseline; gap: 4px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .cp-wrapup-stats__item em { font-style: normal; font-weight: 800; font-size: var(--mk-fs-emphasis); color: var(--mk-blue-text); font-variant-numeric: tabular-nums; }
+
+/* 评估与控制态（2026-11-24）：一行一环节，分数等宽；note 承载「为什么」而不是再开一列 */
+.cp-state {
+  display: grid;
+  gap: 8px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.cp-state__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cp-state__title { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
+.cp-state__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.cp-state__row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
+.cp-state__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted); }
+.cp-state__value { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-variant-numeric: tabular-nums; line-height: 1.5; }
+.cp-state__note { grid-column: 2; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.5; }
 
 .cp-wrapup-cards {
   display: grid;

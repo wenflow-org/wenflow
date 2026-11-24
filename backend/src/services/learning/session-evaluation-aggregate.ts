@@ -32,7 +32,7 @@ import {
 } from './session-evaluation-scale';
 
 /** 公式版本：任何影响输出的口径调整都必须提升它，否则影子历史不可比 */
-export const FORMULA_VERSION = 'session-eval-det-v1';
+export const FORMULA_VERSION = 'session-eval-det-v2';
 
 /** 置信度饱和所需的最少回合数：回合越少，证据越薄，confidence 越低 */
 export const FULL_CONFIDENCE_TURNS = 5;
@@ -94,6 +94,26 @@ export interface SessionEvaluationMetricDiagnostic {
   value: number | null;
 }
 
+/**
+ * 代码裁决的硬事件（2026-11-23 P1-1 影子腿）：
+ * 来自 lessonReport.evidence 的 checkpoint / exit-ticket 行——`independent/firstAttempt/correct`
+ * 全部由代码判分，不经过 LLM，是比键鼠遥测可靠得多的独立证据。
+ *
+ * 只在 **影子层** 使用：先观察 |Δ| 分布，真人样本足够后再谈是否接管生产。
+ */
+export interface SessionHardSignals {
+  /** 可用于判定的检查点/终检证据条数（分母） */
+  checkpointSamples: number;
+  /** 独立且正确的条数（无提示、首答；exit-ticket 通过也计入） */
+  independentPasses: number;
+  /** 首答即正确的条数 */
+  firstAttemptPasses: number;
+  /** 总作答次数（含重答；>samples 说明有重试） */
+  attempts: number;
+  /** 契约是否达标（lessonReport.met） */
+  contractMet?: boolean;
+}
+
 export interface DeterministicSessionEvaluation {
   lss: number;
   ktl: number;
@@ -103,6 +123,8 @@ export interface DeterministicSessionEvaluation {
   basis: 'per-turn-observations' | 'zero-evidence';
   turnCount: number;
   coverage: SessionEvaluationCoverage;
+  /** 本次影子计算实际使用的硬事件（无则 undefined） */
+  hardSignals?: SessionHardSignals;
   diagnostics: {
     lss: SessionEvaluationMetricDiagnostic;
     ktl: SessionEvaluationMetricDiagnostic;
@@ -295,6 +317,7 @@ function buildZeroEvidence(turnCount: number): DeterministicSessionEvaluation {
  */
 export function aggregateSessionEvaluation(
   observations: ReadonlyArray<SessionTurnObservation>,
+  hardSignals?: SessionHardSignals | null,
 ): DeterministicSessionEvaluation {
   const lssSeries = observations.map(turnLss).filter(isNumber);
   const ktlSeries = observations.map(turnKtl).filter(isNumber);
@@ -309,9 +332,22 @@ export function aggregateSessionEvaluation(
   // KTL：中位数与末段均值各半（典型质量 + 结束稳定性）
   const ktlMedian = median(ktlSeries);
   const ktlTail = meanOfLast(ktlSeries, KTL_TAIL_SIZE);
-  const ktlRaw = ktlMedian !== null && ktlTail !== null
+  let ktlRaw = ktlMedian !== null && ktlTail !== null
     ? 0.5 * ktlMedian + 0.5 * ktlTail
     : (ktlMedian ?? ktlTail);
+  let ktlMethod = 'median+tail-mean';
+  // 2026-11-23 P1-1 影子腿：代码裁决的 checkpoint/exit-ticket 独立通过率校准 KTL。
+  // 只在影子层使用（生产仍读 LLM 值）；样本越少权重越低（1 条不让硬事件主导）。
+  const hard = hardSignals && hardSignals.checkpointSamples > 0 ? hardSignals : null;
+  if (hard) {
+    const hadTurnKtl = ktlRaw !== null;
+    const hardKtl = 10 * clamp(hard.independentPasses / hard.checkpointSamples, 0, 1);
+    const weight = 0.15 + 0.15 * clamp(hard.checkpointSamples / 3, 0, 1);
+    ktlRaw = hadTurnKtl ? (1 - weight) * (ktlRaw as number) + weight * hardKtl : hardKtl;
+    ktlMethod = hadTurnKtl
+      ? `median+tail-mean+hard-events(${Math.round(weight * 100)}%)`
+      : 'hard-events';
+  }
   // LF：最差连续窗口均值（持续最差的一段代表负担）
   const lfRaw = worstWindowMean(lfSeries, WORST_WINDOW_SIZE);
 
@@ -333,7 +369,7 @@ export function aggregateSessionEvaluation(
   };
 
   const lss = resolveMetric(lssRaw, lssSeries.length, 'median', SESSION_EVALUATION_ZERO_EVIDENCE.lss);
-  const ktl = resolveMetric(ktlRaw, ktlSeries.length, 'median+tail-mean', SESSION_EVALUATION_ZERO_EVIDENCE.ktl);
+  const ktl = resolveMetric(ktlRaw, ktlSeries.length, ktlMethod, SESSION_EVALUATION_ZERO_EVIDENCE.ktl);
   const lf = resolveMetric(
     lfRaw,
     lfSeries.length,
@@ -354,6 +390,7 @@ export function aggregateSessionEvaluation(
     basis: 'per-turn-observations',
     turnCount: observations.length,
     coverage,
+    ...(hard ? { hardSignals: hard } : {}),
     diagnostics: {
       lss: lss.diagnostic,
       ktl: ktl.diagnostic,
@@ -365,8 +402,9 @@ export function aggregateSessionEvaluation(
 /** 便捷入口：直接吃 `teaching_sessions.messages[]` */
 export function aggregateSessionEvaluationFromMessages(
   messages: ReadonlyArray<SessionEvaluationTurnMessage>,
+  hardSignals?: SessionHardSignals | null,
 ): DeterministicSessionEvaluation {
-  return aggregateSessionEvaluation(extractSessionTurnObservations(messages));
+  return aggregateSessionEvaluation(extractSessionTurnObservations(messages), hardSignals);
 }
 
 /**
@@ -396,6 +434,8 @@ export interface SessionEvaluationShadow {
     basis: DeterministicSessionEvaluation['basis'];
     turnCount: number;
     coverage: SessionEvaluationCoverage;
+    /** 影子腿实际使用的硬事件（checkpoint 独立通过率），无则缺省 */
+    hardSignals?: SessionHardSignals;
   };
   llm: {
     lss: number;
@@ -443,6 +483,7 @@ export function buildSessionEvaluationShadow(input: {
       basis: deterministic.basis,
       turnCount: deterministic.turnCount,
       coverage: deterministic.coverage,
+      ...(deterministic.hardSignals ? { hardSignals: deterministic.hardSignals } : {}),
     },
     llm: llm
       ? {
