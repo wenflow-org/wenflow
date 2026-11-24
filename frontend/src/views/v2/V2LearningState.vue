@@ -2321,6 +2321,12 @@ function loadGuidance() {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg); box-shadow: var(--mk-shadow-modal);
 }
+/* 2026-11-24 走查：窄屏 ⓘ 跟在标题后（x≈224），326px 弹层向右溢出到 550px，
+   右半截被页宽裁掉。窄屏把 ⓘ 推到标题行最右、弹层右对齐，整块落回卡内。 */
+@media (max-width: 640px) {
+  .band__help { margin-left: auto; }
+  .band__help .legend { left: auto; right: 0; }
+}
 /* 掌握分布三色分段条 */
 .mbar {
   display: flex; height: 8px; border-radius: 999px; overflow: hidden;

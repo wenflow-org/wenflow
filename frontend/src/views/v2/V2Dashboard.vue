@@ -1611,8 +1611,9 @@ onMounted(() => {
 @media (min-width: 1440px) {
   .dash__main { max-width: 1260px; }
 }
-/* 问候行：两行结构（21px 问候 + 12.5px 日期行），右侧琥珀 streak 药丸 */
-.greet { display: grid; gap: 3px; padding: 2px 2px 0; }
+/* 问候行：两行结构（21px 问候 + 12.5px 日期行），右侧琥珀 streak 药丸。
+   2026-11-24 全站对齐：去掉左右 2px 内衬，标题与下方卡片同一条左轨（390 实测 16 vs 14）。 */
+.greet { display: grid; gap: 3px; padding: 2px 0 0; }
 /* 眉题行（2026-11-05 屏效比）：日期（可省略）在左、连续天数药丸在右，同一行；
    原先 .greet 是 space-between 的两列 + 移动端 column，日期与药丸各占一行 */
 .greet__eyebrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
@@ -2121,6 +2122,11 @@ onMounted(() => {
   /* 眉题行在窄屏保持同行（原 .greet{flex-direction:column} 把日期与药丸拆成两行，
      白吃 ~40px）；日期优先省略，药丸 flex:none 不缩 */
   .greet { gap: 2px; }
+}
+/* 1024–1100：路径/状态/个人中心在这一档都收到 14px 内衬；学习台若留在 28px，
+   切页时卡片左右各缩进 14px（1024 实测 69 vs 55）。只收横向，纵向密度不变。 */
+@media (min-width: 1024px) and (max-width: 1100px) {
+  .dash__main { padding-left: 14px; padding-right: 14px; }
 }
 </style>
 

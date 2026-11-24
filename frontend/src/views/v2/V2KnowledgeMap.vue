@@ -386,7 +386,9 @@ onMounted(async () => {
    图卡内边距不再按断点改：卡壳已移到 .mk-ge__card，两端统一吃原型固定档 10px 10px 4px。 */
 @media (max-width: 1100px) {
   .km__main {
-    padding: var(--mk-space-2) var(--mk-space-3) var(--mk-space-4);
+    /* 2026-11-24 全站对齐：横向与学习台/路径/状态/资料库同一条 14px 轨
+       （space-3=12 会让本页卡片比邻页宽 4px，切换页面时左右边线跳动）。 */
+    padding: var(--mk-space-2) 14px var(--mk-space-4);
   }
 }
 </style>

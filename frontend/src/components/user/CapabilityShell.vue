@@ -101,7 +101,9 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
      本页不重复写数字——上限只改一处）。 */
   width: min(92vw, var(--vp-container));
   margin: 0 auto;
-  padding: 22px 0 40px;
+  /* 2026-11-24 全站对齐：与学习台/路径/图谱/状态同一条内容轨（28px 内衬）。
+     此前只有宽度相同、没有内衬，个人中心四页的卡比其余页面宽 28px/侧。 */
+  padding: 22px 28px 40px;
   display: grid;
   gap: 16px;
   align-content: start;
@@ -235,10 +237,13 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 
 @media (max-width: 1100px) {
   .uc.v2-page > main.uc__main {
-    width: min(100% - 28px, 1180px);
+    /* 2026-11-24 全站对齐：与路径/状态同一条轨——宽度吃满、14px 内衬。
+       原「宽度减 28 + 无内衬」在 390 下同样落在 14px，但 901–1100 平板档
+       比邻页宽 14px/侧（1024 实测 41 vs 55）。 */
+    width: 100%;
     /* 底部留白 84→12：v2.css 的 .v2-page 已在根部预留 tabbar 高 + safe-area，
        这里再垫 84px 会叠出 ~156px 空白（2026-09-25 移动端框架审查） */
-    padding: 14px 0 12px;
+    padding: 14px 14px 12px;
     gap: 12px;
   }
 
