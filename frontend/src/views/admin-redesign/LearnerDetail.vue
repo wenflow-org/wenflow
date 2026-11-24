@@ -1275,6 +1275,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Inbox } from 'lucide-vue-next'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { isDegradedWrapup } from './cockpitWrapup'
+import { formatTime } from './cockpitFormat'
 import { liveLearners, liveUsers, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow, type CalibrationDetailItem } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh, tidyNarrativeText } from './learner-profile'
@@ -2983,12 +2984,33 @@ const liveControlRows = computed(() => {
   const rows: ProfileKvRow[] = []
   const cs = (rawDetail.value?.learningControlState || null) as Record<string, unknown> | null
   if (cs) {
+    const flags = (cs.controlFlags || null) as Record<string, unknown> | null
+    const distressLocked = flags?.distressRecover === true
+    const distressAt = typeof flags?.distressRecoverAt === 'string' ? formatTime(flags.distressRecoverAt) : ''
+    if (distressLocked) {
+      rows.push({
+        label: '弃课恢复锁',
+        value: distressAt ? `生效中（${distressAt} 触发，72h 内或完成下一节后解除）` : '生效中（72h 内或完成下一节后解除）',
+        hint: '近 72h 有主动弃课/崩溃事件：强制 paceMode=recover、难度封顶 low；只影响控制态，不改写分数',
+        prior: false,
+        derived: true,
+      })
+    }
     if (typeof cs.paceMode === 'string') {
-      rows.push({ label: '节奏模式', value: LIVE_CONTROL_ZH[cs.paceMode] || String(cs.paceMode), hint: '课堂难度封顶与推进节奏的当前档位', prior: false, derived: true })
+      const base = LIVE_CONTROL_ZH[cs.paceMode] || String(cs.paceMode)
+      rows.push({ label: '节奏模式', value: distressLocked && cs.paceMode === 'recover' ? `${base} · 弃课锁` : base, hint: '课堂难度封顶与推进节奏的当前档位', prior: false, derived: true })
     }
     if (typeof cs.challengeLevelCap === 'string') {
       const capZh: Record<string, string> = { low: '低（高疲劳/压力/脆弱概念时限高）', medium: '中', high: '高' }
       rows.push({ label: '挑战封顶', value: capZh[cs.challengeLevelCap] || String(cs.challengeLevelCap), hint: '本课挑战难度上限，向下限高不限低', prior: false, derived: true })
+    }
+    if (typeof cs.conceptLoad === 'string') {
+      const clZh: Record<string, string> = { low: '低（少引入新概念，先巩固）', medium: '中', high: '高' }
+      rows.push({ label: '概念密度', value: clZh[cs.conceptLoad] || String(cs.conceptLoad), hint: '本课新概念投放密度；low 不等于跳过契约必需 KC', prior: false, derived: true })
+    }
+    if (typeof cs.checkpointNeed === 'string') {
+      const cpZh: Record<string, string> = { high: '高（趋势下滑/多点挣扎）', medium: '中', low: '低（恢复期减考测，契约闸门不受影响）' }
+      rows.push({ label: '考测需求', value: cpZh[cs.checkpointNeed] || String(cs.checkpointNeed), hint: '是否主动加检查点；代码闸门的强制出题不受此字段影响', prior: false, derived: true })
     }
     if (typeof cs.reviewPriority === 'string') {
       const rpZh: Record<string, string> = { high: '高（前置缺口/严重挣扎/失衡触发优先巩固）', medium: '中', low: '低' }

@@ -3,6 +3,7 @@
  * 重点守「无证据 → unknown/0.5/absent」，不能误落 under/hint。
  */
 import { normalizeOutput, type TeachingTurnInput } from '../index';
+import { determineNextStage } from '../../../services/ai-teaching/teaching-classroom-flow';
 
 const input: TeachingTurnInput = {
   messages: [{ role: 'user', content: '这一步我不太确定。' }],
@@ -78,5 +79,33 @@ describe('teaching-turn loadBand 归一', () => {
     expect(a.loadBand).toBe('unknown');
     expect(a.loadIndex).toBe(0.5);
     expect(a.loadBasis).toBe('absent');
+  });
+
+  // P1-5 的下游闭环：档位不是只存下来看的，归一后的 numeric 直接驱动课堂阶段机。
+  it('overload 档位 → 阶段机进 intervention；unknown 不误触发', async () => {
+    const overload = await normalizeOutput(
+      outputWith({ loadBand: 'overload', understanding: 0.45 }),
+      input,
+    );
+    const stage = determineNextStage({
+      currentStage: 'teaching',
+      teachingOutput: overload as any,
+      peerTriggered: false,
+      learnerMessage: '这一步我跟不上了',
+    });
+    expect(stage.stage).toBe('intervention');
+    expect(stage.reason).toContain('认知负荷过高');
+
+    const unknown = await normalizeOutput(
+      outputWith({ loadBand: 'unknown', understanding: 0.45 }),
+      input,
+    );
+    const stayed = determineNextStage({
+      currentStage: 'teaching',
+      teachingOutput: unknown as any,
+      peerTriggered: false,
+      learnerMessage: '这一步我跟不上了',
+    });
+    expect(stayed.stage).toBe('teaching');
   });
 });

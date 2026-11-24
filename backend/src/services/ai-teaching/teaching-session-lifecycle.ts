@@ -1166,8 +1166,14 @@ export async function endSession(
           sessionEndTimeOverride: closureEndedAt,
         })
       : await learnerSnapshotService.getSnapshot(snapshotInput);
+    // 2026-11-24 运营可见性：把本节收束时生效的控制态快照一并写进 wrapup。
+    // 此前 paceMode/challengeLevelCap 只在 learner 当前页可见，历史会话无法回看「这节课系统是怎么控的」。
+    if (learnerSnapshot?.learningControlState) {
+      (persistedWrapup as Record<string, unknown>).controlStateSnapshot = learnerSnapshot.learningControlState;
+    }
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
-    const currentPath = learnerSnapshot.knowledgeMemory.currentPath;    const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
+    const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
+    const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
     const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
     // 延伸学一期（#124）：只观测，不产生路径调整建议——延伸课不是任务完成课，
     // 其信号也不该在样本积累前推动重排（2026-10-19 拍板「先不进入，先观测」）。

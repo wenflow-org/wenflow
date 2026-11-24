@@ -97,6 +97,31 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     expect(w.find('.stub-completion').attributes('data-messages')).toBe('5');
   });
 
+  it('展开后按真实节点给课堂阶段锚点，并渲染说话人头像', async () => {
+    const question = '哪一份表会错位？';
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      messages: [
+        { role: 'assistant', content: '开场：先看列序。', timestamp: '2026-09-23T02:51:00.000Z' },
+        { role: 'assistant', content: `板上摆出两份表。${question}`, timestamp: '2026-09-23T02:52:00.000Z', figures: [{ kind: 'matrix', boardRevision: 1, spec: {} }] },
+        { role: 'user', content: '我的答案：A', timestamp: '2026-09-23T02:53:00.000Z' },
+        { role: 'assistant', content: '对，A 就是错位的那一份。', timestamp: '2026-09-23T02:54:00.000Z' }
+      ],
+      state: {
+        checkpointHistory: [
+          { checkpointId: 'cp-stage', title: question, question, type: 'single_choice', options: [{ id: 'A', text: '第一份' }], selectedOptionIds: ['A'], passed: true, submittedAt: '2026-09-23T02:52:30.000Z' }
+        ]
+      }
+    });
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    expect(w.findAll('.evaluation-transcript-stage__label').map((s) => s.text())).toEqual(['开场', '白板出现', '课堂检查点', '收束']);
+    expect(w.findAll('.evaluation-transcript-avatar').length).toBe(5);
+    expect(w.find('.evaluation-transcript-avatar--assistant').text()).toBe('师');
+    expect(w.find('.evaluation-transcript-avatar--user').text()).toBe('你');
+    expect(w.find('.evaluation-transcript-avatar--checkpoint').text()).toBe('题');
+  });
+
   it('回放伴学插话：assistant.peerMessage 挂在老师消息下，并标出「伴学」', async () => {
     getSessionDetailMock.mockResolvedValue({
       ...detail,
@@ -156,7 +181,7 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
 
     await toggle.trigger('click');
     expect(w.findAll('.evaluation-transcript-item').length).toBe(5);
-    expect(w.find('.evaluation-transcript-toggle').text()).toContain('收起记录');
+    expect(w.find('.evaluation-transcript-toggle').text()).toContain('收起课堂回看');
     expect(w.find('.evaluation-transcript-toggle').attributes('aria-expanded')).toBe('true');
 
     await w.find('.evaluation-transcript-toggle').trigger('click');

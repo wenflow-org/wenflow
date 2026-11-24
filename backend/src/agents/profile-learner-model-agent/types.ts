@@ -393,6 +393,8 @@ export interface LearnerLearningControlState {
    */
   controlFlags?: {
     distressRecover?: boolean;
+    /** 触发强制 recover 的那次弃课/崩溃事件时间（ISO）；供运营侧定位「本节为何被压到 low」 */
+    distressRecoverAt?: string;
   };
   /**
    * 语义边界（2026-11-23）：仅表示「优先巩固旧知、降低新概念密度」，**不是**「禁止覆盖本课

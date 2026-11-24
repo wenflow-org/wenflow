@@ -493,16 +493,18 @@ describe('SessionCockpit 双模式', () => {
 
   // 2026-10-17：session_load 此前零运行时读取方（写了没人看的死仓）。总结页是它第一个消费点，
   // 这里钉住渲染口径与「无数据不渲染」——后端没行时不能凭空显示 0。
-  it('总结页呈现本轮负荷聚合（均值/峰值/轮数 + 依据分布 tooltip）；无数据整项不渲染', async () => {
+  it('总结页呈现本轮负荷聚合（档位分布/均值/峰值/轮数 + 依据分布 tooltip）；无数据整项不渲染', async () => {
     const payload = realTeachingPayload();
-    payload.data.teaching.sessionLoad = { mean: 0.264, max: 0.4, basisDist: { semantic: 7 }, perTurnCount: 7 };
+    payload.data.teaching.sessionLoad = { mean: 0.264, max: 0.4, basisDist: { semantic: 7 }, bandDist: { flow: 5, hint: 1, unknown: 1 }, perTurnCount: 7 };
     getRealSessionConsole.mockResolvedValue(payload);
 
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
     const stats = wrapper.find('.cp-wrapup-stats');
-    expect(stats.text()).toContain('本轮负荷 均值 26% · 峰值 40% · 7 轮');
+    // P1-5 后负荷语义以五档为主：档位分布排在最前，0-1 指数均值只作回溯参考
+    expect(stats.text()).toContain('本轮负荷 档位 适中 71% / 偏难 14% / 无证据 14% · 均值 26% · 峰值 40% · 7 轮');
     const item = stats.findAll('.cp-wrapup-stats__item').find((n) => n.text().includes('本轮负荷'));
     expect(item?.attributes('title')).toContain('semantic 7');
+    expect(item?.attributes('title')).toContain('负荷档位分布：适中 71% / 偏难 14%');
     wrapper.unmount();
 
     const noLoad = realTeachingPayload();
@@ -511,6 +513,55 @@ describe('SessionCockpit 双模式', () => {
     const empty = await mountCockpit('session-real', 'ts_real_1');
     expect(empty.text()).not.toContain('本轮负荷');
     empty.unmount();
+  });
+
+  // 2026-11-24：评估/落库/控制态/影子此前只存在 wrapup JSON 里，运营在座舱看不到。
+  // 这里钉住四段链路同屏呈现，以及旧会话（无这些字段）整块不渲染。
+  it('总结页呈现评估与控制态：LLM 档位 → 池化落库 → 收束控制态 → 影子对比', async () => {
+    const payload = realTeachingPayload();
+    payload.data.stageResults.teaching.wrapup = {
+      ...payload.data.stageResults.teaching.wrapup,
+      evaluation: {
+        sessionLss: 6.2, sessionKtl: 7.1, sessionLf: 4.3, confidence: 0.78,
+        evaluationSource: 'model',
+        tiers: { sessionLss: 'mid', sessionKtl: 'high', sessionLf: 'low' },
+      },
+      stateUpdate: { lss: 6.0, ktl: 6.5, lf: 4.4, lsb: -0.2, timestamp: '2026-08-12T15:00:00.000Z' },
+      controlState: {
+        paceMode: 'recover', challengeLevelCap: 'low', conceptLoad: 'low', checkpointNeed: 'low', reviewPriority: 'high',
+        controlFlags: { distressRecover: true, distressRecoverAt: '2026-08-11T09:00:00.000Z' },
+      },
+      shadowDeterministic: {
+        formulaVersion: 'session-eval-det-v2',
+        deterministic: {
+          lss: 6.1, ktl: 6.8, lf: 4.2,
+          hardSignals: { checkpointSamples: 4, independentPasses: 3, firstAttemptPasses: 2, attempts: 5 },
+        },
+        llm: { lss: 6.2, ktl: 7.1, lf: 4.3 },
+        delta: { lss: -0.1, ktl: -0.3, lf: -0.1 },
+      },
+    };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const panel = wrapper.find('.cp-state');
+    expect(panel.exists()).toBe(true);
+    const text = panel.text();
+    expect(text).toContain('LSS 6.2（中）');
+    expect(text).toContain('KTL 7.1（高）');
+    expect(text).toContain('落库状态');
+    expect(text).toContain('LSS 6.0 · KTL 6.5 · LF 4.4 · LSB -0.2');
+    expect(text).toContain('节奏 降压恢复');
+    expect(text).toContain('弃课锁生效');
+    expect(text).toContain('LLM 6.2 / 7.1 / 4.3');
+    expect(text).toContain('独立 3/4');
+    wrapper.unmount();
+
+    // 旧会话：wrapup 没有 evaluation/controlState/shadow → 整块不渲染，不造「无数据」摘要
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const legacy = await mountCockpit('session-real', 'ts_real_1');
+    expect(legacy.find('.cp-state').exists()).toBe(false);
+    legacy.unmount();
   });
 
   it('阶段条不带动作钮（2026-11-09 头部降噪）：下行入口归 Learn 阶段，头部只做阶段切换', async () => {
@@ -1255,6 +1306,30 @@ describe('SessionCockpit 双模式', () => {
     const teachers = wrapper.findAll('.cp-transcript__message.is-teacher');
     expect(teachers.length).toBeGreaterThan(0);
     expect(teachers.every((el) => !el.classes().includes('is-real-learner'))).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('课堂转录给阶段锚点与说话人头像（与总结页课堂回看同口径）', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.checkpoints = [];
+    payload.data.teaching.messages = [
+      { role: 'assistant', content: '开场：先看列序。', time: '2026-08-12T14:00:00.000Z' },
+      { role: 'assistant', content: '板上摆出两份表。', time: '2026-08-12T14:00:05.000Z', figures: [{ kind: 'matrix', spec: {} }] },
+      { role: 'user', content: '我先看第一份。', time: '2026-08-12T14:00:10.000Z' },
+      { role: 'assistant', content: '对，A 就是错位的那一份。', time: '2026-08-12T14:00:15.000Z' }
+    ];
+    payload.data.conversations.learning.messages = payload.data.teaching.messages;
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await settle();
+
+    expect(wrapper.findAll('.cp-stage__label').map((s) => s.text())).toEqual(['开场', '白板出现', '收束']);
+    expect(wrapper.findAll('.cp-msg__avatar').length).toBe(4);
+    expect(wrapper.find('.cp-transcript__message.is-teacher .cp-msg__avatar').text()).toBe('师');
+    expect(wrapper.find('.cp-transcript__message.is-learner .cp-msg__avatar').text()).toBe('学');
 
     wrapper.unmount();
   });

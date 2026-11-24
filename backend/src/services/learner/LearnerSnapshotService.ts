@@ -82,6 +82,8 @@ export function deriveLearningControlState(input: {
    * 它强制 paceMode=recover，**不参与**任何分数计算。
    */
   distressRecover?: boolean;
+  /** 触发事件时间；仅用于快照/运营可见性，不参与判定 */
+  distressRecoverAt?: Date | string | null;
 }): LearnerLearningControlState {
   const { dynamicState, knowledgeMemory } = input;
   const lesson = input.lessonMetrics ?? dynamicState.metrics;
@@ -130,6 +132,10 @@ export function deriveLearningControlState(input: {
     && (dynamicState.recentTrend === 'improving' || stableHighPerformer);
 
   const distressRecover = input.distressRecover === true;
+  const distressAt = input.distressRecoverAt ? new Date(input.distressRecoverAt) : null;
+  const distressRecoverAt = distressAt && Number.isFinite(distressAt.getTime())
+    ? distressAt.toISOString()
+    : undefined;
   const paceMode: LearnerLearningControlState['paceMode'] = distressRecover || overloaded || lessonStress
     ? 'recover'
     : pushEligible
@@ -169,7 +175,14 @@ export function deriveLearningControlState(input: {
     // 不得据此跳过新任务的核心 KC。
     shouldAvoidNewConcepts: conceptLoad === 'low',
     shouldPreferConsolidation: reviewPriority === 'high',
-    ...(distressRecover ? { controlFlags: { distressRecover: true } } : {}),
+    ...(distressRecover
+      ? {
+          controlFlags: {
+            distressRecover: true,
+            ...(distressRecoverAt ? { distressRecoverAt } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -492,6 +505,7 @@ export class LearnerSnapshotService {
       knowledgeMemory: finalKnowledgeMemory,
       lessonMetrics,
       distressRecover: Boolean(recentDistress),
+      distressRecoverAt: recentDistress?.occurredAt ?? null,
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,
@@ -624,6 +638,7 @@ export class LearnerSnapshotService {
       knowledgeMemory: finalKnowledgeMemory,
       lessonMetrics,
       distressRecover: Boolean(recentDistress),
+      distressRecoverAt: recentDistress?.occurredAt ?? null,
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,

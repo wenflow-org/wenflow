@@ -340,11 +340,15 @@ describe('deriveLearningControlState（单课压力起作用的地方 = 课内�
       knowledgeMemory: knowledgeMemory(),
       lessonMetrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 },
       distressRecover: true,
+      distressRecoverAt: '2026-11-23T09:00:00.000Z',
     });
     expect(control.paceMode).toBe('recover');
     expect(control.challengeLevelCap).toBe('low');
     expect(control.checkpointNeed).toBe('low');
-    expect(control.controlFlags).toEqual({ distressRecover: true });
+    expect(control.controlFlags).toEqual({
+      distressRecover: true,
+      distressRecoverAt: '2026-11-23T09:00:00.000Z',
+    });
   });
 
   it('高位学霸（趋势 stable、ACWR 已回落）也能进 push——不只看 improving 斜率（2026-11-23 复核）', () => {

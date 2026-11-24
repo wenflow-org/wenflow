@@ -152,8 +152,10 @@ describe('当堂对话：默认整块折叠 + 计数同源', () => {
   });
 
   it('展开后的讲解/小测卡吃满卡宽，只有用户气泡收窄', () => {
-    expect(has(ruleWith(page, '.evaluation-transcript-item', 'padding: 16px 18px'), /max-width:\s*100%/)).toBe(true);
-    expect(has(ruleOf(page, '.evaluation-transcript-item--user'), /max-width:\s*min\(100%, 620px\)/)).toBe(true);
+    /* 2026-11-24：气泡结构改成「头像 + 正文列」后，内边距落到 __main，消息行本身不再带 padding */
+    expect(has(ruleWith(page, '.evaluation-transcript-item', 'max-width: 100%'), /max-width:\s*100%/)).toBe(true);
+    expect(has(ruleWith(page, '.evaluation-transcript-item__main', 'padding: 14px 16px'), /padding:\s*14px 16px/)).toBe(true);
+    expect(has(ruleOf(page, '.evaluation-transcript-item--user'), /max-width:\s*min\(100%, 720px\)/)).toBe(true);
   });
 });
 

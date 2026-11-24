@@ -61,6 +61,8 @@ import {
   inheritTeachingState,
   isCheckpointAnswerAlreadyGiven,
   isDuplicateCheckpointQuestion, normalizeCheckpointWithTelemetry,
+  isCheckpointRetryCoolingDown,
+  hasOnlyAlreadyFailedGaps,
   findUnfurnishedChoiceQuestion,
   judgeCheckpointAnswer,
   recordAnchorProbeResult,
@@ -411,7 +413,16 @@ export async function processStudentMessage(
       && !previousTeachingState.pendingCheckpoint
       && ((Array.isArray(previousLessonReport.missingKcs) && previousLessonReport.missingKcs.length > 0)
         || independentGapKcs.length > 0)
-      && previousTeachingAssistantCount >= 2,
+      && previousTeachingAssistantCount >= 2
+      // 2026-11-24 真跑复盘：刚判错就换题重测同一 KC（intervention 里也一样）会让课堂变成审讯。
+      // 契约补证仍要落，但至少先让教师把「为什么错」讲两轮——冷却期由 checkpointHistory 的判错时刻计算。
+      && !isCheckpointRetryCoolingDown(session, previousTeachingState)
+      // 更强一层：唯一缺口就是刚判错的那个 KC 时，再测也拿不到「独立证据」（学生已被讲解/纠错），
+      // 只会无限追打。此时停手，让本节 met=false 诚实收口，独立验证留给下一节。
+      && !hasOnlyAlreadyFailedGaps([
+        ...(Array.isArray(previousLessonReport.missingKcs) ? previousLessonReport.missingKcs : []),
+        ...independentGapKcs,
+      ], previousTeachingState),
   });
   // 教师补充材料（批次 E）：上一轮请求已入库 → 本轮把就绪载荷送进 scenario（模型可引用出处讲）。
   // 未就绪/刚过期 → 诚实回执 supplementStatus（supplementStatusForScenario）：此前零注入，

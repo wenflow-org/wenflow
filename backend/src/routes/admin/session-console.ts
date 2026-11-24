@@ -37,6 +37,10 @@ interface ConsoleMessage {
   role: 'user' | 'assistant';
   content: string;
   time: string | null;
+  /** 课堂视觉产物（2026-11-24）：此前控制台只回传文字，运营在座舱里看不到老师当时摆的图。
+   *  侧表消息原本就有 figures/diagrams；这里只在存在时透传，旧会话/纯文字消息形状不变。 */
+  figures?: unknown[];
+  diagrams?: unknown[];
 }
 
 function normalizeRole(role: string | null | undefined): 'user' | 'assistant' {
@@ -62,6 +66,8 @@ function teachingMessages(raw: unknown, limit = 60): ConsoleMessage[] {
       role: normalizeRole(m.role),
       content: String(m.content).trim(),
       time: typeof m.timestamp === 'string' ? m.timestamp : null,
+      ...(Array.isArray(m.figures) && m.figures.length ? { figures: m.figures } : {}),
+      ...(Array.isArray(m.diagrams) && m.diagrams.length ? { diagrams: m.diagrams } : {}),
     }));
 }
 
@@ -168,6 +174,68 @@ function knowledgePointStates(raw: string | null | undefined): Array<Record<stri
   }));
 }
 
+/** 会话评估 → 控制台视图（2026-11-24）：运营需要看到 LLM 档位、证据与置信度，而不只是最终负荷行。 */
+function evaluationView(raw: any) {
+  if (!raw || typeof raw !== 'object') return null;
+  const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  return {
+    sessionLss: num(raw.sessionLss),
+    sessionKtl: num(raw.sessionKtl),
+    sessionLf: num(raw.sessionLf),
+    confidence: num(raw.confidence),
+    reasoning: typeof raw.reasoning === 'string' ? raw.reasoning : null,
+    tiers: raw.metricTiers && typeof raw.metricTiers === 'object' ? raw.metricTiers : null,
+    evidence: raw.metricEvidence && typeof raw.metricEvidence === 'object' ? raw.metricEvidence : null,
+    metricMetadata: raw.metricMetadata && typeof raw.metricMetadata === 'object' ? raw.metricMetadata : null,
+  };
+}
+
+/** 结课时生效的控制态快照（2026-11-24）：paceMode 等此前只在 learner 当前页可见，历史会话看不到。 */
+function controlStateView(raw: any) {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    paceMode: raw.paceMode ?? null,
+    challengeLevelCap: raw.challengeLevelCap ?? null,
+    conceptLoad: raw.conceptLoad ?? null,
+    reviewPriority: raw.reviewPriority ?? null,
+    checkpointNeed: raw.checkpointNeed ?? null,
+    shouldAvoidNewConcepts: raw.shouldAvoidNewConcepts === true,
+    shouldPreferConsolidation: raw.shouldPreferConsolidation === true,
+    controlFlags: raw.controlFlags && typeof raw.controlFlags === 'object' ? raw.controlFlags : null,
+  };
+}
+
+/** 影子评估（LLM vs 确定性聚合）→ 控制台视图；含硬事件腿，便于运营观察 |Δ|。 */
+function shadowEvaluationView(raw: any) {
+  if (!raw || typeof raw !== 'object') return null;
+  const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const det = raw.deterministic && typeof raw.deterministic === 'object' ? raw.deterministic : null;
+  const llm = raw.llm && typeof raw.llm === 'object' ? raw.llm : null;
+  if (!det) return null;
+  return {
+    formulaVersion: raw.formulaVersion ?? null,
+    recordedAt: raw.recordedAt ?? null,
+    deterministic: {
+      lss: num(det.lss),
+      ktl: num(det.ktl),
+      lf: num(det.lf),
+      confidence: num(det.confidence),
+      basis: det.basis ?? null,
+      turnCount: num(det.turnCount),
+      coverage: det.coverage ?? null,
+      hardSignals: det.hardSignals ?? null,
+    },
+    llm: llm ? {
+      lss: num(llm.lss),
+      ktl: num(llm.ktl),
+      lf: num(llm.lf),
+      confidence: num(llm.confidence),
+      tiers: llm.tiers ?? null,
+    } : null,
+    delta: raw.delta && typeof raw.delta === 'object' ? raw.delta : null,
+  };
+}
+
 function wrapupView(raw: string | null | undefined) {
   const wrapup = parseJsonSafe<any>(raw, null);
   if (!wrapup || typeof wrapup !== 'object') return null;
@@ -176,6 +244,21 @@ function wrapupView(raw: string | null | undefined) {
     summary: wrapup.summary || null,
     sources: wrapup.sources || null,
     generatedAt: wrapup.generatedAt || null,
+    /* 2026-11-24：分数管线与控制态对运营可见——此前 wrapupView 只留 summary/sources，
+       evaluation / stateUpdate / shadowDeterministic / controlStateSnapshot 全被裁掉，
+       运营只能看到负荷行，看不到"这节课判了什么档、池化后落了什么状态、控制面切到了哪"。 */
+    evaluation: evaluationView(wrapup.evaluation),
+    stateUpdate: wrapup.stateUpdate && typeof wrapup.stateUpdate === 'object'
+      ? {
+          lss: typeof wrapup.stateUpdate.lss === 'number' ? wrapup.stateUpdate.lss : null,
+          ktl: typeof wrapup.stateUpdate.ktl === 'number' ? wrapup.stateUpdate.ktl : null,
+          lf: typeof wrapup.stateUpdate.lf === 'number' ? wrapup.stateUpdate.lf : null,
+          lsb: typeof wrapup.stateUpdate.lsb === 'number' ? wrapup.stateUpdate.lsb : null,
+          timestamp: wrapup.stateUpdate.timestamp ?? null,
+        }
+      : null,
+    controlState: controlStateView(wrapup.controlStateSnapshot),
+    shadowDeterministic: shadowEvaluationView(wrapup.shadowDeterministic),
     /* 延伸课观测（#124）：延伸段轮数/负荷/学到的概念只存在 wrapup 里，
        此前被视图裁剪掉，座舱「延伸学观测」条对真实会话永远不可达。 */
     extensionObservability: wrapup.extensionObservability || null,
@@ -587,6 +670,9 @@ async function buildTeachingConsole(session: any) {
         max: typeof sessionLoadMeta.max === 'number' ? sessionLoadMeta.max : null,
         basisDist: (sessionLoadMeta.basisDist && typeof sessionLoadMeta.basisDist === 'object')
           ? sessionLoadMeta.basisDist as Record<string, number>
+          : {},
+        bandDist: (sessionLoadMeta.bandDist && typeof sessionLoadMeta.bandDist === 'object')
+          ? sessionLoadMeta.bandDist as Record<string, number>
           : {},
         perTurnCount: typeof sessionLoadMeta.perTurnCount === 'number' ? sessionLoadMeta.perTurnCount : null,
       }

@@ -111,8 +111,7 @@ export interface CheckpointSubmitResult {
   branch?: Record<string, any> | null;
 }
 
-export function shouldEmitCheckpoint(
-  session: {
+export function shouldEmitCheckpoint(  session: {
     messages: Array<{
       role: string;
       analysis?: any;
@@ -169,6 +168,68 @@ export function shouldEmitCheckpoint(
   // ④ 待答票已在上方闸掉；「与 isCompletionCandidate 同轮」由引擎侧 `!completionReady`
   //    兜底（teaching-turn-engine 的 checkpointEmissionEligible），此处不重复实现。
   return true;
+}
+
+/**
+ * 答错后的强制重测冷却（2026-11-24 真跑复盘）。
+ *
+ * 背景：契约缺证据时引擎会走 `forceCheckpoint` 旁路（teaching-turn-engine），
+ * 该旁路不受「单焦点一次 / 临界收口」闸门约束。真跑里学生同一 KC 连续答错 2 次、
+ * 已切进 intervention（allowCheckpoint=false），1 分钟后又被强制换题重测同一 KC：
+ * 2 道题 / 4 次作答全部落在同一个概念上，体感就是「每两轮挨一道审讯」。
+ *
+ * 口径：最近一次**代码判错**的检查点之后，至少要有 2 轮辅导（3 条教师回复：判错反馈 +
+ * 两轮教学）才允许再次强制出题；把「先辅导、再验证」写进代码，而不是只靠提示词。
+ * 正常出题闸门不受影响（understanding<0.7 时本来就不出题）。
+ */
+export const CHECKPOINT_RETRY_COOLDOWN_ASSISTANT_TURNS = 3;
+
+export function isCheckpointRetryCoolingDown(
+  session: { messages: Array<{ role?: string; timestamp?: string | Date | null }> },
+  teachingState: Record<string, any> | null | undefined,
+  cooldownTurns: number = CHECKPOINT_RETRY_COOLDOWN_ASSISTANT_TURNS,
+): boolean {
+  const history = Array.isArray(teachingState?.checkpointHistory) ? teachingState.checkpointHistory : [];
+  const lastFailed = [...history]
+    .reverse()
+    .find((row: any) => row && row.passed === false && row.voided !== true);
+  if (!lastFailed?.submittedAt) return false;
+  const failedAt = new Date(lastFailed.submittedAt).getTime();
+  if (!Number.isFinite(failedAt)) return false;
+  const assistantTurnsAfter = (session.messages || []).filter((message) => {
+    if (message?.role !== 'assistant' || !message.timestamp) return false;
+    const at = new Date(message.timestamp).getTime();
+    return Number.isFinite(at) && at > failedAt;
+  }).length;
+  return assistantTurnsAfter < cooldownTurns;
+}
+
+/**
+ * 契约缺口是否**只剩已判错的 KC**（2026-11-24 真跑复盘）。
+ *
+ * 真跑样本：本节唯一缺证据的 KC 就是「锁定钟点格读数」，而它已经在本会话被两个 cpId
+ * 判错 4 次。forceCheckpoint 每轮仍会为它出题——但学生刚被讲解/纠错后再答，拿到的
+ * 是「提示后通过」，本来就不满足「独立证据」；继续重测既补不上契约，也把课堂变成审讯。
+ *
+ * 口径：把 missingKcs + independentGapKcs 归一后，若每个目标 KC 都已有一次代码判错，
+ * 就不再用 forceCheckpoint 去追；本节以 met=false 诚实收口，把独立验证留给下一节。
+ * 只要还有一个「从未被判错」的缺口，就仍然允许强制出题（那才是真正缺证据的 KC）。
+ */
+export function hasOnlyAlreadyFailedGaps(
+  targets: unknown[],
+  teachingState: Record<string, any> | null | undefined,
+): boolean {
+  const normalize = (value: unknown) => normalizeForKeywordMatch(String(value ?? ''));
+  const normalizedTargets = [...new Set(targets.map(normalize).filter(Boolean))];
+  if (normalizedTargets.length === 0) return false;
+  const history = Array.isArray(teachingState?.checkpointHistory) ? teachingState.checkpointHistory : [];
+  const failed = new Set(
+    history
+      .filter((row: any) => row && row.passed === false && row.voided !== true)
+      .map((row: any) => normalize(row.conceptName ?? row.conceptKey))
+      .filter(Boolean),
+  );
+  return normalizedTargets.every((target) => failed.has(target));
 }
 
 /**

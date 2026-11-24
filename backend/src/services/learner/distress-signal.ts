@@ -12,6 +12,8 @@
 import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { getSimulatedAsOf, simulatedNowOr } from '../virtual-lab/simulation-clock-context';
+import { resolveUserSimulatedNow } from '../virtual-lab/simulation-clock-resolver';
 
 export const DISTRESS_ABANDON_EVIDENCE_TYPE = 'session:distress_abandon';
 export const DISTRESS_RECOVER_HOURS = 72;
@@ -80,31 +82,37 @@ export interface RecentDistressSignal {
 /**
  * 读取仍生效的弃课信号：
  * - 72h 窗口外 → null；
- * - 事件之后已有正常完成的课（startTime > occurredAt）→ null（提前解除）；
+ * - 事件之后已有正常完成的课（endTime > occurredAt）→ null（提前解除）；
  * - 查询失败/旧库无表 → null（不阻塞快照）。
+ *
+ * 时钟域（2026-11-24）：模拟学习者不在 advance-day 上下文里读快照时，用该 VL 实例的
+ * 模拟钟（resolveUserSimulatedNow）算 72h 窗口，不能拿真墙钟去比业务日。
  */
 export async function loadRecentDistressSignal(
   userId: string,
-  now: Date = new Date(),
+  now?: Date,
 ): Promise<RecentDistressSignal | null> {
   const evidence = (prisma as unknown as {
     learner_evidence?: { findFirst?: Function };
     teaching_sessions?: { findFirst?: Function };
   }).learner_evidence;
   if (!evidence?.findFirst) return null;
-  const cutoff = new Date(now.getTime() - DISTRESS_RECOVER_HOURS * 60 * 60 * 1000);
   try {
+    // 先取最近一条事件（无时间过滤，避免在无事件时白算模拟钟）；命中后再做窗口判定。
     const event = await evidence.findFirst({
-      where: {
-        userId,
-        evidenceType: DISTRESS_ABANDON_EVIDENCE_TYPE,
-        occurredAt: { gte: cutoff },
-      },
+      where: { userId, evidenceType: DISTRESS_ABANDON_EVIDENCE_TYPE },
       orderBy: { occurredAt: 'desc' },
     }) as { occurredAt?: Date | string; sessionId?: string | null } | null;
     if (!event?.occurredAt) return null;
     const occurredAt = new Date(event.occurredAt);
     if (!Number.isFinite(occurredAt.getTime())) return null;
+    const effectiveNow = now
+      ?? (getSimulatedAsOf() ? simulatedNowOr() : await resolveUserSimulatedNow(userId))
+      ?? new Date();
+    const cutoff = new Date(effectiveNow.getTime() - DISTRESS_RECOVER_HOURS * 60 * 60 * 1000);
+    // 未来事件（> now + 5min）视为时钟错位/脏数据：不据此锁人，避免造出无法解除的锁。
+    const futureLimit = new Date(effectiveNow.getTime() + 5 * 60 * 1000);
+    if (occurredAt < cutoff || occurredAt > futureLimit) return null;
 
     const sessions = (prisma as unknown as { teaching_sessions?: { findFirst?: Function } }).teaching_sessions;
     if (sessions?.findFirst) {
@@ -112,7 +120,14 @@ export async function loadRecentDistressSignal(
         where: {
           userId,
           status: 'completed',
-          startTime: { gt: occurredAt },
+          // 2026-11-24 真跑复盘：解锁条件是「完成一节正常课」，不是「开了一节正常课」。
+          // 旧口径只看 startTime → 事件发生前开课、事件后正常结课的课无法解锁；
+          // 改看 endTime（完课时刻），endTime 缺失的旧行仍回退 startTime。
+          // lte: now 排除「未来时间」的假完成（模拟课次用业务日、手工事件用真墙钟时会出现这种错位）。
+          OR: [
+            { endTime: { gt: occurredAt, lte: effectiveNow } },
+            { endTime: null, startTime: { gt: occurredAt, lte: effectiveNow } },
+          ],
           ...(event.sessionId ? { id: { not: event.sessionId } } : {}),
         },
         select: { id: true },
