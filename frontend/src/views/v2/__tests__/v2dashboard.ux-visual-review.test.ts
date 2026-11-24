@@ -114,7 +114,11 @@ describe('学习台到期/复习口径（走查 2026-10-08 #74）', () => {
 
 describe('学习台成就提示口径（走查 2026-10-08 #75）', () => {
   it('直接展示服务端中文描述，不再二次展开 KTL', () => {
-    expect(source).toContain('`目标 ${nearest.description} · 进度 ${prog}`');
+    /* 2026-11-24：目标与进度拆成两个 span（320 下整句曾在「·」后断行），
+       服务端中文描述仍然原样展示。 */
+    expect(source).toContain("goal: nearest.description || ''");
+    expect(source).toContain('progress: `· 进度 ${prog}`');
+    expect(source).toContain('week__note-progress');
     expect(source).not.toContain("replace(/KTL/g");
   });
 });

@@ -368,7 +368,7 @@ onMounted(() => {
 /* 筛选（原型 wf-filters / wf-filter 840-846）：状态 chip 与类型 chip 同一套胶囊语言 */
 .filters { display: flex; gap: 8px 16px; align-items: center; flex-wrap: wrap; }
 /* 两组筛选各成一体：组内 8px、组间 16px，配 12px 小标签（仓库字号下限）区分维度 */
-.filter-group { display: flex; gap: 8px; align-items: center; }
+.filter-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filter-group__label { font-size: 12px; color: var(--faint); flex: none; }
 .filter {
   /* P3-47（设计评审）：筛选 chips 是本页唯一筛选交互，36px 低于 44px 移动触控地板——
@@ -381,6 +381,10 @@ onMounted(() => {
   border-radius: var(--mk-radius-sm);
   color: var(--muted);
   font: inherit; font-size: 13px; font-weight: 600;
+  /* 2026-11-24：320 实测整组只差 6px 时 flex 会把单个 chip 压窄，「里程碑」断成两行。
+     chip 不收缩、整枚换行。 */
+  flex: none;
+  white-space: nowrap;
   cursor: pointer;
   transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }

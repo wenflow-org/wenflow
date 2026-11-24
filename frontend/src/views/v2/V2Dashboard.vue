@@ -414,7 +414,7 @@
               </p>
               <p v-if="nearestAchievement" class="week__note week__note--achv">
                 <Medal :size="14" :stroke-width="1.75" aria-hidden="true" />
-                <span>成就「{{ nearestAchievement.name }}」{{ nearestAchievement.achieved ? '即将解锁 · ' : '' }}{{ nearestAchievement.hint }}</span>
+                <span class="week__note-text">成就「{{ nearestAchievement.name }}」<template v-if="nearestAchievement.achieved">即将解锁</template><template v-else><span v-if="nearestAchievement.goal" class="week__note-goal">{{ nearestAchievement.goal }}</span><span class="week__note-progress">{{ nearestAchievement.progress }}</span></template></span>
               </p>
             </div>
           </section>
@@ -1185,9 +1185,10 @@ const nearestAchievement = computed(() => {
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
     // 成就条件由服务端提供可直接展示的中文描述；掌握类自 2026-10-23 起为知识点数，
     // 不再含 KTL 缩写，无需在前端二次展开。
-    hint: nearest.description
-      ? `目标 ${nearest.description} · 进度 ${prog}`
-      : `进度 ${prog}`
+    // 2026-11-24：目标与进度拆成两个 span——320 下原来整句在「·」后断行，
+    // 第二行只剩「进度 4/5」；现在分隔点跟着进度整体换行。
+    goal: nearest.description || '',
+    progress: `· 进度 ${prog}`
   };
 });
 
@@ -2101,6 +2102,10 @@ onMounted(() => {
 }
 .week__note svg { flex-shrink: 0; color: var(--amber); }
 .week__note--achv svg { color: var(--accent); }
+/* 成就提示分三段（名称 / 条件 / 进度）：窄屏只在段边界折行，「· 进度」整体带走。 */
+.week__note-text { min-width: 0; }
+.week__note-goal { margin-left: 8px; }
+.week__note-progress { white-space: nowrap; }
 
 /* ---------- 响应式 ---------- */
 /* 断点取 1023：与 PC 双栏（min-width: 1024）严丝合缝。若仍留在 1100，

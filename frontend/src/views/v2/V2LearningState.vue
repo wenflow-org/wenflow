@@ -1811,6 +1811,16 @@ function loadGuidance() {
   gap: 14px;
   flex-wrap: wrap;
 }
+/* ≤767（2026-11-24 走查）：标题、入口排第一行，KPI 三卡整行落第二行。
+   原布局把 KPI 塞在标题右侧，窄屏卡片换成两行后比标题块高，flex-end 把页名
+   压到统计下方；320/390 实测读作「先统计、后页名」。 */
+@media (max-width: 767px) {
+  .state__head { flex-wrap: wrap; align-items: center; row-gap: 10px; }
+  .state__head > div:first-child { flex: 1 1 auto; }
+  .state__head-side { display: contents; }
+  .kpis { order: 3; flex: 1 1 100%; }
+  .state__head-side > .btn-ghost { order: 2; }
+}
 .kpis { display: block; }
 /* PC（2026-11-06 走查）：三等分把每张框拉到 ~350px 宽、中间只有几个小字，两侧全是空地。
    改 flex 按内容收紧、靠左排；数字 24px/800 的 KPI 档不变。 */
