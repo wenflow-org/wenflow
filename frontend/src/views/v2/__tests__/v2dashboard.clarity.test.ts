@@ -215,6 +215,30 @@ describe('学习台问候标题分层（实机 headline 证据）', () => {
   });
 });
 
+describe('学习台状态互斥（2026-11-24 走查：行动卡与新手卡同屏）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    userState.user = { name: '奶茶店店长' };
+    getMock.mockReset();
+    getStats.mockReset();
+    getPaths.mockReset();
+    getAdaptiveGuidance.mockReset();
+  });
+
+  it('已有进行中路径时，不渲染「先说说想解决的事」新手卡', async () => {
+    const w = await mountDashboard({ copy: guidanceCopy() });
+    expect(w.find('.action').exists()).toBe(true);
+    expect(w.find('.action--empty').exists()).toBe(false);
+    expect(w.text()).not.toContain('先说说想解决的事');
+  });
+
+  it('没有路径时才只渲染新手卡', async () => {
+    const w = await mountDashboard({ copy: null, paths: [] });
+    expect(w.find('.action--empty').exists()).toBe(true);
+    expect(w.find('.action__title').text()).toBe('先说说想解决的事，一起确认怎么学');
+  });
+});
+
 describe('学习台「最近学习」区块（走查 #3：只在有数据时渲染）', () => {
   beforeEach(() => {
     setActivePinia(createPinia());

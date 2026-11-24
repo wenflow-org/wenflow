@@ -33,11 +33,12 @@
           >查看全部</button>
         </div>
 
-        <!-- P2-33（设计评审）：三统计全部加「本月」限定——与顶部「累计」口径分家，不再同词不同值 -->
+        <!-- P2-33（设计评审）：三统计全部加「本月」限定——与顶部「累计」口径分家，不再同词不同值。
+             2026-11-24：月份已在卡头「2026年11月」写明，后两项不再复读「本月」。 -->
         <div class="month__meta">
           <span>本月 <b>{{ monthTotals.minutes }}</b> 分钟</span>
-          <span>本月 <b>{{ monthTotals.days }}</b> 天有学习</span>
-          <span>本月 <b>{{ monthTotals.sessions }}</b> 次</span>
+          <span><b>{{ monthTotals.days }}</b> 天有学习</span>
+          <span><b>{{ monthTotals.sessions }}</b> 次会话</span>
           <span class="month__legend" role="group" aria-label="每日学习时长色阶">
             <span class="month__legend-title">每日时长</span>
             <span class="month__lg-item"><i class="lg lg--0" aria-hidden="true"></i>无</span>

@@ -82,12 +82,11 @@
         <V2ResultState
           tone="empty"
           title="资料库还是空的"
-          description="上传 PDF / Word / PPT / Excel / TXT / Markdown / CSV；生成路径时会按目标相关性选用。"
+          description="支持 PDF / Word / PPT / Excel / TXT / Markdown / CSV。"
           action-text="上传资料"
           :busy="uploading"
           @action="openPicker"
         />
-        <p class="library__drop-note">也可以把文件直接拖到这里上传。</p>
       </template>
 
       <p v-else-if="!visible.length" class="library__no-match">
@@ -768,13 +767,6 @@ onMounted(load);
   color: var(--blue-deep);
   font-size: 12.5px;
   font-weight: 700;
-  text-align: center;
-}
-
-.library__drop-note {
-  margin: -8px 0 0;
-  color: var(--faint);
-  font-size: 12.5px;
   text-align: center;
 }
 

@@ -1345,7 +1345,8 @@ function trackPathGeneration(pathId: string) {
   genPollFails = 0;
   genTrack.value = { pathId, lc: null };
   setGoalGenTracking(recentGoalsUserId.value, pathId, cid);
-  scheduleGenPolling();
+  // 立即问一次状态，别让「确认生成进度」的空窗撑到第一个 5s 节拍
+  void pollGenStatus();
 }
 /** 挂载/切号恢复（P22 缺陷2）：本地记着 pathId 且其仍在生成 → 重显 pill 并续轮询。
     终态则清键；状态接口暂不可得则本次不显示（下次挂载再试），不凭空造进行态。 */
@@ -1397,7 +1398,9 @@ function isGeneratingRecent(r: RecentGoalEntry): boolean {
 const doneGenNote = computed(() => {
   if (live.hardBlocked || live.reopenableTerminal) return '';
   const lc = genTrack.value?.lc;
-  if (!lc) return '阶段与任务还在生成中。';
+  /* 2026-11-24 走查：恢复旧会话时 genTrack 刚建立、状态尚未应答，原句直接断言「还在生成中」，
+     对早已生成完的路径是假状态。未拿到状态只报「正在确认」，等轮询落地再说事实。 */
+  if (!lc) return '路径已创建，正在确认生成进度…';
   if (lc.status === 'failed' || lc.status === 'stale') return '生成没有完成，可在学习路径里重试。';
   if (lc.phase === 'ready') return '生成完成，可去学习路径查看。';
   return `阶段与任务还在生成中 · ${genStageLabel(lc)}。`;

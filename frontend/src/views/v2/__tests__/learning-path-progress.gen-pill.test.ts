@@ -57,6 +57,11 @@ describe('目标页接线（防回退）', () => {
   it('完成弹层注跟随真实状态，不再恒为「还在生成中」（P22 缺陷3）', () => {
     expect(goalSource).toContain('{{ doneGenNote }}');
     expect(goalSource, '静态旧句不得直接写回模板').not.toContain('>阶段与任务还在生成中。<');
+    /* 2026-11-24 走查：恢复旧会话时状态尚未应答，兜底句曾断言「还在生成中」；
+       现在只报「正在确认」，并立即问一次状态，不把空窗撑到 5s 节拍。 */
+    expect(goalSource).not.toContain("if (!lc) return '阶段与任务还在生成中。'");
+    expect(goalSource).toContain('正在确认生成进度');
+    expect(goalSource).toContain('void pollGenStatus()');
   });
 
   it('离页停轮询：onBeforeUnmount 清理（P22 缺陷4）', () => {

@@ -33,7 +33,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     id: 'task_10',
     type: 'milestone',
     name: '渐入佳境',
-    description: '完成10个任务',
+    description: '完成 10 个任务',
     xpReward: 50,
     requirement: {
       type: 'task_count',
@@ -44,7 +44,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     id: 'task_50',
     type: 'milestone',
     name: '学习达人',
-    description: '完成50个任务',
+    description: '完成 50 个任务',
     xpReward: 200,
     requirement: {
       type: 'task_count',
@@ -55,7 +55,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     id: 'task_100',
     type: 'milestone',
     name: '学习专家',
-    description: '完成100个任务',
+    description: '完成 100 个任务',
     xpReward: 500,
     requirement: {
       type: 'task_count',
@@ -68,7 +68,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     id: 'streak_3',
     type: 'streak',
     name: '持之以恒',
-    description: '连续3天学习',
+    description: '连续 3 天学习',
     xpReward: 30,
     requirement: {
       type: 'streak_days',
@@ -79,7 +79,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     id: 'streak_7',
     type: 'streak',
     name: '七日坚持',
-    description: '连续7天学习',
+    description: '连续 7 天学习',
     xpReward: 100,
     requirement: {
       type: 'streak_days',
@@ -90,7 +90,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     id: 'streak_30',
     type: 'streak',
     name: '月度冠军',
-    description: '连续30天学习',
+    description: '连续 30 天学习',
     xpReward: 500,
     requirement: {
       type: 'streak_days',
@@ -178,7 +178,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     id: 'speed_learner',
     type: 'mastery',
     name: '速成高手',
-    description: '比预计时间提前50%完成任务',
+    description: '比预计时间提前 50% 完成任务',
     xpReward: 150,
     requirement: {
       type: 'custom',

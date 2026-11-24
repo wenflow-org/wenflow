@@ -701,7 +701,7 @@ export class LearningStateReadService {
           type: 'fatigue',
           level: 'critical',
           title: '学习疲劳预警',
-          message: '你最近连续 3 天的急性负荷明显高于适应基座（ACWR ≥ 1.5），疲劳正在累积。',
+          message: '你最近连续 3 天的急性负荷明显高于适应基座，疲劳正在累积。',
           suggestion: '建议暂停学习1-2天，做一些轻松的事情恢复精力，后续降低学习强度。'
         });
       }
@@ -712,7 +712,7 @@ export class LearningStateReadService {
           type: 'lsb_negative',
           level: 'warning',
           title: '学习状态预警',
-          message: '你的疲劳已连续超过知识积累（form = KTL − LF 为负），当前处于负荷失衡。',
+          message: '你的疲劳已连续超过知识积累，当前处于负荷失衡。',
           suggestion: '建议调整学习计划，减少每日学习量或选择更简单的任务。'
         });
       }

@@ -91,7 +91,6 @@
             <div v-if="finalDeliverable" class="hero__deliverable">
               <span class="hero__deliverable-tag">走完会拿到</span>
               <p>{{ finalDeliverable }}</p>
-              <small v-if="stages.length">这条路径的 {{ stages.length }} 个阶段都朝这份成果收口</small>
             </div>
             <div class="hero__actions">
               <button
@@ -2294,7 +2293,6 @@ onBeforeUnmount(() => {
 }
 .hero__deliverable-tag { font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
 .hero__deliverable p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.55; }
-.hero__deliverable small { display: block; margin-top: 3px; font-size: var(--mk-fs-micro); color: var(--faint); }
 .badge--topology { background: transparent; border: 1px dashed color-mix(in srgb, var(--blue) 35%, transparent); color: var(--blue-deep); }
 .stages__toolbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -2510,6 +2508,11 @@ onBeforeUnmount(() => {
 /* ===== 移动端适配 ===== */
 @media (max-width: 1100px) {
   .crumbs { flex-wrap: wrap; row-gap: 6px; }
+}
+/* 2026-11-24 走查：窄屏面包屑的当前页与下方 h1 完全同名，白占一行；只留返回链。 */
+@media (max-width: 640px) {
+  .crumbs__sep,
+  .crumbs__current { display: none; }
 }
 
 /* ===== 补充说明调整弹窗 ===== */

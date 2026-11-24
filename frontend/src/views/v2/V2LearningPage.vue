@@ -165,7 +165,8 @@
       <div class="stage-card">
         <span class="spinner"></span>
         <h2>正在准备本节内容…</h2>
-        <p>问流正在为{{ taskTitle ? '「' + taskTitle + '」' : '这节课' }}组织讲解和练习。</p>
+        <!-- 2026-11-24：标题已在顶栏（任务名 + 第 N / M 节），加载态不再复读一遍。 -->
+        <p>问流正在组织讲解和练习。</p>
         <div class="stage-card__skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 返回常驻（移动端头部返回键被隐藏）；长时间无响应再亮出重试，页面不无出口 -->
         <div class="stage-card__actions">
@@ -288,10 +289,10 @@
             </div>
         </div>
 
-        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout }" @scroll="updateNearBottom">
+        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout && !introRedundant }" @scroll="updateNearBottom">
           <!-- 本节要掌握（2026-11-11 首屏空洞修复）：只在「刚开课、只有开场白」时出现，
                内容全部来自已有的知识点数据；学员一开口即退场，不长期占位。 -->
-          <section v-if="introLayout && introPoints.length" class="tutor__intro" aria-label="本节要掌握的知识点">
+          <section v-if="introLayout && introPoints.length && !introRedundant" class="tutor__intro" aria-label="本节要掌握的知识点">
             <span class="tutor__intro-kicker">本节要掌握</span>
             <div class="tutor__intro-row">
               <span
@@ -1579,6 +1580,15 @@ const introLayout = computed(
   () => msgs.value.length <= 1 && !openingScene.value && !checkpoint.value && !typing.value && !completed.value
 );
 const introPoints = computed(() => knowledgePoints.value.slice(0, 4));
+/* 2026-11-24 走查：契约卡（2026-11-19）先列出「本节完成要求」的 coreKcs，紧随其后的
+   「本节要掌握」把同一批名字再列一遍。契约卡已覆盖全部要点时，首屏补白块让位。 */
+const introRedundant = computed(() => {
+  const names = new Set(contractCoreKcs.value.map((kc) => kc.name).filter(Boolean));
+  return introPoints.value.length > 0 && introPoints.value.every((kp) => {
+    const name = kp.name || kp.title || '';
+    return !!name && names.has(name);
+  });
+});
 
 /**
  * 小测收起后的续接快选（2026-11-02 用户反馈「快选没什么意义」）：

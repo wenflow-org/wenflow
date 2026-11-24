@@ -288,7 +288,7 @@
           <section class="card advisory state__adv">
             <div class="advisory__head">
               <svg class="advisory__star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/></svg>
-              <strong>AI 调控建议</strong>
+              <strong>调控建议</strong>
               <span class="band__meta">{{ suggestSource }}</span>
               <!-- 待确认角标（2026-11-05 用户定稿）：有可执行调整时亮出状态，
                    与下方「采用建议 / 保持原计划」对上 -->
@@ -351,6 +351,7 @@
                   <div class="sug__body">
                     <strong>{{ s.title }}</strong>
                     <p>{{ s.message }}</p>
+                    <p v-if="s.action" class="sug__action">{{ s.action }}</p>
                   </div>
                   <router-link v-if="s.to" :to="s.to" class="sug__cta">{{ s.cta }}</router-link>
                 </article>
@@ -1679,12 +1680,13 @@ const svgBulb = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="cur
 const svgWarn = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>';
 
 const suggestionCards = computed(() => {
-  const cards: Array<{ title: string; message: string; level: string; bg: string; ink: string; icon: string; cta?: string; to?: string }> = [];
+  const cards: Array<{ title: string; message: string; action?: string; level: string; bg: string; ink: string; icon: string; cta?: string; to?: string }> = [];
   const sug = current.value?.suggestion;
   if (sug?.message) {
     cards.push({
       title: '节奏建议',
-      message: sug.message + (sug.action ? `（${sug.action}）` : ''),
+      message: sug.message,
+      action: typeof sug.action === 'string' ? sug.action : '',
       level: sug.level || 'info',
       bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)', icon: svgBulb,
       cta: '去调整', to: '/learning-paths'
@@ -1999,6 +2001,8 @@ function loadGuidance() {
 .sug__icon { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; }
 .sug__body strong { font-size: 13.5px; }
 .sug__body p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+/* 建议动作单独一行（不再塞进括号）：状态一行、动作一行，布局自己说明先后 */
+.sug__body .sug__action { margin-top: 2px; color: var(--ink); font-weight: 600; }
 .sug__cta {
   /* 走查 2026-10-08 #79：这枚「继续」此前只有 7px 上下内边距，桌面实测约 45×30，
      比同页「查看学习历史」（107×44）小一截，是触控热区不达标的可点元素。

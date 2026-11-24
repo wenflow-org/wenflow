@@ -44,7 +44,9 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
     if (k === 'continuation') {
       const rel = sc.recap?.relation;
       if (rel === 'prev-milestone') return `上节课在「${sc.recap?.sourceTitle || '上一阶段'}」结束，这节课是它的下一步。`;
-      return '上一课刚结束，这节课接着往下推进。';
+      /* 2026-11-24 走查：默认句「上一课刚结束，这节课接着往下推进」与标签「接着学」、
+         标题「接着上一课往下学」三行同义；没有跨阶段增量时不再出副文行。 */
+      return '';
     }
     if (k === 'relearn') return sc.attempt && sc.attempt > 1 ? `这是你第 ${sc.attempt} 次学这节课，重点补上次没掌握的。` : '从头再学一遍这节课。';
     if (k === 'review') return '先巩固快忘记的知识点，再继续新内容。';

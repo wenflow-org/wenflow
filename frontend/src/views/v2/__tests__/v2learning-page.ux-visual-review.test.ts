@@ -144,9 +144,11 @@ describe('开课准备态不再用占位词与失真的等待预期（#66/#67）
 
   it('准备卡文案去掉「当前任务」占位，且不写任何时长承诺（2026-11-05 口径）', () => {
     expect(source, '旧承诺文案还在').not.toContain('一般几秒到十几秒');
-    const p = /问流正在为[\s\S]*?<\/p>/.exec(source)?.[0] ?? '';
+    /* 2026-11-24：正文不再复读顶栏任务名，改为「问流正在组织讲解和练习。」 */
+    const p = /问流正在[\s\S]*?<\/p>/.exec(source)?.[0] ?? '';
     expect(p, '准备卡找不到正文').not.toBe('');
     expect(p, '准备卡仍用「当前任务」占位').not.toContain('当前任务');
+    expect(p, '准备卡复读了顶栏任务名').not.toContain('taskTitle');
     expect(p, '时长承诺复活（秒/分都不许写）').not.toMatch(/几秒|半分钟|几分钟|十几秒/);
     expect(p, '准备卡仍用方位指路').not.toContain('点下方');
   });

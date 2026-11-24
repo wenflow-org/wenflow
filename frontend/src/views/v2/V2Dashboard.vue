@@ -132,13 +132,10 @@
                 </div>
               </div>
               <!-- 路径归属（2026-11-05 屏效比）：原独立的右栏路径进度卡（含标题/阶段/进度/详情链）
-                   与行动卡讲的是同一条路径同一阶段，合并为行动卡底部一条分隔栏——
-                   省一整张卡（移动端 ≥140px），路径信息仍然一处可见 -->
+                   与行动卡讲的是同一条路径同一阶段，合并为行动卡底部一条分隔栏。
+                   2026-11-24：路径名已在卡头「来自路径」出现，底栏不再复读，只留进度与详情入口。 -->
               <div v-if="primaryPath" class="action__path">
-                <span class="action__path-title" :title="primaryPath.title">
-                  所属路径：{{ primaryPath.title }}
-                  <span class="action__path-pct">整体 {{ primaryPath.percent }}%</span>
-                </span>
+                <span class="action__path-pct">整体 {{ primaryPath.percent }}%</span>
                 <router-link :to="`/learning-path/${primaryPath.id}`" class="action__path-link">路径详情 ›</router-link>
               </div>
             </template>
@@ -146,7 +143,9 @@
 
           <!-- 隔日小测（外部评审 P1.2，2026-11-22）：24–72h 延迟保持探针此前只有 API 没有真人
                入口，延迟保持测量一直缺真人数据。有到期题才出现，不占空态主流程；
-               作答就地反馈对错与一句话解析，答完即收。 -->
+               作答就地反馈对错与一句话解析，答完即收。
+               2026-11-24 走查：本卡插在行动卡与失败/生成/新手三态之间，把 v-if 链接断了——
+               行动中学员会同时看到「今日行动」和「先说说想解决的事」。三态改各自 v-if。 -->
           <section v-if="pageState !== 'attention' && probeCardVisible" class="card probe">
             <div class="action__eyebrow">
               <span>隔日小测</span>
@@ -188,7 +187,7 @@
             </template>
           </section>
 
-          <section v-else-if="pageState === 'attention'" class="card action action--alert">
+          <section v-if="pageState === 'attention'" class="card action action--alert">
             <div class="action__eyebrow action__eyebrow--alert">
               <span>需要先处理</span>
               <span class="action__from">路径「{{ primaryPath?.title }}」</span>
@@ -211,7 +210,7 @@
           <!-- 生成中：等待态（区别于失败红卡，禁用重试）。
                状态只在标题讲一次：原眉标「路径生成中」+ 标题「路径正在生成」+ 青色 tag「正在生成」
                是三处同义（2026-10-29 全站副文审计）；眉标只留来源路径。 -->
-          <section v-else-if="pageState === 'generating'" class="card action action--gen">
+          <section v-if="pageState === 'generating'" class="card action action--gen">
             <div class="action__eyebrow">
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
@@ -232,7 +231,7 @@
 
           <!-- 新手态：引导卡（占满双列——原右侧「还没有学习路径」占位卡与这里同屏
                说两遍同一件事，走查 2026-09-27 冗余项，合并为一处，行动留给本卡） -->
-          <section v-else class="card action action--empty">
+          <section v-if="pageState === 'empty'" class="card action action--empty">
             <!-- 图标盘与标题同行（2026-11-07 用户走查 图3/图4）：原 66px 图标盘独占一整行，
                  右侧 90% 全空，卡片顶部白吃 64px。收到 40px 挪到标题左侧，与「标题 + 副标题」
                  组成一行（flex items-center gap-3 那一档）。 -->
@@ -362,7 +361,8 @@
                  空位改画「上月尾日」的浅灰占位，并把首日当天数据格抬到普通可读色。 -->
             <div v-else class="cal">
               <div class="cal__head">
-                <span class="cal__title">{{ monthOpen ? monthLabel : '本周' }}</span>
+                <!-- 2026-11-24：周视图不再重复卡名「本周节奏」的「本周」，只留整月范围标签。 -->
+                <span v-if="monthOpen" class="cal__title">{{ monthLabel }}</span>
                 <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ▴' : '展开整月 ▾' }}</button>
               </div>
               <div class="cal__wks" aria-hidden="true">
@@ -954,7 +954,7 @@ const actionTitle = computed(() => {
 });
 
 /* 起步预期固定说明确认与渐进生成，不承诺对话或生成耗时。 */
-const guidanceEmptyText = '先聊清目标、起点和可用时间，由你确认方案后再生成路径。后续课程会随学习进展逐步准备。';
+const guidanceEmptyText = '先聊清目标、起点和可用时间，确认方案后生成路径，课程会随进展逐步准备。';
 
 /* skill 今日行动（todayActions 语义跳转解析） */
 interface SkillAction { label: string; to: string; primary: boolean }
@@ -1127,7 +1127,13 @@ const tipText = computed(() => {
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;
-  if (stats.value?.suggestion?.message) return stats.value.suggestion.message;
+  /* 「状态正在建立」这类 normal 级只是状态，不是行动；有 action 时直接给可执行建议，
+     让提示条回答「现在怎么做」，而不是再复述一遍状态。 */
+  const sug = stats.value?.suggestion as { message?: unknown; action?: unknown; level?: unknown } | null | undefined;
+  if (sug?.message) {
+    const action = typeof sug.action === 'string' ? sug.action.trim() : '';
+    return sug.level === 'normal' && action ? action : String(sug.message);
+  }
   if (copy?.paceHint && copy.paceHint !== '当前节奏稳定，继续保持。') return copy.paceHint;
   return '';
 });
@@ -1877,9 +1883,6 @@ onMounted(() => {
   font-size: 12px; color: var(--faint);
   min-width: 0;
 }
-.action__path-title {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .action__path-pct { color: var(--muted); }
 .action__path-link { flex: none; color: var(--blue-deep); font-weight: 700; text-decoration: none; }
 .action__path-link:hover { text-decoration: underline; }
@@ -2027,6 +2030,8 @@ onMounted(() => {
 .cal { display: grid; gap: 6px; }
 .cal__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .cal__title { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+/* 周视图没有范围标签时，展开按钮仍贴右（单子项下 space-between 会把它推到左边）。 */
+.cal__head > .link-muted { margin-left: auto; }
 .cal__wks {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px;
   font-size: 12px; font-weight: 700; color: var(--faint); text-align: center;
@@ -2359,6 +2364,12 @@ a.btn-primary { text-decoration: none; }
 /* 移动端防横向溢出 */
 .action__eyebrow { flex-wrap: wrap; row-gap: 4px; }
 .action__from { min-width: 0; overflow-wrap: anywhere; }
+/* 2026-11-24：390 实测眉标排不下，出处会被挤到第二行独占一排（阶段标签再行）。
+   窄屏收起行动卡的次要出处（卡底已有「路径详情」），只留「今日行动 + 阶段标签」一行；
+   失败/生成卡的出处是唯一眉标，保留。 */
+@media (max-width: 640px) {
+  .action:not(.action--alert):not(.action--gen) .action__from { display: none; }
+}
 @media (max-width: 1100px) {
   /* greet__sub 已降级成日期行里的 inline 续写（.greet__date 承担 nowrap 省略号），
      原「独占一行 + line-clamp」的移动端覆写随之退役——父级是 inline span，

@@ -219,7 +219,7 @@
                   :type="showPwd.new ? 'text' : 'password'"
                   class="uc-field__input"
                   autocomplete="new-password"
-                  placeholder="至少 8 位，含字母和数字"
+                  placeholder="输入新密码"
                   :aria-invalid="!!pwdErrors.new"
                   :aria-describedby="pwdErrors.new ? 'pwd-new-error' : 'pwd-rule'"
                   @input="onPwdInput('new')"
@@ -279,7 +279,7 @@
           <div class="uc-card__head">
             <div>
               <h3 id="danger-title">注销账号 <span class="danger-tag">不可撤销</span></h3>
-              <p id="danger-desc">注销后账号将不可用，学习数据无法再访问。此操作不可自行撤销（可联系管理员恢复）。</p>
+              <p id="danger-desc">注销后账号将不可用，学习数据无法再访问。如需恢复请联系管理员。</p>
             </div>
           </div>
           <div class="danger-form">
