@@ -98,18 +98,24 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.reasons).toEqual([]);
   });
 
-  it('本路径最近压力大（课内 lss≥6）→ 降一档', () => {
-    const decision = decideTaskDifficulty({ ...normalInput(), lessonMetrics: metrics(7.2, 3.7, 2.4) });
+  it('本路径最近高压（lss 命中 high 档 8.2）→ 降一档', () => {
+    const decision = decideTaskDifficulty({ ...normalInput(), lessonMetrics: metrics(8.2, 3.7, 2.4) });
     expect(decision.direction).toBe('decrease');
     expect(decision.adjusted).toBe(4);
     expect(decision.reasons).toContain('lesson_stress_high');
+  });
+
+  it('良性吃力（mid 档数值 7.2）不降档——mid 的中点不是高压（2026-11-23 复核）', () => {
+    const decision = decideTaskDifficulty({ ...normalInput(), lessonMetrics: metrics(7.2, 3.7, 2.4) });
+    expect(decision.direction).toBe('keep');
+    expect(decision.reasons).not.toContain('lesson_stress_high');
   });
 
   it('没有本路径历史时不借用别的路径的单课压力（LSS 是会话级量）', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
       lessonMetrics: null,
-      globalMetrics: metrics(7.2, 3.7, 2.4), // 全局 lss 高（别的路径的难课），但全局疲劳不高
+      globalMetrics: metrics(8.2, 3.7, 2.4), // 全局 lss 高（别的路径的难课），但全局疲劳不高
     });
     expect(decision.direction).toBe('keep');
     expect(decision.reasons).not.toContain('lesson_stress_high');
@@ -149,7 +155,7 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
   it('负荷类理由才降档；知识类不叠加降档深度（1 负荷 + 1 知识 → 只 -1）', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
-      lessonMetrics: metrics(7.2, 3.7, 2.4), // 课内压力大
+      lessonMetrics: metrics(8.2, 3.7, 2.4), // 课内压力大
       knowledgeSignals: { fragileCount: 3, strugglingCount: 0, prerequisiteGapCount: 0 },
     });
     expect(decision.delta).toBe(-1);
@@ -173,7 +179,7 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
   it('同一份证据不被算两次：本路径压力大 + 上限 low → 只降一档', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
-      lessonMetrics: metrics(7.2, 3.7, 2.4),
+      lessonMetrics: metrics(8.2, 3.7, 2.4),
       learningControlState: { paceMode: 'recover', conceptLoad: 'low', challengeLevelCap: 'low' },
     });
     expect(decision.delta).toBe(-1);
@@ -211,6 +217,19 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     });
     expect(decision.delta).toBe(1);
     expect(decision.reasons).toEqual(['ready_to_accelerate']);
+  });
+
+  it('升档 + 知识类理由：fragile/struggling 只留支架，不吃掉 ready_to_accelerate（2026-11-23）', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: metrics(3, 6, 2),
+      learningControlState: { paceMode: 'push', conceptLoad: 'high', challengeLevelCap: 'high' },
+      knowledgeSignals: { fragileCount: 2, strugglingCount: 1, prerequisiteGapCount: 0 },
+    });
+    expect(decision.delta).toBe(1);
+    // 知识类理由不否决升档，也就不能把「有余力」的标签挤掉——否则 push 的
+    // 「减少示范与提示」提示词在 fragile 恒大于 0 的真实载荷里永远不触发。
+    expect(decision.reasons).toEqual(['fragile_concepts', 'struggling_concepts', 'ready_to_accelerate']);
   });
 
   it('上一节课紧绷（lss>4）→ 即使上限允许也不升档', () => {
@@ -261,9 +280,9 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
   });
 
   it('证据快照完整（可审计）', () => {
-    const decision = decideTaskDifficulty({ ...normalInput(), lessonMetrics: metrics(7.2, 3.7, 2.4) });
+    const decision = decideTaskDifficulty({ ...normalInput(), lessonMetrics: metrics(8.2, 3.7, 2.4) });
     expect(decision.evidence).toMatchObject({
-      lessonLss: 7.2,
+      lessonLss: 8.2,
       lessonScopeIsPath: true,
       challengeLevelCap: 'medium',
       globalPacing: 'moderate',
@@ -416,7 +435,7 @@ describe('decideTaskDifficulty · 知识理由的严重度门（#59/#60 第 6 �
   it('负荷类理由仍然一票否决（知识类放宽不波及刹车）', () => {
     const decision = decideTaskDifficulty({
       ...capable(),
-      lessonMetrics: metrics(7, 3, 1),
+      lessonMetrics: metrics(8.2, 3, 1),
       knowledgeSignals: { fragileCount: 0, strugglingCount: 0, prerequisiteGapCount: 0 },
     });
     expect(decision.direction).toBe('decrease');

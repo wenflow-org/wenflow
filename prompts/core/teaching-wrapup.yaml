@@ -26,7 +26,7 @@ inputs:
   - name: sessionEvidence
     type: object
     ref: sandbox:teaching.session.evidence
-    desc: 会话证据（回合数/理解均值/困惑点/情绪信号/loadIndex 均值与峰值——若输入提供，用于判定"高负荷"而非猜测）
+    desc: 会话证据（回合数/理解均值/困惑点/情绪信号/loadBand 分布/峰值（平台映射后的负荷档位）——若输入提供，用于判定"高负荷"而非猜测）
   - name: knowledgeContext
     type: object
     ref: sandbox:teaching.session.knowledgeContext

@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-wrapup
-coreHash: c1bd8edb3774aa6a5395b4fbc29f94e95814b32043aec12e7d29b5d0295ec996
+coreHash: 748d3936d855cf7ac326ea21c7e054ae733952bd7e2fdfcf72e19b3ae84d5ac5
 coreVersion: 1
 temperature: 0.25
 maxTokens: 64000
@@ -24,7 +24,7 @@ failurePolicy: propagate
 - 「knowledgePoints（object[]）」`sandbox:teaching.knowledge.state`（编排注入） — 会话结束时知识看板状态
 - 「sessionInfo（object）」`sandbox:teaching.session.info`（编排注入） — 会话信息（主题/任务/路径/时长）
 - 「learningState（object）」`sandbox:teaching.learningState`（编排注入） — 学习状态与运行时信号
-- 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪信号/loadIndex 均值与峰值——若输入提供，用于判定"高负荷"而非猜测）
+- 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪信号/loadBand 分布/峰值（平台映射后的负荷档位）——若输入提供，用于判定"高负荷"而非猜测）
 - 「knowledgeContext（object）」`sandbox:teaching.session.knowledgeContext`（编排注入） — 知识上下文（课前初始知识点快照 initialPoints + 本节知识点变化 delta + 记忆保持率提示 reviewHints〔FSRS 计算〕）——证据优先级与记忆保持率引用规则依赖它
 - 「sessionStructure（object）」`sandbox:teaching.session.structure`（编排注入） — 课堂结构证据（路径背景/课堂最终状态/课堂事件历史/阶段轨迹/结束原因）——证据优先级与结束原因解释依赖它
 

@@ -165,9 +165,6 @@ const DEFAULT_NARRATIVE_INSIGHTS: LearnerNarrativeInsights = {
 };
 
 const DEFAULT_CURRICULUM_CONTROLS: LearnerCurriculumControls = {
-  taskGranularityLevel: 'medium',
-  conceptDensityLevel: 'medium',
-  reviewFrequencyLevel: 'medium',
   progressionStrategyNote: '默认采用平衡推进：先建立理解，再用小任务验证，再逐步扩展。'
 };
 
@@ -269,19 +266,15 @@ export class ProfileAggregator {
     /* suggestedApproach 是规则拼装的文本，不是测量值——按本段契约不列入 sources（同 strengths/riskFactors）。
        界面改为在「输入有观测」时标「规则推导」，而不是硬塞进「实测」或一律标「初始默认值」。
        旧实现在任一画像输入有观测时就 push 它，导致通用兜底文案「采用平衡的学习方式」也带实测语义。 */
-    /* 课程控制是规则产出：只有它读的那几个输入有实测值时才不算默认（buildCurriculumControls 的判据） */
+    /* 课程控制是规则产出：只有它读的那几个输入有实测值时才不算默认（buildCurriculumControls 的判据）。
+       2026-11-23 三档退役后本组只剩 progressionStrategyNote 一格——判据沿用原「三档输入有观测」
+       的并集口径（sessionLength / lf / ktl / confidenceLevel / theoryVsPractice 任一实测）。 */
     const curriculumObserved: string[] = [];
-    if (preferenceObserved.includes('sessionLength') || learningObserved.includes('lf')) {
-      curriculumObserved.push('taskGranularityLevel');
-    }
-    if (learningObserved.includes('lf') || emotionalObserved.includes('confidenceLevel')) {
-      curriculumObserved.push('conceptDensityLevel');
-    }
-    if (learningObserved.includes('lf') || learningObserved.includes('ktl')
+    if (preferenceObserved.includes('sessionLength') || learningObserved.includes('lf')
+      || learningObserved.includes('ktl') || emotionalObserved.includes('confidenceLevel')
       || preferenceObserved.includes('theoryVsPractice')) {
-      curriculumObserved.push('reviewFrequencyLevel');
+      curriculumObserved.push('progressionStrategyNote');
     }
-    if (curriculumObserved.length > 0) curriculumObserved.push('progressionStrategyNote');
     const sources: ProfileFieldSources = {
       cognitive: cognitiveObserved,
       behavioral: behavioralObserved,
@@ -873,36 +866,19 @@ export class ProfileAggregator {
   }): LearnerCurriculumControls {
     /* 2026-11-09 口径统一：课程控制原先用一组绝对阈值（lf>4.5 / lf>5 / lf>4 / ktl>6），
        与快照 fatigueRisk/recommendedPacing 的相对量 ACWR 判据不同源。改为全部由 classifyLoad
-       派生：超载→更小粒度/更低密度/更高复习频率；有余力且基座成熟→反向。 */
+       派生：超载→更小粒度/更低密度/更高复习频率；有余力且基座成熟→反向。
+       2026-11-23 三档退役：taskGranularityLevel / conceptDensityLevel / reviewFrequencyLevel
+       全仓零功能消费且名不副实（课程结构实际由 CLT 契约 + 体量真值表控制，复习节奏归 FSRS），
+       按外审拍板退役不再推导；progressionStrategyNote 是活字段（进课堂 promptEnhancement），
+       判据从原三档条件直接收缩为 classifyLoad 两分支。 */
     const verdict = classifyLoad(profile.learning);
-    const capacity = verdict.mature && verdict.fatigueRisk === 'low';
 
-    const taskGranularityLevel: LearnerCurriculumControls['taskGranularityLevel'] =
-      profile.preferences.sessionLength === 'short' || verdict.pacing === 'slow' ? 'small'
-        : profile.preferences.sessionLength === 'long' && capacity ? 'large'
-          : 'medium';
-
-    const conceptDensityLevel: LearnerCurriculumControls['conceptDensityLevel'] =
-      verdict.pacing === 'slow' || profile.emotional.confidenceLevel === 'anxious' ? 'low'
-        : capacity ? 'high'
-          : 'medium';
-
-    const reviewFrequencyLevel: LearnerCurriculumControls['reviewFrequencyLevel'] =
-      verdict.fatigueRisk !== 'low' || profile.preferences.theoryVsPractice === 'practice-first' ? 'high'
-        : capacity ? 'low'
-          : 'medium';
-
-    const progressionStrategyNote = taskGranularityLevel === 'small'
+    const progressionStrategyNote = verdict.pacing === 'slow' || verdict.fatigueRisk !== 'low'
       ? '先用小任务建立连续完成感，再逐步串成完整阶段。'
-      : conceptDensityLevel === 'low'
-        ? '控制单次新概念数量，确保每一步都能及时验证理解。'
-        : `采用平衡推进：${profile.narrativeInsights.effectiveTeachingPattern}`;
+      : `采用平衡推进：${profile.narrativeInsights.effectiveTeachingPattern}`;
 
     return {
       ...DEFAULT_CURRICULUM_CONTROLS,
-      taskGranularityLevel,
-      conceptDensityLevel,
-      reviewFrequencyLevel,
       progressionStrategyNote
     };
   }
@@ -956,7 +932,13 @@ export class ProfileAggregator {
       if (valid.length < 2) return 'stable';
       const recentWindow = valid.slice(-2);
       const previousWindow = valid.slice(Math.max(0, valid.length - 4), Math.max(0, valid.length - 2));
-      if (previousWindow.length === 0) return 'stable';
+      /* 小样本守卫（2026-11-23 真人测试实锤）：previousWindow 只有 1 个样本时不判趋势——
+         首课 EWMA 从 0 快速拉到高位（实测 lsb=[6.11, 5.14, 5.44]），2v1 窗口的 delta
+         必然 < -0.6，把「冷启动拉升后的自然回落」误判成 declining，随后
+         identifyRiskFactors 写「学习进度下滑」进 derivedInsights.riskFactors，
+         personalization 又把它注入每轮课堂 prompt（而学习者三节课全答对），
+         管理端列表同时亮「↘ 下降」。样本不足时宁可 stable，不产出误报。 */
+      if (previousWindow.length < 2) return 'stable';
       const recentAvg = recentWindow.reduce((sum, item) => sum + item.lsb, 0) / recentWindow.length;
       const previousAvg = previousWindow.reduce((sum, item) => sum + item.lsb, 0) / previousWindow.length;
       const delta = recentAvg - previousAvg;

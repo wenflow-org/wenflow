@@ -508,6 +508,19 @@
             </div>
           </div>
         </section>
+        <!-- 当前生效调控（2026-11-23 控制面投影）：课堂实时读取的硬信号，排障看这里 -->
+        <section v-if="liveControlRows.length" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">当前生效调控</h3>
+            <span class="mk-card__meta">课堂实时读取 · 非画像推导</span>
+          </div>
+          <div class="ld-kv">
+            <div v-for="kv in liveControlRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong :title="kv.hint">{{ kv.value }}</strong>
+            </div>
+          </div>
+        </section>
         <!-- 叙述洞察通栏卡（2026-10-11 走查：长文本与参数卡解耦——上排三张参数卡收成等高水平带，
              叙述独占通栏按语义分区 + 两栏文本流，不再把同行参数卡拉出半屏空洞） -->
         <section v-if="narrativeSections.length || historyNarrativeSections.length || narrativeScopeNotice" class="mk-card ld-pf-narr">
@@ -2957,16 +2970,48 @@ const historyNarrativeSections = computed<{ label: string; items: string[] }[]>(
   return sections
 })
 
-/** 画像补充展示：课程控制（curriculumControls）——运营价值：平台侧可执行的粒度/密度/复习策略。
-    2026-11-09：四项都是规则推导产物，输入有观测时标「规则推导」而非「实测」。 */
+/** 画像补充展示：当前生效调控（2026-11-23 控制面投影）——运营排障看「系统现在怎么控这个人的课」。
+    只投影课堂实时读取的硬信号（learningControlState + teachingHints.avoid），每项带触发语义；
+    不堆任何派生标签——镜像推导类字段已随三档退役移除。paceMode/challengeLevelCap/avoid 此前
+    页面不可见（同屏不复读检查通过），FSRS 温故负载在「记忆与调度」页签单源展示，这里不重复。 */
+const LIVE_CONTROL_ZH: Record<string, string> = {
+  recover: '降压恢复（疲劳/高负荷触发）',
+  steady: '按序推进',
+  push: '放开推进（余力充足触发）'
+}
+const liveControlRows = computed(() => {
+  const rows: ProfileKvRow[] = []
+  const cs = (rawDetail.value?.learningControlState || null) as Record<string, unknown> | null
+  if (cs) {
+    if (typeof cs.paceMode === 'string') {
+      rows.push({ label: '节奏模式', value: LIVE_CONTROL_ZH[cs.paceMode] || String(cs.paceMode), hint: '课堂难度封顶与推进节奏的当前档位', prior: false, derived: true })
+    }
+    if (typeof cs.challengeLevelCap === 'string') {
+      const capZh: Record<string, string> = { low: '低（高疲劳/压力/脆弱概念时限高）', medium: '中', high: '高' }
+      rows.push({ label: '挑战封顶', value: capZh[cs.challengeLevelCap] || String(cs.challengeLevelCap), hint: '本课挑战难度上限，向下限高不限低', prior: false, derived: true })
+    }
+    if (typeof cs.reviewPriority === 'string') {
+      const rpZh: Record<string, string> = { high: '高（前置缺口/严重挣扎/失衡触发优先巩固）', medium: '中', low: '低' }
+      rows.push({ label: '巩固优先级', value: rpZh[cs.reviewPriority] || String(cs.reviewPriority), hint: '是否触发「优先稳前置/巩固」开关；到期队列明细见「记忆与调度」页签', prior: false, derived: true })
+    }
+  }
+  const avoid = (rawDetail.value?.teachingHints as { avoid?: unknown } | null | undefined)?.avoid
+  if (Array.isArray(avoid) && avoid.length) {
+    rows.push({ label: '排斥形式', value: avoid.map(String).slice(0, 5).join('、'), hint: '课堂提示词强规则：本轮 reply 必须避免这些教学形式', prior: false, derived: true })
+  }
+  return rows
+})
+
+/** 画像补充展示：课程控制（curriculumControls）——2026-11-23 三档退役
+    （taskGranularityLevel / conceptDensityLevel / reviewFrequencyLevel 全仓零功能消费且
+    名不副实：课程结构由 CLT 契约 + 体量真值表控制、复习节奏归 FSRS，见后端 types.ts 记账），
+    只留 progressionStrategyNote 一行。若运营需要看「现在系统怎么控这个人的课」，
+    应投影真正生效的控制面（paceMode / challengeLevelCap / FSRS 温故负载），不是镜像推导。 */
 const curriculumRows = computed(() =>
   kvRows((profile.value?.curriculumControls || null) as Record<string, unknown> | null, {
-    taskGranularityLevel: '任务粒度',
-    conceptDensityLevel: '概念密度',
-    reviewFrequencyLevel: '复习频率',
     progressionStrategyNote: '推进策略'
   }, 'curriculumControls', {
-    derivedKeys: ['taskGranularityLevel', 'conceptDensityLevel', 'reviewFrequencyLevel', 'progressionStrategyNote']
+    derivedKeys: ['progressionStrategyNote']
   })
 )
 

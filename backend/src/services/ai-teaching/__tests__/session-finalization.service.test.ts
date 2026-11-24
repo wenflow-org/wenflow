@@ -14,6 +14,7 @@ const mockCompleteTask = jest.fn()
 // F2 入队侧收紧（2026-10-06）：温故回写的入队必须可观测——不 mock 就只能看真实入队副作用
 const mockApplyWarmupExtractionForSession = jest.fn()
 const mockEnqueueReviewCompletedEvent = jest.fn()
+const mockRecordDistressAbandonEvidence = jest.fn()
 
 jest.mock('../TeachingSessionRepository', () => ({
   FinalizationOperationError: class FinalizationOperationError extends Error {},
@@ -27,6 +28,9 @@ jest.mock('../AITeachingCoordinator', () => ({
 jest.mock('../../learning/learning.service', () => ({
   __esModule: true,
   default: { completeTask: mockCompleteTask }
+}))
+jest.mock('../../learner/distress-signal', () => ({
+  recordDistressAbandonEvidence: (...args: unknown[]) => mockRecordDistressAbandonEvidence(...args),
 }))
 jest.mock('../warmup-writeback', () => ({
   applyWarmupExtractionForSession: mockApplyWarmupExtractionForSession,
@@ -74,6 +78,7 @@ describe('SessionFinalizationService', () => {
     mockRepository.markReviewCompleted.mockResolvedValue(undefined)
     mockApplyWarmupExtractionForSession.mockResolvedValue(undefined)
     mockEnqueueReviewCompletedEvent.mockResolvedValue(undefined)
+    mockRecordDistressAbandonEvidence.mockResolvedValue(undefined)
   })
 
   it('任务完成失败时只标记 taskCompletion 失败，不调用 Wrapup', async () => {
@@ -508,6 +513,29 @@ describe('SessionFinalizationService', () => {
     // 批 21：taskCompletion='skipped'——abandon 课结算确实跳过，不再对 trace 声称 completed
     expect(payload.taskCompletion.status).toBe('skipped')
     expect(mockApplyWarmupExtractionForSession).not.toHaveBeenCalled()
+    // P0-2：主动弃课落控制面信号（不进学习指标）
+    expect(mockRecordDistressAbandonEvidence).toHaveBeenCalledTimes(1)
+    expect(mockRecordDistressAbandonEvidence.mock.calls[0][0]).toMatchObject({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      endReason: 'learner-abandoned',
+    })
+  })
+
+  it('路径调整的一键清场（operationId=abandon:）不落弃课控制信号', async () => {
+    mockRepository.assertOwnership.mockResolvedValue(
+      completedSession({ status: 'active', wrapup: null, revision: 4 }))
+    mockRepository.abandonSessionFinalization.mockResolvedValue(
+      completedSession({ status: 'abandoned', wrapup: null, revision: 5 }))
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'abandon:session-1',
+      revision: 4,
+      endReason: 'learner-abandoned',
+    })
+    expect(mockRecordDistressAbandonEvidence).not.toHaveBeenCalled()
   })
 
   it('complete_review：正常收束 → 复习结果入队 review:completed（路径逐字不变）', async () => {

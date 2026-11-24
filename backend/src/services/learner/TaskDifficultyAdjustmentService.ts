@@ -15,6 +15,7 @@
  */
 import type { LearnerLearningControlState } from '../../agents/profile-learner-model-agent/types';
 import { classifyLoad } from '../learning/learning-load-verdict';
+import { SESSION_LSS_HIGH_THRESHOLD } from '../learning/session-evaluation-scale';
 
 /** `challengeLevelCap` 在任务级的具体含义：本任务难度不得越过该上限 */
 export const CHALLENGE_CAP_LIMITS: Record<'low' | 'medium' | 'high', number> = {
@@ -218,7 +219,8 @@ function collectReasons(
   // （LSS 是会话级量、balance 是路径自身状态），那是跨路径污染。
   // 2026-10-15 PMC 改造：疲劳/失衡改**相对量**（ACWR/form）——绝对 `lf>=6` 在日负荷口径下失效。
   const lessonVerdict = classifyLoad({ ktl: lesson.ktl, lf: lesson.lf });
-  if (lessonScopeIsPath && lesson.lss >= 6) reasons.push('lesson_stress_high');
+  // 2026-11-23 复核：sessionLss 档位化后 mid 的中点恰好=6（良性困难），门槛必须是 high 档（7.5）。
+  if (lessonScopeIsPath && lesson.lss >= SESSION_LSS_HIGH_THRESHOLD) reasons.push('lesson_stress_high');
   if (lessonScopeIsPath && (lessonVerdict.fatigueRisk === 'high' || lessonVerdict.imbalanced)) reasons.push('path_load_unbalanced');
   // 学习者级：总负担重（累）→ 任何路径都别再上强度
   const globalVerdict = classifyLoad({ ktl: input.globalMetrics.ktl, lf: input.globalMetrics.lf });
@@ -312,7 +314,13 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
   const finalDelta = adjusted - baseline;
 
   const finalReasons = [...reasons];
-  if (finalReasons.length === 0 && finalDelta > 0) finalReasons.push('ready_to_accelerate');
+  // 升档本身就是「有余力」的结论：只要没有负荷类降档理由，即使带着知识类理由也补上
+  // ready_to_accelerate。知识类理由（fragile/struggling/prerequisite）只要求"多给支架"、
+  // 不否决升档；此前只在 reasons 全空时才补标签，而 fragile 通道几乎恒大于 0，
+  // 于是 push 的「减少示范与提示」提示词在真实载荷里永远不触发（2026-11-23 复核）。
+  if (finalDelta > 0 && !finalReasons.some((reason) => DECREASE_REASON_SET.has(reason))) {
+    finalReasons.push('ready_to_accelerate');
+  }
   const capApplied = adjusted < desired;
   const floorApplied = delta < 0 && floored > desired;
 

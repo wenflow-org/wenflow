@@ -6,7 +6,7 @@ describe('simulate-learner-days（日期模拟验证脚手架）', () => {
     expect(plan.days).toBe(3);
     // 第 1 天：路径 A 两节难课（对照：只判定不执行）+ 路径 C 两节难课（实验：第 2 节按调整执行）
     expect(lessonsForDay(plan, 0).map((lesson) => `${lesson.pathKey}${lesson.difficulty}`))
-      .toEqual(['A9', 'A9', 'C9', 'C9']);
+      .toEqual(['A10', 'A10', 'C10', 'C10']);
     const experiment = lessonsForDay(plan, 0).filter((lesson) => lesson.applyAdjustment);
     expect(experiment).toHaveLength(1);
     expect(experiment[0].pathKey).toBe('C');

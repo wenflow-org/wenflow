@@ -38,9 +38,7 @@ const ENUM_ZH: Record<string, Record<string, string>> = {
   urgencyLevel: { high: '高', medium: '中', low: '低' },
   confidenceLevel: { confident: '自信', moderate: '一般', anxious: '容易紧张' },
   rewardSensitivity: { high: '高', medium: '中', low: '低' },
-  taskGranularityLevel: { small: '细粒度', medium: '中等', large: '粗粒度' },
-  conceptDensityLevel: { low: '低', medium: '中', high: '高' },
-  reviewFrequencyLevel: { low: '低', medium: '中', high: '高' },
+  // taskGranularityLevel / conceptDensityLevel / reviewFrequencyLevel 三档已随 2026-11-23 退役下线（后端 types.ts 记账）
   recommendedDifficulty: { easy: '偏易', medium: '适中', hard: '偏难' }
 }
 
@@ -84,7 +82,7 @@ const FIELD_HINT: Record<string, string> = {
   totalSessions: '全部课堂记录数（真实计数，不受最近 50 节窗口限制）',
   totalMessages: '最近 50 节课的消息总数（逐会话聚合的窗口统计）',
   avgSessionDuration: '最近 50 节课的平均时长（逐会话聚合的窗口统计）',
-  reviewFrequencyLevel: '画像给出的复习节奏建议。实际复习调度由 FSRS 到期队列决定，不由该字段控制',
+  progressionStrategyNote: '由负荷/疲劳状态推导的推进建议（进课堂个性化提示）。粒度/密度/复习三档已于 2026-11-23 退役：课程结构由契约+体量真值表控制、复习调度归 FSRS',
   optimalSessionLength: '按目标对话里的可用时间推断的建议时长。平台没有真实交互间隔采集，不是测量值'
 }
 

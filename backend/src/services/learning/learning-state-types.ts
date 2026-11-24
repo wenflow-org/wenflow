@@ -130,6 +130,35 @@ export interface SessionScoreInput {
   sessionId?: string | null;
 }
 
+/**
+ * 会话 LSS 的冷启动先验（0-10，中性档）。
+ *
+ * 2026-11-23 P0-1：低置信度不再乘 `0.6 + 0.4c` 向 0 收缩（那会把"不确定"压成"低负荷"），
+ * 改为向**个人先验**部分池化。LSS 是单课事件量，先验取该学习者历史 sessionLss 中位数；
+ * 首课无历史时用这个中性常值 5.0（mid 下界），绝不落 0。
+ */
+export const SESSION_LSS_PRIOR_FALLBACK = 5;
+
+/** 计算 LSS 先验时回看的历史会话数（取中位数，抗单次极端课）。 */
+export const SESSION_LSS_PRIOR_SESSIONS = 9;
+
+/**
+ * 观测值 × 置信度 + 先验 × (1−置信度) 的部分池化（0-10 同量纲）。
+ *
+ * 与旧的乘法衰减 `x*(0.6+0.4c)` 的区别：低置信度只表示"这次观测不可全信"，
+ * 应回落到个人基线，而不是把分数整体压向 0。高置信度时行为接近原值。
+ */
+export function poolObservationWithPrior(
+  observation: number,
+  prior: number,
+  confidence: number | undefined,
+): number {
+  const ratio = Math.min(1, Math.max(0, Number.isFinite(confidence) ? Number(confidence) : 0.75));
+  const base = Number.isFinite(prior) ? prior : SESSION_LSS_PRIOR_FALLBACK;
+  const value = Number.isFinite(observation) ? observation : base;
+  return ratio * value + (1 - ratio) * base;
+}
+
 export interface LearningStateMetricPersistOptions {
   sourceKey?: string | null;
   version?: string;

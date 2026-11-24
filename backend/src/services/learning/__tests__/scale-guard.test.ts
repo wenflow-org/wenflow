@@ -109,8 +109,9 @@ describe('双向自检的接线位置', () => {
     const warnCall = warn.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(warnCall[1]).toMatchObject({ context: expect.stringContaining('read') });
     expect(state?.lss).toBe(4);
-    // ktl/lf 不再是落库原值（30/10），而是由归一后的单节负荷 4 重放：ktl=0.05×4=0.2、lf=0.3×4=1.2
-    expect(state?.ktl).toBeCloseTo(0.2, 6);
-    expect(state?.lf).toBeCloseTo(1.2, 6);
+    // ktl/lf 不再是落库原值（30/10），而是由归一后的单节负荷 4 重放；
+    // 2026-11-23 可达性修复：首日负荷作为慢性基线 → ktl=lf=4。
+    expect(state?.ktl).toBeCloseTo(4, 6);
+    expect(state?.lf).toBeCloseTo(4, 6);
   });
 });

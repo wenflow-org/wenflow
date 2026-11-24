@@ -89,9 +89,10 @@ describe('getAggregatedState（PMC 日负荷模型）', () => {
     const globalKtl = aggregated!.metrics.ktl;
     const pathBKtl = aggregated!.perPath.find((e) => e.pathId === 'lp-B')!.metrics.ktl;
     expect(globalKtl).toBeGreaterThan(pathBKtl);
-    // 冷启动按 PMC 从 0 生长：1 天负荷 6 → ktl=0.05×6=0.3、lf=0.30×6=1.8
-    expect(globalKtl).toBeCloseTo(0.3, 6);
-    expect(aggregated!.metrics.lf).toBeCloseTo(1.8, 6);
+    // 2026-11-23 可达性修复后的口径：首日负荷作为慢性基线（bootstrapFromFirstLoad），
+    // 同日两课求和 6 → 首日 ktl=lf=6（不再从 0 生长成 0.05×6）。
+    expect(globalKtl).toBeCloseTo(6, 6);
+    expect(aggregated!.metrics.lf).toBeCloseTo(6, 6);
     // dayLoad 保留原始观测，但 fatigueBonus 归零（PMC 已把同日课量求和进 KTL/LF，不重复加成）
     expect(aggregated!.dayLoad).toEqual({ lessons: 2, minutes: 100, fatigueBonus: 0 });
     // lsb = ktl − lf（form）
@@ -122,9 +123,9 @@ describe('getCurrentState 支持 asOf（PMC 读侧：行过滤按 asOf）', () =
     });
 
     const atThatTime = await learningStateService.getCurrentState('u1', { pathId: 'lp-A', asOf: at });
-    // 只有第一行（lss=5）参与 → PMC 的 ktl/lf 由单课负荷推出；晚于 asOf 的 9 不参与
+    // 只有第一行（lss=5）参与；bootstrap 口径下首日负荷即慢性基线 → ktl=lf=5；晚于 asOf 的 9 不参与
     expect(atThatTime!.lss).toBeCloseTo(5, 6);
-    expect(atThatTime!.ktl).toBeLessThan(5); // 单课 lss=5 → ktl = 0.05×5 = 0.25
+    expect(atThatTime!.ktl).toBeCloseTo(5, 6);
     expect(findSpy).toHaveBeenCalled();
   });
 });
@@ -289,15 +290,28 @@ describe('deriveLearningControlState（单课压力起作用的地方 = 课内�
     ...overrides,
   }) as any;
 
-  it('本节课所在路径压力大（lss≥6）→ 课内降档，但不影响全局节奏', () => {
+  it('本节课所在路径高压（lss 命中 high 档 9）→ 课内降档，但不影响全局节奏', () => {
     const control = deriveLearningControlState({
       dynamicState: dynamicState() as any,
       knowledgeMemory: knowledgeMemory(),
-      lessonMetrics: { lss: 7, ktl: 3, lf: 1, lsb: 2 },
+      lessonMetrics: { lss: 9, ktl: 3, lf: 1, lsb: 2 },
     });
     expect(control.paceMode).toBe('recover');
     expect(control.challengeLevelCap).toBe('low');
     expect(control.conceptLoad).toBe('low');
+    // 恢复期不叠加高频考测（2026-11-23 复核）：checkpointNeed 统一 low
+    expect(control.checkpointNeed).toBe('low');
+  });
+
+  it('良性吃力（mid 档中点 6）不触发 recover——mid≠高压（2026-11-23 复核）', () => {
+    const control = deriveLearningControlState({
+      dynamicState: dynamicState() as any,
+      knowledgeMemory: knowledgeMemory(),
+      lessonMetrics: { lss: 6, ktl: 3, lf: 1, lsb: 2 },
+    });
+    expect(control.paceMode).toBe('steady');
+    expect(control.challengeLevelCap).toBe('medium');
+    expect(control.conceptLoad).toBe('medium');
   });
 
   it('课内状态正常时用课内基线判断（不被别的路径的高负荷拖降档）', () => {
@@ -310,13 +324,48 @@ describe('deriveLearningControlState（单课压力起作用的地方 = 课内�
     expect(control.conceptLoad).toBe('medium');
   });
 
-  it('全局疲劳高时仍然建议休息（疲劳是学习者级信号，不能被路径级掩盖）', () => {
+  it('全局疲劳高时仍然进入 recover（疲劳是学习者级信号，不能被路径级掩盖）', () => {
     const control = deriveLearningControlState({
       dynamicState: dynamicState({ metrics: { lss: 2, ktl: 3, lf: 7, lsb: -4 }, fatigueRisk: 'high' }) as any,
       knowledgeMemory: knowledgeMemory(),
       lessonMetrics: { lss: 2, ktl: 4, lf: 1, lsb: 3 },
     });
-    expect(control.shouldOfferBreak).toBe(true);
+    expect(control.paceMode).toBe('recover');
+    expect(control.challengeLevelCap).toBe('low');
+  });
+
+  it('近期弃课/崩溃硬信号 → 即使指标很好也强制 recover（P0-2）', () => {
+    const control = deriveLearningControlState({
+      dynamicState: dynamicState({ metrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 }, recentTrend: 'improving' }) as any,
+      knowledgeMemory: knowledgeMemory(),
+      lessonMetrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 },
+      distressRecover: true,
+    });
+    expect(control.paceMode).toBe('recover');
+    expect(control.challengeLevelCap).toBe('low');
+    expect(control.checkpointNeed).toBe('low');
+    expect(control.controlFlags).toEqual({ distressRecover: true });
+  });
+
+  it('高位学霸（趋势 stable、ACWR 已回落）也能进 push——不只看 improving 斜率（2026-11-23 复核）', () => {
+    const control = deriveLearningControlState({
+      dynamicState: dynamicState({ metrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 }, recentTrend: 'stable' }) as any,
+      knowledgeMemory: knowledgeMemory(),
+      lessonMetrics: { lss: 2, ktl: 8, lf: 2, lsb: 6 },
+    });
+    expect(control.paceMode).toBe('push');
+    expect(control.challengeLevelCap).toBe('high');
+    expect(control.conceptLoad).toBe('high');
+  });
+
+  it('PMC 刻度下的高位学霸（ktl 未到 6，但有 ≥2 个掌握证据）同样可 push（2026-11-23 复核）', () => {
+    const control = deriveLearningControlState({
+      dynamicState: dynamicState({ metrics: { lss: 2, ktl: 3.2, lf: 2, lsb: 1.2 }, recentTrend: 'stable' }) as any,
+      knowledgeMemory: knowledgeMemory({ globalSignals: { fragileConcepts: [], strugglingConcepts: [], masteredConcepts: ['a', 'b'] } }) as any,
+      lessonMetrics: { lss: 2, ktl: 3.2, lf: 2, lsb: 1.2 },
+    });
+    expect(control.paceMode).toBe('push');
+    expect(control.challengeLevelCap).toBe('high');
   });
 
   it('无课内状态（本路径还没历史）→ 不借用别的路径的单课压力降档；疲劳信号仍生效', () => {
