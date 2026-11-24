@@ -260,6 +260,14 @@ describe('学习状态：单日折线图与卡头紧凑化', () => {
   it('学习偏好默认折叠（details 无 open 属性）', () => {
     expect(state).toMatch(/<details v-if="preferenceItems\.length && hasAnyLoad" class="card band sidecard pref-fold">/);
   });
+
+  it('窄屏页脚贴底：页级不再给 state 追加 84px 底距（会落在页脚下方）', () => {
+    /* 2026-11-24 用户走查：AI 提示被托到 dock 上方一条空白带里。
+       84px 只留给没有自带页脚的知识图谱页。 */
+    const css = strip(v2css);
+    expect(css).not.toMatch(/html \.v2-page\.state\s*\{/);
+    expect(css).toMatch(/html \.v2-page\.km\s*\{[^}]*padding-bottom:\s*calc\(84px/);
+  });
 });
 
 describe('学习历史：Tab 栏、双栏与格子', () => {

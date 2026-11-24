@@ -1020,11 +1020,12 @@ html, body {
     justify-content: center;
     gap: 6px;
   }
-  /* 内层滚动页（知识图谱 / 学习状态）给底部 dock 留呼吸位，最后一张卡不再被贴边裁切。
+  /* 知识图谱：内层滚动页给底部 dock 留呼吸位，最后一张卡不再被贴边裁切。
      必须带 html 前缀压过上面 `html .v2-page:has(> .v2nav__dock)` 的 padding-bottom:0：
-     两者同权重，否则这条会被前者按源码顺序覆盖（实测 390 下 padding-bottom 仍为 0）。 */
-  html .v2-page.km,
-  html .v2-page.state {
+     两者同权重，否则这条会被前者按源码顺序覆盖（实测 390 下 padding-bottom 仍为 0）。
+     2026-11-24：学习状态移出本规则——它末尾有自己的 AI 提示 + 页脚，多出的 84px
+     落在页脚下方，把提示托到 dock 上方一条空白带里；现在与学习路径页一样贴底。 */
+  html .v2-page.km {
     padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
 }
