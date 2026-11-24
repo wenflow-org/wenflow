@@ -46,7 +46,13 @@
                 </template>
               </div>
               <span class="profile-identity__role">学习者 · Lv.{{ user.level || 1 }} · {{ user.xp || 0 }} XP</span>
-              <p class="profile-meta">{{ user.email || '未绑定邮箱' }} · 注册于 <span class="profile-meta__date">{{ formatDateShort(user.createdAt) }}</span> · 最近登录 <span class="profile-meta__date">{{ formatLastLogin(user.lastLoginAt) }}</span></p>
+              <!-- 2026-11-24 走查：邮箱 / 注册 / 最近登录三段各占一行——原来用「·」连成一句，
+                   窄屏会在日期中间断行，读起来像一句话被切碎。 -->
+              <p class="profile-meta">
+                <span class="profile-meta__line">{{ user.email || '未绑定邮箱' }}</span>
+                <span class="profile-meta__line">注册于 <span class="profile-meta__date">{{ formatDateShort(user.createdAt) }}</span></span>
+                <span class="profile-meta__line">最近登录 <span class="profile-meta__date">{{ formatLastLogin(user.lastLoginAt) }}</span></span>
+              </p>
             </div>
           </div>
         </article>
@@ -338,19 +344,21 @@ async function handleSaveName() {
 }
 
 /* 邮箱/注册时间/最近登录：原型账户段没有这一行（2044 只有身份行），
-   属本仓多出的信息——降级为 12px faint 弱化小字，压在身份行下方不抢层级。 */
+   属本仓多出的信息——降级为 12px faint 弱化小字，压在身份行下方不抢层级。
+   2026-11-24：三段各占一行（原来用「·」串成一句，窄屏会在日期中间折断）。 */
 .profile-meta {
   margin: 0;
+  display: grid;
+  gap: 1px;
   color: var(--faint);
   font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.55;
 }
+.profile-meta__line { min-width: 0; overflow-wrap: anywhere; }
 
 /* 日期片段（2026-10-08）整体不可断：窄屏 .profile-meta 放成 normal 后，浏览器会在
    连字符处把日期切成「2026-10-」/「08」两截（2026-10-08 走查 #50）。只锁日期片段，
-   行整体仍可在「 · 注册于 / · 最近登录」这些分隔处换行，不会退回省略号截断。 */
+   行整体仍可正常换行，不会退回省略号截断。 */
 .profile-meta__date {
   white-space: nowrap;
 }
@@ -510,8 +518,9 @@ async function handleSaveName() {
     font-size: 16px;
   }
 
+  /* 2026-11-24：三段已各占一行，窄屏不再需要改 white-space；行内自然折行。 */
   .profile-meta {
-    white-space: normal;
+    line-height: 1.6;
   }
 
   .profile-kpis {

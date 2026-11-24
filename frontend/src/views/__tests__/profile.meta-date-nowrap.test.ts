@@ -63,13 +63,11 @@ describe('账户页两处日期不可在连字符处断行（#50）', () => {
     expect(decl(body, 'white-space'), '日期片段没有锁 nowrap，连字符处仍可断行').toBe('nowrap');
   });
 
-  it('窄屏仍放行整行换行（不退回省略号截断）', () => {
-    // 基础档 .profile-meta 是 nowrap + ellipsis；窄屏覆写必须是 normal，
-    // 否则整行会被截成省略号，修 #50 的同时制造新问题。
-    const blocks = [...css.matchAll(/\.profile-meta\s*\{([^{}]*)\}/g)].map((m) => m[1]);
-    expect(
-      blocks.some((b) => decl(b, 'white-space') === 'normal'),
-      '窄屏没有把 .profile-meta 放成 white-space: normal，行会退回省略号截断',
-    ).toBe(true);
+  it('邮箱 / 注册 / 最近登录各占一行，不再用「·」串成一句（2026-11-24）', () => {
+    const lines = source.match(/class="profile-meta__line"/g) ?? [];
+    expect(lines, '三段没有各自成行').toHaveLength(3);
+    const body = bodyOf(css, '.profile-meta');
+    expect(decl(body, 'display'), '段落容器没有分行布局').toBe('grid');
+    expect(source, '三段又被「·」串回一行').not.toMatch(/profile-meta__date[^\n]*<\/span> · 最近登录/);
   });
 });
