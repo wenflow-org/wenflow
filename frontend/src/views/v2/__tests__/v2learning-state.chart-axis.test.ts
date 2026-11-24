@@ -69,9 +69,11 @@ describe('学习状态趋势图反挤压（2026-10-08 用户：容易挤压）',
     expect(flat, '阈值标签容器又回到图内浮层了').not.toContain('.ff-zones');
     expect(flat, '图内不该再有阈值标签节点').not.toContain('class="ff-zonetag"');
     expect(flat, '图例里缺少阈值项').toContain('.ff-legend__zone');
-    // 分隔符必须是 DOM 真实文本：::before 生成内容不进 DOM，读屏会念成连读
+    // 分隔符必须是 DOM 真实文本：::before 生成内容不进 DOM，读屏会念成连读。
+    // 2026-11-24：独立「·」元素会在 390 折到第二行行首，改为档位末尾的「、」。
     expect(flat, '阈值分隔符又退回 ::before 了').not.toContain('b + b::before');
-    expect(flat, '阈值分隔符应该是 DOM 里的真实文本').toContain('ff-legend__sep');
+    expect(flat, '阈值分隔符又用独立元素串排了').not.toContain('ff-legend__sep');
+    expect(flat, '阈值档位缺少 DOM 内分隔符').toContain('精力充沛、');
     // 虚线本体留在图内（保留信息）
     expect(flat).toContain('ff-zone');
   });

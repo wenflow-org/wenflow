@@ -9,7 +9,6 @@
       <header class="state__head">
         <div>
           <h1>学习状态</h1>
-          <p>训练负荷、疲劳度与掌握进度</p>
         </div>
         <div class="state__head-side">
           <div v-if="!stateEmpty && !stateLoading" class="kpis">
@@ -33,7 +32,6 @@
               </template>
             </div>
           </div>
-          <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
         </div>
       </header>
 
@@ -153,10 +151,12 @@
                    而 20/40 是同一条「最优训练区」的上下边界。改为三档区间口径，
                    每档都写清边界与动作。 -->
               <span class="ff-legend__zone">
-                <i class="ff-dash"></i>虚线阈值&nbsp;
-                <b>≥40 精力充沛</b><span class="ff-legend__sep">·</span>
-                <b>20–39 最优训练区</b><span class="ff-legend__sep">·</span>
-                <b>&lt;20 需要休息</b>
+                <span class="ff-legend__zone-head"><i class="ff-dash"></i>虚线阈值</span>
+                <span class="ff-legend__zones">
+                  <b>≥40 精力充沛、</b>
+                  <b>20–39 最优训练区、</b>
+                  <b>&lt;20 需要休息</b>
+                </span>
               </span>
               <!-- 图例补单位/读法（2026-11-11）：图里既有 0–100 的指标分，又有当日分钟柱，
                    此前只靠悬停才知道柱是什么。 -->
@@ -1811,15 +1811,11 @@ function loadGuidance() {
   gap: 14px;
   flex-wrap: wrap;
 }
-/* ≤767（2026-11-24 走查）：标题、入口排第一行，KPI 三卡整行落第二行。
-   原布局把 KPI 塞在标题右侧，窄屏卡片换成两行后比标题块高，flex-end 把页名
-   压到统计下方；320/390 实测读作「先统计、后页名」。 */
+/* ≤767（2026-11-24 走查）：页头只留页名 + KPI；能并排就并排（390），
+   放不下时 KPI 整行换到第二行（320）。三张 KPI 锁一行，不再 2+1 折行把页名压到下方。 */
 @media (max-width: 767px) {
-  .state__head { flex-wrap: wrap; align-items: center; row-gap: 10px; }
-  .state__head > div:first-child { flex: 1 1 auto; }
-  .state__head-side { display: contents; }
-  .kpis { order: 3; flex: 1 1 100%; }
-  .state__head-side > .btn-ghost { order: 2; }
+  .state__head { flex-wrap: wrap; align-items: center; row-gap: 8px; }
+  .kpis__grid { display: flex; flex-wrap: nowrap; }
 }
 .kpis { display: block; }
 /* PC（2026-11-06 走查）：三等分把每张框拉到 ~350px 宽、中间只有几个小字，两侧全是空地。
@@ -2413,9 +2409,12 @@ function loadGuidance() {
    （像素实测两线在 y≈544/563、刻度中心 y≈572），孤立看刻度栏容易把「12」当成阈值标注。
    修法落在下面 .ff-zone / .ff-grid line：阈值线加粗提实、网格线压淡，拉开两者层级；
    不改刻度取值（取整避开 20/40 会破坏 5 条等分网格线与曲线纵坐标的对应）。 */
-.ff-legend__zone { display: inline-flex; align-items: center; flex-wrap: wrap; color: var(--muted); }
-.ff-legend__zone b { font-weight: 700; color: var(--green-ink); }
-.ff-legend__zone .ff-legend__sep { margin: 0 5px; color: var(--faint); font-weight: 400; }
+/* 2026-11-24：阈值说明拆成「标签一行 + 三档一行」——原来三档用独立「·」元素串排，
+   390 下分隔点会单独折到第二行行首；现在档位整体换行、档间只用间距分隔。 */
+.ff-legend__zone { display: flex; flex-direction: column; gap: 2px; color: var(--muted); }
+.ff-legend__zone-head { display: inline-flex; align-items: center; }
+.ff-legend__zones { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.ff-legend__zone b { font-weight: 700; color: var(--green-ink); white-space: nowrap; }
 /* 图例补单位与读法（2026-11-11）：分值刻度与分钟柱同图，必须说明各自口径 */
 .ff-legend__unit { font-size: 12px; color: var(--faint); }
 .ff-dash {

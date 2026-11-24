@@ -1061,8 +1061,9 @@ onBeforeUnmount(() => {
   /* 窄屏把「新目标」抬到 44：它是本页唯一主操作，mobile:spec 分级口径要求主操作 ≥44
      （旁边的排序/筛选是无边框文字档，留在 36–40 紧凑带） */
   .paths__new-goal { grid-area: 1 / 2; min-height: 44px; }
-  /* 第二行：排序与筛选入口都贴右，与第一行的新目标右边缘对齐成一列 */
-  .paths__sort { grid-area: 2 / 1; justify-self: end; }
+  /* 第二行：排序贴左、筛选贴右——原先两枚都贴右，390 下第二行左半屏空着，
+     读作「搜索下面一块空白」。现在两端分开，第二行成为完整工具带。 */
+  .paths__sort { grid-area: 2 / 1; justify-self: start; }
   .paths__search input { min-height: 44px; }
   /* 单列卡片：375 下一列读得完，不硬拉两列窄条 */
   .cards { grid-template-columns: 1fr; }
