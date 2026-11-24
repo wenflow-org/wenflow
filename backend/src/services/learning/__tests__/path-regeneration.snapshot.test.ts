@@ -99,6 +99,36 @@ describe('buildStoredGoalPathRequest 锁快照', () => {
     }
     expect(buildStoredGoalPathRequest(path)?.materialIds).toBeUndefined()
   })
+
+  it('clarification 随重生成回传（goalFinalPayload 优先，sceneFraming 兜底）', () => {
+    const clarification = {
+      core: { question: '诊断与讲解调节怎么串起来', evidence: ['想把诊断弄懂'] },
+      stopping: { kind: 'do', scope: 'instance', evidence: 'platform', statement: '能说出卡点并给改法' },
+    }
+    const fromPayload: RegenerablePath = {
+      ...BASE_PATH,
+      aiPromptTemplate: JSON.stringify({
+        goalFinalPayload: { rawGoal: '目标', clarification },
+        sceneFraming: { normalizedInput: { clarification: { core: { question: '旧值' } } } },
+      }),
+    }
+    expect(buildStoredGoalPathRequest(fromPayload)?.clarification).toEqual(clarification)
+
+    const fromFraming: RegenerablePath = {
+      ...BASE_PATH,
+      aiPromptTemplate: JSON.stringify({
+        goalFinalPayload: { rawGoal: '目标' },
+        sceneFraming: { normalizedInput: { clarification } },
+      }),
+    }
+    expect(buildStoredGoalPathRequest(fromFraming)?.clarification).toEqual(clarification)
+
+    const none: RegenerablePath = {
+      ...BASE_PATH,
+      aiPromptTemplate: JSON.stringify({ goalFinalPayload: { rawGoal: '目标' } }),
+    }
+    expect(buildStoredGoalPathRequest(none)?.clarification).toBeUndefined()
+  })
 })
 
 describe('buildGoalPathRequestFromConversation 锁快照', () => {
@@ -119,5 +149,25 @@ describe('buildGoalPathRequestFromConversation 锁快照', () => {
     }
     const request = await buildGoalPathRequestFromConversation(path)
     expect(request?.materialIds).toEqual([UUID_A, UUID_B])
+  })
+
+  it('clarification 从会话存档回传（重生成不退回无契约旧轨）', async () => {
+    const { findGoalConversationForPathSummary } = await import('../learning-routes.repo')
+    const clarification = {
+      core: { question: '诊断与讲解调节怎么串起来', evidence: ['想把诊断弄懂'] },
+      stopping: { kind: 'do', scope: 'instance', evidence: 'platform', statement: '能说出卡点并给改法' },
+    }
+    ;(findGoalConversationForPathSummary as jest.Mock).mockResolvedValue({
+      id: 'gc_2',
+      userId: 'u1',
+      description: '目标',
+      collectedData: JSON.stringify({ messages: [], understanding: {}, clarification }),
+    })
+    const path: RegenerablePath = {
+      ...BASE_PATH,
+      aiPromptTemplate: JSON.stringify({ sourceConversationId: 'gc_2' }),
+    }
+    const request = await buildGoalPathRequestFromConversation(path)
+    expect(request?.clarification).toEqual(clarification)
   })
 })

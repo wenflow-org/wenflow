@@ -385,11 +385,13 @@ function normalize(p: Record<string, any>): PathCard {
   let totalTasks = 0;
   let doneTasks = 0;
   let stageDone = 0;
+  let preparedMinutes = 0;
   for (const w of weeks) {
     const tasks = w.subtasks || w.tasks || [];
     let stageAllDone = tasks.length > 0;
     for (const t of tasks) {
       totalTasks += 1;
+      preparedMinutes += Number(t.estimatedMinutes) || 0;
       if (t.status === 'completed') doneTasks += 1;
       else stageAllDone = false;
     }
@@ -398,6 +400,12 @@ function normalize(p: Record<string, any>): PathCard {
   // 权威学习进度：优先用后端/规范化后的 learningProgress（只数真实任务），
   // 旧数据才回退到前端按任务状态现算。设计进度永远不冒充这里的百分比。
   const learningProgress = lc?.learningProgress ?? p.learningProgress ?? null;
+  const lessonCount = learningProgress?.totalTasks ?? totalTasks;
+  // 已备好口径：课数与小时必须来自同一批已生成任务，不能拿首阶段课数配全路径总估时
+  // （2026-11-24 列表页与详情页口径对齐；详情页 preparedHours 同源）。
+  const preparedHours = lessonCount > 0 && preparedMinutes > 0
+    ? Math.max(0.1, Math.round(preparedMinutes / 6) / 10)
+    : 0;
   const percent = learningProgress
     ? Math.max(0, Math.min(100, Math.round(learningProgress.percent)))
     : (totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0);
@@ -412,7 +420,7 @@ function normalize(p: Record<string, any>): PathCard {
   });
   return {
     id: p.id, title, desc,
-    sub: [buildSub(totalStages, learningProgress?.totalTasks ?? totalTasks, hours), designActive ? '后续课程准备中' : '']
+    sub: [buildSub(totalStages, lessonCount, preparedHours), designActive ? '后续课程准备中' : '']
       .filter(Boolean).join(' · '),
     kind, stages: totalStages, stageDone: stageDoneCount,
     percent, hours, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status,

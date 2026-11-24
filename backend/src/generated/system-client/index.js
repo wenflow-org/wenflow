@@ -384,7 +384,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\jinl2\\.zcode\\worktrees\\0ffe\\wenflow\\backend\\src\\generated\\system-client",
+      "value": "D:\\wenflow\\wenflow\\backend\\src\\generated\\system-client",
       "fromEnvVar": null
     },
     "config": {
@@ -398,11 +398,12 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\jinl2\\.zcode\\worktrees\\0ffe\\wenflow\\backend\\prisma\\system\\schema.prisma",
+    "sourceFilePath": "D:\\wenflow\\wenflow\\backend\\prisma\\system\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
-    "rootEnvPath": null
+    "rootEnvPath": null,
+    "schemaEnvPath": "../../../.env"
   },
   "relativePath": "../../../prisma/system",
   "clientVersion": "5.22.0",

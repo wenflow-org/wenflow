@@ -2,31 +2,35 @@ import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline
 import { paceSignalRangeConfig } from '../../../config/pedagogy.config';
 
 /**
- * 走查 P7：预览承诺的阶段数必须与真实生成一致（两边都走 derivePlanningHints，同源）。
- * 体量口径（A′，2026-09-20）：scope_size 只作**下界参考**，计数以 key_stages 为准；
- * 上界取 scope 与 pace 中较松者再压硬上限 8 —— 保留防膨胀，同时不让"~95% small"的退化信号压小。
+ * 2026-11-24 契约收窄：key_stages 只是方向切口，预览不再承诺阶段数；
+ * 实际阶段数由 Path 按认知盲区收敛。预览仍给内容边界（scope → milestoneRange）。
  */
-describe('derivePlannedOutline（预览口径与生成同源）', () => {
-  it('4 段大纲 + scope_size=small → 生成口径 4 段（不再被 scopeCap=3 砍掉）', () => {
+describe('derivePlannedOutline（方向切口，不再承诺阶段数）', () => {
+  it('4 条方向 + scope_size=small → 不建议精确阶段数，方向原样保留', () => {
     const result = derivePlannedOutline({
       key_stages: ['环境搭建与基础认知', 'Python 操作 Excel 核心技能', '周报自动化脚本开发与调试', '流程优化与异常处理'],
       scope_size: 'small',
     });
-    expect(result.plannedMilestones).toBe(4);
-    expect(result.stages).toHaveLength(4); // 清洗只剔操作性阶段
+    expect(result.plannedMilestones).toBeNull();
+    expect(result.stages).toHaveLength(4);
+    expect(result.milestoneRange).toEqual([2, 4]);
   });
 
-  it('scope 与大纲自洽时不缩水（medium + 4 段 → 4）', () => {
+  it('scope 与方向自洽时不缩水（medium + 4 条方向 → 方向保留 4 条）', () => {
     const result = derivePlannedOutline({
       key_stages: ['一', '二', '三', '四'],
       scope_size: 'medium',
     });
-    expect(result.plannedMilestones).toBe(4);
+    expect(result.plannedMilestones).toBeNull();
+    expect(result.stages).toHaveLength(4);
+    expect(result.milestoneRange).toEqual([3, 5]);
   });
 
-  it('缺 scope_size 时按段数归一（下限 2）', () => {
-    expect(derivePlannedOutline({ key_stages: ['一'] }).plannedMilestones).toBe(2);
+  it('缺 scope_size 时仍不承诺精确数，给自然范围', () => {
+    expect(derivePlannedOutline({ key_stages: ['一'] }).plannedMilestones).toBeNull();
+    expect(derivePlannedOutline({ key_stages: ['一'] }).milestoneRange).toEqual([3, 6]);
     expect(derivePlannedOutline({ key_stages: [] }).plannedMilestones).toBeNull();
+    expect(derivePlannedOutline({ key_stages: [] }).milestoneRange).toBeNull();
   });
 
   it('不再正则剔除「操作性阶段」：原样保留（方案乙——交给 LLM 判断）', () => {
@@ -36,12 +40,14 @@ describe('derivePlannedOutline（预览口径与生成同源）', () => {
     });
     // 旧行为按动词前缀黑名单删掉"梳理…"，还会误删"学习/设计/分析…"开头的真阶段（实测删过"设计…固定动作"）
     expect(result.stages).toEqual(['环境搭建', '4. 梳理本周任务清单', '脚本开发']);
-    expect(result.plannedMilestones).toBe(3); // 建议值
-    expect(result.milestoneRange).toEqual([3, 5]); // 权威区间
+    expect(result.plannedMilestones).toBeNull();
+    expect(result.milestoneRange).toEqual([3, 5]);
   });
 
   it('兼容 camelCase 键（handoff 形态）', () => {
-    expect(derivePlannedOutline({ keyStages: ['一', '二', '三'], scopeSize: 'small' }).plannedMilestones).toBe(3);
+    const result = derivePlannedOutline({ keyStages: ['一', '二', '三'], scopeSize: 'small' });
+    expect(result.plannedMilestones).toBeNull();
+    expect(result.stages).toHaveLength(3);
   });
 
   it('非对象输入安全返回', () => {
@@ -49,15 +55,16 @@ describe('derivePlannedOutline（预览口径与生成同源）', () => {
   });
 });
 
-describe('体量与节奏分轴（A′）：scope 降为下界、计数以 keyStages 为准', () => {
-  it('small + 5 段（pace=standard 上界 5）→ 5', () => {
-    expect(derivePlannedOutline({ key_stages: ['一', '二', '三', '四', '五'], scope_size: 'small' }).plannedMilestones).toBe(5);
+describe('体量与节奏分轴（A′）：scope 只给内容边界，方向数不承诺阶段数', () => {
+  it('small + 5 条方向 → 不建议精确阶段数', () => {
+    expect(derivePlannedOutline({ key_stages: ['一', '二', '三', '四', '五'], scope_size: 'small' }).plannedMilestones).toBeNull();
   });
 
-  it('紧节奏（compact）仍保留防膨胀：small + 4 段 → 3', () => {
+  it('紧节奏（compact）不再砍已确认阶段：small + 4 段 → 4（2026-11-23 契约优先）', () => {
     const hints = derivePlanningHints('1天', null, null, null, ['一', '二', '三', '四'], null, 'small');
     expect(hints.paceSignal).toBe('compact');
-    expect(hints.targetMilestones).toBe(3); // cap = min(8, max(scope 3, pace 3)) = 3
+    // key_stages 是用户确认过的契约，节奏只影响单课/任务密度，不静默删站
+    expect(hints.targetMilestones).toBe(4);
   });
 
   it('宽松节奏（extended）允许铺开：small + 6 段 → 6', () => {
@@ -70,9 +77,9 @@ describe('体量与节奏分轴（A′）：scope 降为下界、计数以 keySt
     expect(derivePlanningHints(null, null, null, null, ['一'], null, 'micro').targetMilestones).toBe(1);
   });
 
-  it('无 scope 时行为不变', () => {
+  it('无 scope 时按内容区间下界给内部建议值', () => {
     expect(derivePlanningHints(null, null, null, null, ['一', '二', '三'], null, null).targetMilestones).toBe(3);
-    expect(derivePlanningHints(null, null, null, null, [], null, null).targetMilestones).toBeNull();
+    expect(derivePlanningHints(null, null, null, null, [], null, null).targetMilestones).toBe(3);
   });
 });
 
@@ -204,25 +211,23 @@ describe('scope_size（问题规模钳制里程碑数）', () => {
 });
 
 describe('targetMilestones 降级为建议值 + milestoneRange 为权威区间（方案乙）', () => {
-  it('keyStages 数作为建议值；区间给边界', () => {
+  it('keyStages 数作为内部建议值；内容边界给区间', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3']);
     expect(hints.targetMilestones).toBe(3);
-    expect(hints.milestoneRange).toEqual([2, 8]); // 无 scope：下界 2、上界硬上限 8
+    expect(hints.milestoneRange).toEqual([3, 6]); // 无 scope：自然范围 3-6
   });
 
-  it('keyStages 缺失时建议值为 null，区间仍给边界（不再沿用 pace 区间）', () => {
+  it('keyStages 缺失时内部建议值取内容区间下界，区间仍给边界', () => {
     const hints = derivePlanningHints('三个月', null, null, null, [], null);
-    expect(hints.targetMilestones).toBeNull();
-    expect(hints.milestoneRange).toEqual([2, 8]);
+    expect(hints.targetMilestones).toBe(3);
+    expect(hints.milestoneRange).toEqual([3, 6]);
   });
 
-  it('方案丙：无 scope 时上界由节奏给（standard→5、extended→8），下界仍 2', () => {
+  it('单条方向不再抬成两点契约；≥3 条只受硬顶 8 兜底', () => {
     const low = derivePlanningHints(null, null, null, null, ['S1']);
-    expect(low.targetMilestones).toBe(2);
-    // 无时间信号 → pace=standard → cap = min(8, 5) = 5
+    expect(low.targetMilestones).toBe(3);
     const mid = derivePlanningHints(null, null, null, null, Array.from({ length: 12 }, (_, i) => `S${i}`));
-    expect(mid.targetMilestones).toBe(5);
-    // 长周期 → pace=extended → cap = min(8, 8) = 8
+    expect(mid.targetMilestones).toBe(8);
     const wide = derivePlanningHints('三个月', null, null, null, Array.from({ length: 12 }, (_, i) => `S${i}`));
     expect(wide.targetMilestones).toBe(8);
   });
@@ -292,9 +297,9 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
     expect(hints.subtasksPerStageRange).toEqual([2, 6]);
   });
 
-  it('keyStages 缺失时 targetSubtasksPerStage 为 null，沿用 pace 区间', () => {
+  it('keyStages 缺失时内部目标取内容下界，targetSubtasksPerStage 仍按结构推导', () => {
     const hints = derivePlanningHints('三个月', null, null, null, [], null);
-    expect(hints.targetSubtasksPerStage).toBeNull();
+    expect(hints.targetSubtasksPerStage).toBe(4);
     expect(hints.subtasksPerStageRange).toEqual(paceSignalRangeConfig.extended.subtasksPerStageRange);
   });
 });
@@ -325,7 +330,7 @@ describe('缺陷修复：学时未知时每阶段任务数不再落到 1', () =>
     expect(hints.targetSubtasksPerStage).toBe(4);
     // 去等分带（锚 4 → [2,7] 被 cap 6 夹住）
     expect(hints.subtasksPerStageRange).toEqual([2, 6]);
-    expect(hints.milestoneRange).toEqual([2, 8]);
+    expect(hints.milestoneRange).toEqual([3, 6]);
     expect(hints.maxWeeks).toBe(15);
   });
 });
@@ -336,9 +341,9 @@ describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异
       '三个月', null, null, null, ['S1', 'S2', 'S3'], null, 'medium',
       { availableTime: null, loadTolerance: '信息一多就容易乱，三步以上就放弃' }
     );
-    // 2026-09-21：认知负荷退出里程碑数（结构归 LLM 与学习证据）——边界只由 scope/pace 给。
+    // 2026-09-21：认知负荷退出里程碑数（结构归 LLM 与学习证据）——边界只由 scope 给。
     expect(tightened.targetMilestones).toBe(3);
-    expect(tightened.milestoneRange).toEqual([3, 8]); // scope=medium 下界 3；pace=extended 上界 8
+    expect(tightened.milestoneRange).toEqual([3, 5]); // scope=medium 内容边界
     expect(tightened.milestoneRange[0]).not.toBe(tightened.milestoneRange[1]);
     expect(tightened.subtaskMinutesRange).toEqual([30, 45]);
     expect(tightened.maxWeeks).toBe(2);
@@ -444,31 +449,19 @@ describe('derivePlanningHints：紧预算同时收紧建议值与区间上界（
   });
 });
 
-describe('keyStages 缺失时的学时兜底（2026-09-27 横向扩测 heavy-fp#4 塌方）', () => {
-  it('keyStages 空但有 estimatedHours=490 → 里程碑兜底生效、锚链全链生效', () => {
+describe('keyStages 缺失时不再用学时反推里程碑数（2026-11-24 时间降维）', () => {
+  it('keyStages 空但 estimatedHours=490 → 建议值只取内容区间下界，不受学时影响', () => {
     const hints = derivePlanningHints(null, null, null, null, [], {
       totalWeeks: 10, estimatedHours: 490, sessionsPerWeek: 7, sessionsLengthMin: 420, totalSessions: 70,
     });
-    // 兜底按学时反推 round(490/45)=11，再被节奏档上限钳制（测试未传 timeHorizon → 非 extended 档 cap=5；
-    // 真实 heavy-fp#4 场景 time_horizon='三个月全职备考' → extended cap=8）
-    expect(hints.targetMilestones).toBe(5);
-    expect(hints.targetMilestones).not.toBeNull();
-    // 2026-09-28 粒度修正后：扩容只加课数不加单课分钟——分钟上界保持默认档 90min
-    //（不再被扩容块顶到 240）。
-    // 2026-09-29 R5-1：课数上界从硬帽 14 改为按需抬升（30 封顶）——98h/阶段
-    // needed=66 → 上界 30；结构容量 30×90min=45h/阶段（诚实装不下 98h/阶段，钳到 45，
-    // 缺口由路径级容量说明声明）；学时反推锚 round(490/5)=98 被 30 夹住 →
-    // targetSubtasksPerStage=30。旧预期（14 课/21h）只覆盖 490h 的 21%，现覆盖 46%。
-    expect(hints.targetHoursPerMilestone).toBe(45);
-    expect(hints.targetMinutesPerTask).toBe(90);
-    expect(hints.subtaskMinutesRange[1]).toBe(90);
-    expect(hints.targetSubtasksPerStage).toBe(30);
-    expect(hints.subtasksPerStageRange[0]).toBeLessThanOrEqual(hints.subtasksPerStageRange[1]);
+    // 总学时是用户自估/伪精度，不再用来反推阶段数；阶段数由内容边界与自然盲区决定。
+    expect(hints.targetMilestones).toBe(3);
+    expect(hints.milestoneRange).toEqual([3, 6]);
   });
 
-  it('keyStages 空且无学时信号 → 维持旧行为（scope 无则 null）', () => {
+  it('keyStages 空且无学时信号 → 建议值同样取内容区间下界', () => {
     const hints = derivePlanningHints(null, null, null, null, [], null);
-    expect(hints.targetMilestones).toBeNull();
+    expect(hints.targetMilestones).toBe(3);
     expect(hints.targetHoursPerMilestone).toBeNull();
   });
 

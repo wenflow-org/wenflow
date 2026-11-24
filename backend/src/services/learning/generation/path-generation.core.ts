@@ -351,7 +351,6 @@ export function buildPathAgentInput(data: GeneratePathData): AgentInput {
     timePerDay: data.userProfile?.timePerDay,
     structuredData: data.userProfile?.structuredData,
     confirmedProposal: data.userProfile?.confirmedProposal,
-    confidenceScores: data.userProfile?.confidenceScores,
     conversationHistory: data.userProfile?.conversationHistory,
     metadata: {
       availableTime: data.userProfile?.timePerDay,

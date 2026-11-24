@@ -89,10 +89,10 @@ async function main(): Promise<void> {
       stageCount: 4,
       currentStageNumber: 1,
       stages: [
-        { stageNumber: 1, title: milestone.title, estimatedHours: 1.6, coreConceptName: cognitiveCore.coreConcepts[0].name },
-        { stageNumber: 2, title: '对齐十几份门店周报列名并拼成一张大表', estimatedHours: 1.5, coreConceptName: cognitiveCore.coreConcepts[1].name },
-        { stageNumber: 3, title: '界定门店周报重复记录并执行可解释的去重', estimatedHours: 1.5, coreConceptName: '重复记录边界与去重行数影响' },
-        { stageNumber: 4, title: '按门店和月份汇总周报并核对出月报', estimatedHours: 1.5, coreConceptName: '分组聚合与合计勾稽核对' },
+        { stageNumber: 1, title: milestone.title, coreConceptName: cognitiveCore.coreConcepts[0].name },
+        { stageNumber: 2, title: '对齐十几份门店周报列名并拼成一张大表', coreConceptName: cognitiveCore.coreConcepts[1].name },
+        { stageNumber: 3, title: '界定门店周报重复记录并执行可解释的去重', coreConceptName: '重复记录边界与去重行数影响' },
+        { stageNumber: 4, title: '按门店和月份汇总周报并核对出月报', coreConceptName: '分组聚合与合计勾稽核对' },
       ],
     },
   };

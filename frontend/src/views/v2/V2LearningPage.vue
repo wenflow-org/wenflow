@@ -412,6 +412,8 @@
                   <span class="msg__supplement-tag">补充资料</span>
                   <span class="msg__supplement-title">{{ m.supplement.title }}</span>
                   <span class="msg__supplement-topic">关于「{{ m.supplement.topic }}」</span>
+                  <!-- 发布时间（切口④）：Provider 给了才显示，抓取时间不冒充发布时间 -->
+                  <span v-if="m.supplement.publishedAt" class="msg__supplement-topic">发布于 {{ supplementPublishedLabel(m.supplement.publishedAt) }}</span>
                 </button>
                 <!-- streaming 复用为「不可重答」口径：MessageActions 以 streaming 隐藏「再回答一次」，
                      非最后一条 AI 消息一律不可重答（追加语义下只在最新一轮回复上开放） -->
@@ -446,7 +448,7 @@
                同轮补充材料复调（2026-11-23）：编排层 progress 事件到达时，状态行换成
                「正在查阅外部资料：xxx」——turnstate 单行复用，不并排堆两条。 -->
           <div v-if="typing && streamingBubbleIndex >= 0" class="msg__turnstate" role="status">
-            <span class="msg__chip msg__chip--turnstate"><i aria-hidden="true"></i>{{ supplementSearching ? `正在查阅外部资料：${supplementSearching}…` : '本回合仍在生成…' }}</span>
+            <span class="msg__chip msg__chip--turnstate"><i aria-hidden="true"></i>{{ supplementSearching === '你发来的链接' ? '正在读取你发来的链接…' : (supplementSearching ? `正在查阅外部资料：${supplementSearching}…` : '本回合仍在生成…') }}</span>
           </div>
 
           <!-- 小测讲解进行中（2026-11-02）：讲解归对话区，所以这条状态行也放对话区底部——
@@ -2432,6 +2434,12 @@ const streamingBubbleIndex = ref(-1);
  *  非空时 turnstate 状态行显示「正在查阅外部资料：xxx…」 */
 const supplementSearching = ref('');
 
+/** 来源卡发布时间展示（切口④）：只取年月日；空值不渲染（抓取时间不冒充发布时间） */
+function supplementPublishedLabel(iso: string): string {
+  const at = Date.parse(String(iso || ''));
+  return Number.isFinite(at) ? new Date(at).toLocaleDateString('zh-CN') : '';
+}
+
 /** 最后一条 AI 消息的下标：「再回答一次」入口只对它开放——追加语义下保留旧答案，
  *  只把对应问题作为新一轮发送；历史中段的消息不开放（避免新回答接到错误位置） */
 const lastAiIndex = computed(() => {
@@ -2550,10 +2558,11 @@ async function sendTurnOnce(
         if (m?.role === 'ai') m.text = '';
       },
       onProgress: (stage, topic) => {
-        // 补充材料同轮复调（2026-11-23）：searching/fusing 都是「在查」，状态行换文案；
+        // 编排层进度（2026-11-23）：searching/fusing=补充材料在查；reading-link=读学生贴的链接。
         // final 到达或回合失败时由下方清空
         onActivity();
         if (stage === 'searching' || stage === 'fusing') supplementSearching.value = topic;
+        else if (stage === 'reading-link') supplementSearching.value = '你发来的链接';
       },
     }, meta) as unknown as Record<string, any>;
     supplementSearching.value = '';

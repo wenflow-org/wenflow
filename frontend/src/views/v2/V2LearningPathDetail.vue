@@ -166,7 +166,7 @@
               <span class="stages__toolbar-actions">
                 <label class="stages__toggle">
                   <input v-model="coreOnly" type="checkbox" />
-                  <span>⏱ 时间紧，只看核心主干</span>
+                  <span>⏱ 只看核心主干</span>
                 </label>
                 <small v-if="coreOnly" class="stages__toolbar-note">已隐藏 {{ hiddenFlexibleCount }} 节课，仅筛选显示，不改变学习安排与完成要求</small>
               </span>

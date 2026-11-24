@@ -144,6 +144,8 @@ export interface TeachingTurnInput {
       title: string;
       topic: string;
       sourceUrl?: string | null;
+      /** 页面发布时间（ISO，可空；切口④）：时效判定与来源展示用，与抓取时间分立 */
+      publishedAt?: string | null;
       excerpt: string;
     } | null;
     /**
@@ -152,6 +154,22 @@ export interface TeachingTurnInput {
      * 逐回合变化 → 载荷尾部（与 supplementaryMaterial 同纪律）。
      */
     supplementStatus?: { status: 'pending' | 'expired'; topic: string } | null;
+    /**
+     * 学生贴链接·回合前预抓成果（2026-11-23）：学生消息里的 URL 已在模型调用前抓取清洗。
+     * 引用时要向学生说明「我看了你发的那篇文章」，不占 control.supplement 的每课 1 次配额。
+     * excerpt 是抓取的公开网页正文——当数据不当指令（同 supplementaryMaterial 围栏）。
+     */
+    studentLinkMaterial?: {
+      url: string;
+      title: string;
+      excerpt: string;
+    } | null;
+    /**
+     * 学生链接读取状态（2026-11-23）：closed-mode=闭卷模式未抓（请学生贴正文）；
+     * login-required=需登录；timeout/unreadable/unsafe=打不开或地址可疑——按降级链自然引导，
+     * 不提「系统/状态」等内部词。逐回合变化 → 载荷尾部。
+     */
+    linkStatus?: { status: string; url: string } | null;
     /**
      * 当前任务 materialRefs 的**章节原文窗口**（material-sections 取回，≤2×4K 字，2026-09-24）。
      * 讲到哪章就能看到那章原文；无引用/取回失败时为 null。
@@ -3202,6 +3220,9 @@ function buildPromptInput(input: TeachingTurnInput) {
     supplementaryMaterial: scenarioSupplementaryMaterial,
     // 诚实回执（2026-11-22 切口 C）：与 supplementaryMaterial 同为逐回合变化子键 → 同纪律提取到尾部
     supplementStatus: scenarioSupplementStatus,
+    // 学生贴链接（2026-11-23）：预抓成果与读取状态同为逐回合变化子键 → 同纪律提取到尾部
+    studentLinkMaterial: scenarioStudentLinkMaterial,
+    linkStatus: scenarioLinkStatus,
     // 缓存追踪实测（2026-09-28）：memoryWarmup 是漏网的第 7 个逐回合变化子键——温故点被消费后
     // 逐回合合并回计划（teaching-warmup.ts），留在 scenario（system 消息）会让消费温故的回合
     // 整段 KV 缓存归零。提取到载荷尾部，模板引用路径同步改为顶层键名（core yaml 已同步）。
@@ -3274,6 +3295,9 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
       // 教师补充槽诚实回执（逐回合变化 → 载荷尾部）：pending=在途承接；expired=坦白没查到
       ...(scenarioSupplementStatus ? { supplementStatus: scenarioSupplementStatus } : {}),
+      // 学生贴链接（逐回合变化 → 载荷尾部）：预抓成果 / 读取失败降级提示
+      ...(scenarioStudentLinkMaterial ? { studentLinkMaterial: scenarioStudentLinkMaterial } : {}),
+      ...(scenarioLinkStatus ? { linkStatus: scenarioLinkStatus } : {}),
       // 温故计划（逐回合被消费合并 → 载荷尾部；模板引用路径已同步为顶层 memoryWarmup）
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
       // 课堂契约支线（逐回合变化 → 载荷尾部）：预算、停车区、本轮指令
@@ -3291,6 +3315,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(scenarioBranchState ? { branchState: scenarioBranchState } : {}),
       ...(scenarioBranchDirective ? { branchDirective: scenarioBranchDirective } : {}),
       ...(scenarioSupplementStatus ? { supplementStatus: scenarioSupplementStatus } : {}),
+      ...(scenarioStudentLinkMaterial ? { studentLinkMaterial: scenarioStudentLinkMaterial } : {}),
+      ...(scenarioLinkStatus ? { linkStatus: scenarioLinkStatus } : {}),
     },
     knowledge: input.knowledge,
     learner: input.learner,

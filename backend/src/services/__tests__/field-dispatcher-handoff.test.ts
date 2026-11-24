@@ -151,8 +151,8 @@ describe('assembleGoalHandoff（配置式 goal→path 值抽取）', () => {
 
   // 回归守卫（#189）：挂在 skill 名下、声明 handoff→path 的字段此前抽取不到（抽取器只读 agent 名下行）
   it('skill 名下 handoff→path 的字段可被抽取（#189）', async () => {
-    // 6 条原有 + 2026-11-19 补齐的 understanding.intent_type / entry_state
-    expect(GOAL_SKILL_PATH_HANDOFF_FIELDS.length).toBe(8)
+    // 2026-11-24 清退三条 evidence 路由后：skill 名下 handoff→path 字段剩 5 条
+    expect(GOAL_SKILL_PATH_HANDOFF_FIELDS.length).toBe(5)
     const output = buildGoalSkillOutput()
     const { fields } = await assembleGoalHandoff(output, GOAL_PATH_HANDOFF_ROWS)
     for (const fieldId of GOAL_SKILL_PATH_HANDOFF_FIELDS) {

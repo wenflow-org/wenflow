@@ -551,7 +551,7 @@
         </div>
 
         <div v-if="reviewProposal?.stages.length" class="proposal__stages">
-          <span class="proposal__stages-label">路径大纲 · {{ reviewProposal.stageCount }} 个阶段</span>
+          <span class="proposal__stages-label">路径大纲 · {{ reviewProposal.stageCount }} 个方向</span>
           <!-- 耗时消歧（2026-11-18 外评）：只说「每次 45 分钟」会让用户把 N 个阶段误读成
                N 次坐学；把单次节奏与内容总量分开写，避免「3 站怎么突然变 30 小时」。 -->
           <span

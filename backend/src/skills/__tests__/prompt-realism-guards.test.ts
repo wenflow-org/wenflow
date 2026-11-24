@@ -40,7 +40,7 @@ describe('goal/path/stage prompt realism guards', () => {
   it('goal-conversation：不在对话里报总账（总学时/总坐学数交给路径卡片）', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('不在对话里报总账')
-    expect(md).toContain('不得承诺完整路径的总学时 / 总课次')
+    expect(md).toContain('不得承诺完整路径的总学时/总课次')
     expect(md).toContain('不写总小时数、不写总坐学次数')
   })
 
@@ -105,10 +105,10 @@ describe('goal/path/stage prompt realism guards', () => {
   it('goal-conversation：时间口径按单次节奏，不拿上限当默认值', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('时间口径一致')
-    expect(md).toContain('不得把 objectiveScopeHours 说成「两小时以内」')
-    expect(md).toContain('不得用来推算总时长')
-    // 2026-11-22 唯一真值表：单点帽 1.2h（代码帽同值），不再有「轻起步 2h」旧带
-    expect(md).toContain('单点概念 objectiveScopeHours 硬上限 1.2h（代码帽同值）；技能模块帽 12h；完整学科不钳')
+    // 2026-11-24 时间降维：只留两条物理边界（单次坐姿、外部截止），总学时/周数不再采集
+    expect(md).toContain('时间只采两条物理边界')
+    expect(md).toContain('总可投入时间、总学时、总周数、objectiveScopeHours 一律不采集')
+    expect(md).not.toContain('单点概念 objectiveScopeHours 硬上限 1.2h')
     expect(md).not.toContain('轻起步 objectiveScopeHours 硬上限 2h')
   })
 
@@ -215,7 +215,23 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('术语真名与证据对象')
     expect(md).toContain('后台执行轨迹（Trace）')
     expect(md).toContain('零代码/低代码原型')
-    expect(md).toContain('不写「每次坐下大约 25 分钟」')
+    expect(md).toContain('不写总学时、总周数、精确分钟带')
+  })
+
+  it('path-planning：课名锚定主题/机制，不写成单次故障问句或资料小节名', () => {
+    const md = read('prompts/skill.path-planning.md')
+    expect(md).toContain('主题/机制 + 体系能力')
+    expect(md).toContain('不是一次故障排查、单条 FAQ 或单个文档小节名')
+    expect(md).toContain('具体痛点、翻车场景、排障入口全部下沉到 summary 与第一课')
+    expect(md).toContain('Pod 卡住不动，先查哪一层状态')
+    expect(md).toContain('Pod 生命周期与状态机制')
+  })
+
+  it('path-planning：资料目录不是课程目录，用户没问的章节不得自动扩成阶段', () => {
+    const md = read('prompts/skill.path-planning.md')
+    expect(md).toContain('资料目录不是课程目录')
+    expect(md).toContain('资料有 N 章/N 节，不等于路径要有 N 段')
+    expect(md).toContain('删掉这一段，用户的原诉求是否仍然完整达成')
   })
 
   it('path-planning：拓扑先定再套阶段公式，基准锚必填且被里程碑引用', () => {
@@ -290,8 +306,8 @@ describe('goal/path/stage prompt realism guards', () => {
   it('path：单次承诺与任务分钟上界一致（默认 25 分钟不再放行 35 分钟）', () => {
     const planning = read('prompts/skill.path-planning.md')
     const taskDesign = read('prompts/skill.path-task-design.md')
-    expect(planning).toContain('按 `timeDimensions.sessionsLengthMin` 写实际单次节奏')
-    expect(taskDesign).toContain('允许的浮动不超过 +5 分钟')
+    expect(planning).toContain('时间只按 `timeDimensions.sessionsLengthMin` 写**单次节奏**')
+    expect(taskDesign).toContain('允许浮动不超过 +5 分钟')
     expect(taskDesign).not.toContain('一节 35 分钟的真课')
   })
 
@@ -311,8 +327,7 @@ describe('goal/path/stage prompt realism guards', () => {
   it('path-task-design：前置顺序、末课材料前提、收口课认知层级与 loadTarget 回退', () => {
     const taskDesign = read('prompts/skill.path-task-design.md')
     expect(taskDesign).toContain('阶段内前置顺序自检')
-    expect(taskDesign).toContain('但前提是用户明确提到手头有真实材料')
-    expect(taskDesign).toContain('禁止假设用户手头有正在读的材料')
+    expect(taskDesign).toContain('不得假设用户手头有正在读的真实材料/正在做的任务')
     expect(taskDesign).toContain('收口课不默认标 create')
     expect(taskDesign).toContain('缺省时读 `cognitiveCore.loadProfile.stageLoadDistribution`')
     // 2026-11-20 密度：low 负荷下，两个未建立概念必须拆成两节；≥4 个平级子类按 2-3 个一组拆

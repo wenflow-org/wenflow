@@ -189,9 +189,20 @@ export interface PromptMaterial {
   materialId: string | null;
   publisher: string | null;
   sourceTier: string | null;
+  /**
+   * 来源权威分级（2026-11-23）：upload=用户上传/挂载（权威锚定）；web=联网采集（参考补充）。
+   * 下游任务设计据此区分「任务必须长在资料上」与「只是可引用的参考」。
+   * 可选：旧快照/测试夹具没有该字段时由 sourceUrl 推断（attachment:// = upload）。
+   */
+  origin?: 'upload' | 'web' | null;
   tldr: string | null;
   sections: PromptMaterialSection[];
   keyPoints: PromptMaterialKeyPoint[];
+  /**
+   * 页面发布时间（ISO，可空；2026-11-23 切口④）：联网资料由 Provider 提供，上传附件恒 null。
+   * 供模型判时效（「这条资料是不是新版」）、来源展示「发布于 X」；与 fetchedAt（抓取时间）分立。
+   */
+  publishedAt?: string | null;
   /**
    * 资料理解摘要（path-material-brief；仅上传附件且已生成时存在，2026-09-24）。
    * path-planning 据此获得「这份资料是什么/怎么切分学习」的分段意图；
@@ -206,10 +217,43 @@ export interface PromptMaterial {
     coreConcepts: string[];
     naturalDivisions: string[];
   } | null;
+  /**
+   * 采集完整性（2026-11-23 带宽审计）：仅**非 ok** 时出现——path-planning 据此在
+   * summary/阶段说明里交代缺口，不得把「4 个主题只覆盖 2 个」当成完整覆盖。
+   * pending/not_found 的 pack 为 null，不会进投影；实际上只有 partial 会走到这里。
+   */
+  completeness?: { status: 'partial' | 'not_found'; missing: string[] } | null;
 }
 
 function normalizeString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/** 来源权威分级：显式 origin 优先；旧包按 sourceUrl 推断（attachment:// = 上传）。 */
+function resolveMaterialAuthority(pack: Record<string, unknown>): 'upload' | 'web' | null {
+  const explicit = normalizeString(pack.origin);
+  if (explicit === 'upload' || explicit === 'web') return explicit;
+  const url = normalizeString(pack.sourceUrl);
+  if (!url) return null;
+  return url.startsWith('attachment://') ? 'upload' : 'web';
+}
+
+/**
+ * 资料包完整性投影（仅 partial/not_found 有意义）：coverage.missing 取采集链判定的
+ * 「目标需要但正文没覆盖」的主题，最多 8 条防载荷膨胀。ok/缺字段 → null。
+ */
+function resolveCompleteness(item: unknown): PromptMaterial['completeness'] {
+  const record = (item || {}) as { status?: unknown; coverage?: { missing?: unknown } };
+  const status = normalizeString(record.status);
+  if (!status || status === 'ok' || status === 'pending') return null;
+  const rawMissing = record.coverage?.missing;
+  const missing = Array.isArray(rawMissing)
+    ? rawMissing
+        .map((entry) => normalizeString(entry))
+        .filter((entry): entry is string => !!entry)
+        .slice(0, 8)
+    : [];
+  return { status: status === 'partial' ? 'partial' : 'not_found', missing };
 }
 
 /**
@@ -282,17 +326,23 @@ export function buildPromptFriendlyMaterials(
       }))
       .filter((point) => !!point.text);
     if (!sections.length && !keyPoints.length) continue;
+    const completeness = resolveCompleteness(item);
     out.push({
       title: normalizeString(pack.title),
       sourceUrl: normalizeString(pack.sourceUrl),
       materialId: normalizeString(pack.materialId),
       publisher: normalizeString(pack.publisher),
       sourceTier: normalizeString(pack.sourceTier),
+      origin: resolveMaterialAuthority(pack),
       tldr: normalizeString(pack.tldr)?.slice(0, limits.maxTldrChars) || null,
       sections,
       keyPoints,
+      // 发布时间透传（切口④）：Provider 没给时保持 null，与抓取时间分立
+      publishedAt: normalizeString((pack as { publishedAt?: unknown }).publishedAt),
       // 资料理解摘要（仅上传附件携带；透传即可——规模已由生成侧钳制，无需再截）
       brief: (item as { brief?: PromptMaterial['brief'] }).brief ?? null,
+      // 非 ok 才出现（缺口诚实）：ok 资料不带该键，冷启动/完整资料载荷零变化
+      ...(completeness ? { completeness } : {}),
     });
   }
   return out.length ? out : null;

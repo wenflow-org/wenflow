@@ -162,21 +162,11 @@ fields:
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.skill_nature
     description: 技能性质 tool_operation|cognitive_internalized|physical_internalized|knowledge_structure；决定 AI 能否代跑核心动作，判不出留空（2026-10-27 补齐路由声明）
-  - fieldId: understanding.skill_nature_evidence
-    promptRole: hidden-inference
-    valueType: string
-    pathInRawOutput: internal.ext.goalConversation.understanding.skill_nature_evidence
-    description: 支撑 skill_nature 的一句证据（优先用户原话）
   - fieldId: understanding.platform_judgment
     promptRole: hidden-inference
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.platform_judgment
     description: 平台可判定性 judgeable_output|judgeable_sensor|not_judgeable；与 skill_nature 相互独立
-  - fieldId: understanding.platform_judgment_evidence
-    promptRole: hidden-inference
-    valueType: string
-    pathInRawOutput: internal.ext.goalConversation.understanding.platform_judgment_evidence
-    description: 支撑 platform_judgment 的一句依据
   - fieldId: understanding.intent_type
     promptRole: hidden-inference
     valueType: string
@@ -187,11 +177,6 @@ fields:
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.entry_state
     description: 进入态 focused|exploratory；exploratory 触发起步路径与 pathTopologyHint=exploratory（core 规则要求每轮更新）
-  - fieldId: understanding.sensor_readouts
-    promptRole: hidden-inference
-    valueType: array<string>
-    pathInRawOutput: internal.ext.goalConversation.understanding.sensor_readouts
-    description: judgeable_sensor 时的客观读数来源，如 ["功率计","心率带"]
   - fieldId: understanding.needsMaterial
     promptRole: hidden-inference
     valueType: object
@@ -276,11 +261,6 @@ fields:
     valueType: boolean
     pathInRawOutput: internal.core.isCompleted
     description: 对话是否完成
-  - fieldId: confidenceScores
-    promptRole: control-signal
-    valueType: object
-    pathInRawOutput: internal.ext.goalConversation.confidenceScores
-    description: 分项置信度评分（每轮产出）
 
 routings:
   # === skill:goal-conversation 产出的字段 ===
@@ -469,25 +449,11 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: skill:goal-conversation
-    fieldId: understanding.skill_nature_evidence
-    render: hidden
-    handoff: [path]
-    internal: false
-    accumulate: false
-    visibilityPreset: agent-internal
-  - agentId: skill:goal-conversation
     fieldId: understanding.platform_judgment
     render: hidden
     handoff: [goal-agent, path]
     internal: false
     accumulate: true
-    visibilityPreset: agent-internal
-  - agentId: skill:goal-conversation
-    fieldId: understanding.platform_judgment_evidence
-    render: hidden
-    handoff: [path]
-    internal: false
-    accumulate: false
     visibilityPreset: agent-internal
   - agentId: skill:goal-conversation
     fieldId: understanding.intent_type
@@ -505,13 +471,6 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: auto — path 定帧层读取（buildFramedNormalizedInput → normalizedInput.learnerProfile.entryState → pathTopologyHint=exploratory，path-planning 起步路径消费）；2026-11-19 补齐声明
-  - agentId: skill:goal-conversation
-    fieldId: understanding.sensor_readouts
-    render: hidden
-    handoff: [path]
-    internal: false
-    accumulate: false
-    visibilityPreset: agent-internal
   - agentId: skill:goal-conversation
     fieldId: understanding.needsMaterial
     render: hidden
@@ -613,12 +572,6 @@ routings:
     notes: internal — 仅作 UI 进度条
   - agentId: skill:goal-conversation
     fieldId: core.isCompleted
-    render: visible
-    handoff: [goal-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:goal-conversation
-    fieldId: confidenceScores
     render: visible
     handoff: [goal-agent]
     internal: false
@@ -773,13 +726,6 @@ routings:
     handoff: [path]
     internal: false
     accumulate: false
-  - agentId: goal-agent
-    fieldId: confidenceScores
-    render: visible
-    handoff: [path]
-    internal: false
-    accumulate: false
-  # 2026-10-24 契约同步批：path 层实际消费的新字段桥接
   - agentId: goal-agent
     fieldId: understanding.time_dimensions
     render: hidden

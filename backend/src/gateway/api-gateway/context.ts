@@ -17,7 +17,7 @@ export type PromptStreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'restart'; attempt: number }
   | { type: 'error'; code: string; message: string }
-  | { type: 'progress'; stage: 'searching' | 'fusing'; topic: string };
+  | { type: 'progress'; stage: 'searching' | 'fusing' | 'reading-link'; topic: string };
 
 /** 请求级流式意向：路由在进入业务链路前通过 setRequestContext 注入 */
 export interface StreamRequest {

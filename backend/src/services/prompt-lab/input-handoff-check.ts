@@ -156,6 +156,14 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
         'backend/src/services/learning/generation/stage-enrichment.ts:1337（normalizedInput.timeDimensions）；' +
         'backend/src/services/learning/goal-path-visible-summary.ts:326',
     },
+    {
+      // 2026-11-23 资料缺口诚实：materials[] 的采集完整度（仅 partial/not_found 出现）
+      key: 'completeness',
+      owner: 'materials[].completeness（资料包投影）',
+      evidence:
+        'backend/src/services/materials/material-prompt-projection.ts:resolveCompleteness（status/coverage.missing → completeness.status/missing）；' +
+        'backend/src/coordinators/path.coordinator.ts:widenCollectedWebPack（保留采集链 coverage）',
+    },
   ],
   'path-task-design': [
     {
@@ -163,6 +171,16 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
       owner: 'normalizedInput',
       evidence:
         'backend/src/services/learning/generation/path-generation.core.ts:336（buildFramedNormalizedInput 附加 planningHints）',
+    },
+  ],
+  'path-reviewer': [
+    {
+      // 2026-11-24：评审护栏新增「联网残缺资料不得压掉学科主干」，引用 materials[].completeness
+      key: 'completeness',
+      owner: 'materials[].completeness（路径资料投影）',
+      evidence:
+        'backend/src/services/materials/material-prompt-projection.ts:resolveCompleteness（status/coverage.missing → completeness.status/missing）；' +
+        'prompts/core/path-planning.yaml「资料缺口诚实」',
     },
   ],
   'teaching-opening': [

@@ -89,22 +89,23 @@ describe('derivePlanningHints × topic_granularity 硬上界', () => {
   });
 });
 
-describe('derivePlannedOutline × 颗粒度同源（走查 P7：预览承诺=真实生成）', () => {
-  it('[单点概念] + 3 段大纲 → 标签与结构冲突，按 3 段走（不再钳到 2）', () => {
+describe('derivePlannedOutline × 颗粒度同源（预览只给方向，不承诺阶段数）', () => {
+  it('[单点概念] + 3 条方向 → 不建议精确阶段数，区间覆盖结构', () => {
     const result = derivePlannedOutline({
       key_stages: ['判断链建立', '连续变式判别', '真题实战校准'],
       scope_size: '[单点概念] 只涉及一个判别动作（共轭类型判定），无前置依赖',
     });
-    expect(result.plannedMilestones).toBe(3);
+    expect(result.plannedMilestones).toBeNull();
     expect(result.milestoneRange![1]).toBeGreaterThanOrEqual(3);
   });
 
-  it('无前缀的自由文本：预览行为不变', () => {
+  it('无前缀的自由文本：同样不承诺精确阶段数', () => {
     const result = derivePlannedOutline({
       key_stages: ['一', '二', '三'],
       scope_size: '中等偏小：核心是记账习惯',
     });
-    expect(result.plannedMilestones).toBe(3);
+    expect(result.plannedMilestones).toBeNull();
+    expect(result.milestoneRange).toEqual([3, 6]);
   });
 });
 

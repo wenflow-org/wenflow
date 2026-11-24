@@ -45,6 +45,8 @@ import {
   fetchSupplementMaterialSync,
   supplementStatusForScenario,
   supplementSyncPlan,
+  planStudentLinkRead,
+  readStudentLink,
   buildSupplementPayload,
   type SupplementSlot,
   type SupplementSyncOutcome,
@@ -146,7 +148,7 @@ import {
  * `progress` 事件），前端在「正在查阅外部资料：…」状态行提示。非流式/测试上下文无
  * streamRequest 时静默——进度提示永不影响主流程。
  */
-function emitSupplementProgress(stage: 'searching' | 'fusing', topic: string): void {
+function emitSupplementProgress(stage: 'searching' | 'fusing' | 'reading-link', topic: string): void {
   try {
     getRequestContext()?.streamRequest?.onStream?.({ type: 'progress', stage, topic });
   } catch {
@@ -438,6 +440,49 @@ export async function processStudentMessage(
   // 语义不翻转：figure/diagram 丢弃闸看的是 `board` 真值；提示词侧已按内容判（2026-11-03，rule15）；
   // #244 起文案与校验器信号同源（boardReachesStudent：degenerate 首版板永不下发，不得声称有板）。
   Object.assign(turnInput, boardPromptInputForTeacher(board));
+  // —— 学生贴链接·回合前预抓（2026-11-23，DeepSeek 调研 ③ 修正落法）——
+  // URL 在调用模型前就能用正则确定性抽出：预抓（SSE reading-link 状态行）→ 注入本轮输入 →
+  // **只调一次** teaching-turn（与 control.supplement 的二次调用不同路——那条路必须先答一轮
+  // 才知道要不要搜；这条不需要）。独立配额（学生自带学习材料 ≠ 老师补料的每课 1 次）；
+  // 闭卷/SSRF/配额不抓 → linkStatus 注入降级提示，老师明确说明而不是装没看见。
+  let studentLinkPayload: { url: string; title: string; excerpt: string } | null = null;
+  let studentLinkStatus: { status: string; url: string } | null = null;
+  let studentLinkReadAttempted = false;
+  {
+    const previousLinkReadCount = Number(sessionArtifacts.linkReadCount || 0);
+    const plan = planStudentLinkRead(message, sessionArtifacts, previousLinkReadCount);
+    if (plan.action === 'read') {
+      emitSupplementProgress('reading-link', plan.url);
+      studentLinkReadAttempted = true;
+      const outcome = await readStudentLink(session.userId, plan.url);
+      if (outcome.ok && outcome.excerpt) {
+        studentLinkPayload = { url: outcome.url, title: outcome.title || '学生发来的链接', excerpt: outcome.excerpt };
+        logger.info('[AITeaching] 学生链接已读取并注入本轮', {
+          sessionId,
+          url: outcome.url,
+          durationMs: outcome.durationMs,
+          chars: outcome.excerpt.length,
+        });
+      } else {
+        studentLinkStatus = { status: outcome.code || 'unreadable', url: plan.url };
+        logger.info('[AITeaching] 学生链接读取失败，注入降级提示', {
+          sessionId,
+          url: plan.url,
+          code: outcome.code,
+          durationMs: outcome.durationMs,
+        });
+      }
+    } else if (plan.action === 'skip' && (plan.reason === 'closed-book' || plan.reason === 'unsafe-url') && plan.url) {
+      // 不抓但必须「看见」：注入 linkStatus 让老师明确说明（闭卷 → 请学生贴正文；可疑地址 → 同样引导贴正文，不提内部词）
+      studentLinkStatus = { status: plan.reason === 'closed-book' ? 'closed-mode' : 'unsafe', url: plan.url };
+    }
+  }
+  if (studentLinkPayload) {
+    (turnInput.scenario as Record<string, unknown>).studentLinkMaterial = studentLinkPayload;
+  }
+  if (studentLinkStatus) {
+    (turnInput.scenario as Record<string, unknown>).linkStatus = studentLinkStatus;
+  }
   // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
   // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
@@ -1924,6 +1969,11 @@ export async function processStudentMessage(
     lastPeerRuntimeEnvelope: peerRuntimeEnvelope,
     sessionArtifacts: {
       ...parseSessionArtifacts(session.teachingState),
+      // 学生链接独立配额计数（2026-11-23）：按**抓取尝试**记账（失败也占额，防重试风暴），
+      // 上限 STUDENT_LINK_MAX_PER_LESSON；不与 control.supplement 的每课 1 次混用
+      ...(studentLinkReadAttempted
+        ? { linkReadCount: Number(sessionArtifacts.linkReadCount || 0) + 1 }
+        : {}),
       // 共享白板：任务级持久板书（跨轮保留；换任务时由上方 load 逻辑丢弃）
       board: board ?? null,
       // 白板 revision 历史（2026-11-13 课堂评审 7/7 实证）：教师逐轮「板上左栏第 N 行」类指认

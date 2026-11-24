@@ -32,6 +32,21 @@ export const CAPACITY_DEFAULTS = {
   display: '1 小时',
 } as const;
 
+/**
+ * 单次学习时长硬顶（分钟）：**日预算不是单课容器**。
+ * 实证（2026-11-23 Case 1）：用户说「每天两小时」，goal 写成 sessionsLengthMin=120 →
+ * 阶段 1 排出 5 节 45–85 分钟、合计 350 分钟的排表课。单次节奏超过 60 分钟时一律按 60 计，
+ * 多出来的可用时间应体现为「一天多上几次」，而不是把单节课撑大。
+ */
+export const SESSION_LENGTH_MAX_MIN = 60;
+
+/** 把单次时长钳到物理上限（非法/缺失 → null；不改小值）。 */
+export function clampSessionLength(raw: number | null | undefined): number | null {
+  const value = Math.round(Number(raw));
+  if (raw === null || raw === undefined || !Number.isFinite(value) || value <= 0) return null;
+  return Math.min(value, SESSION_LENGTH_MAX_MIN);
+}
+
 export type CapacitySource =
   | 'understanding.time_dimensions'
   | 'understanding.available_resources.time_per_session'

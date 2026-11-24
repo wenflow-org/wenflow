@@ -49,7 +49,7 @@ describe('结构容量缺口 capacityDeficit', () => {
     expect(round.capacityDeficit.bounds).toEqual({
       subtasksPerStage: 30,
       subtaskMinutes: 90,
-      milestones: 5,
+      milestones: 3,
     });
   });
 
@@ -121,11 +121,11 @@ describe('单课分钟档 = min(用户自述会话时长, 90 原子硬顶)', () 
     expect(cpa().subtaskMinutesRange[1]).toBe(90);
   });
 
-  it('结构容量随 90 原子粒度回落：240h → 225h（对 416h 目标缺口 46%）', () => {
+  it('结构容量随内容阶段数回落：3 阶段 → 135h（对 416h 目标缺口 68%）', () => {
     const r = cpa().capacityDeficit!;
-    expect(r.capacityHours).toBeCloseTo(225, 0);
-    expect(r.deficitRatio).toBeLessThan(0.5);
-    expect(r.deficitRatio).toBeGreaterThan(0.4);
+    expect(r.capacityHours).toBeCloseTo(135, 0);
+    expect(r.deficitRatio).toBeLessThan(0.7);
+    expect(r.deficitRatio).toBeGreaterThan(0.6);
   });
 
   it('课数反推与容量报告用同一个分钟档（去掉 90 封顶后的同源契约）', () => {

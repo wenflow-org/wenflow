@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   CAPACITY_DEFAULTS,
+  clampSessionLength,
   parseSessionMinutes,
   resolveCapacity,
 } from '../capacity-authority';
@@ -35,6 +36,15 @@ describe('resolveCapacity（#106 单一权威）', () => {
     expect(c.daysPerWeek).toBe(3);
     expect(c.dailyMinutes).toBe(30);
     expect(c.source).toBe('understanding.time_dimensions');
+  });
+
+  it('单次时长硬顶 60：日预算不得被当成单课容器（Case 1：每天两小时 → 120 分钟）', () => {
+    // 权威解析保持用户原话不变（display/容量口径要忠实）；硬顶只在规划装配层生效
+    expect(resolveCapacity({ timePerSession: '每天两小时（约120分钟一次）' }).sessionMinutes).toBe(120);
+    expect(clampSessionLength(120)).toBe(60);
+    expect(clampSessionLength(45)).toBe(45);
+    expect(clampSessionLength(null)).toBeNull();
+    expect(clampSessionLength(Number.NaN)).toBeNull();
   });
 
   it('L2：understanding.available_resources.time_budget 成为权威来源', () => {

@@ -11,6 +11,9 @@ import {
   supplementStatusForScenario,
   supplementSyncPlan,
   fetchSupplementMaterialSync,
+  planStudentLinkRead,
+  readStudentLink,
+  STUDENT_LINK_MAX_PER_LESSON,
   type SupplementSlot,
 } from '../teaching-supplement.service';
 
@@ -235,6 +238,91 @@ describe('fetchSupplementMaterialSync · 带硬预算同步采集（2026-11-23�
     const outcome = await fetchSupplementMaterialSync('user_sync3', '话题', '查询', deps as never);
     expect(outcome.ok).toBe(false);
     expect(String(outcome.error)).toContain('provider down');
+  });
+});
+
+describe('planStudentLinkRead · 学生贴链接回合前判定（2026-11-23）', () => {
+  it('有 URL + 未闭卷 + 配额未满 → read 首条', () => {
+    const plan = planStudentLinkRead('老师看这个 https://learn.microsoft.com/sql/t-sql', {}, 0);
+    expect(plan).toEqual({ action: 'read', url: 'https://learn.microsoft.com/sql/t-sql' });
+  });
+
+  it('无 URL → skip no-url（零开销：没链接就不走抓取）', () => {
+    expect(planStudentLinkRead('这句话没有任何链接', {}, 0)).toEqual({ action: 'skip', reason: 'no-url' });
+  });
+
+  it('闭卷模式 → skip closed-book（不抓但带 url，老师据此让学生贴正文）', () => {
+    const plan = planStudentLinkRead(
+      '看这个 https://mp.weixin.qq.com/s/abc',
+      { allowWebSupplement: false },
+      0
+    );
+    expect(plan).toEqual({ action: 'skip', reason: 'closed-book', url: 'https://mp.weixin.qq.com/s/abc' });
+  });
+
+  it('SSRF 闸：localhost/内网地址 → skip unsafe-url（不抓）', () => {
+    expect(planStudentLinkRead('http://192.168.1.10/admin 看看', {}, 0))
+      .toEqual({ action: 'skip', reason: 'unsafe-url', url: 'http://192.168.1.10/admin' });
+  });
+
+  it('每课独立配额：第 N 条超上限 → skip quota-exhausted（不与 supplement 配额混用）', () => {
+    const url = 'https://example.com/doc';
+    expect(planStudentLinkRead(`看 ${url}`, {}, STUDENT_LINK_MAX_PER_LESSON - 1)).toEqual({ action: 'read', url });
+    expect(planStudentLinkRead(`看 ${url}`, {}, STUDENT_LINK_MAX_PER_LESSON))
+      .toEqual({ action: 'skip', reason: 'quota-exhausted', url });
+  });
+});
+
+describe('readStudentLink · 带预算读学生链接（2026-11-23）', () => {
+  it('抓到正文 → 章节窗口截 ≤1200 字 + 标题', async () => {
+    const deps = {
+      fetchWeb: (async () => ({
+        results: [{ url: 'https://example.com/a', finalUrl: 'https://example.com/a', title: 'STRING_AGG 官方文档', text: '正文内容足够长可以成为摘录。'.repeat(200), provider: 'tavily' }],
+        errors: [],
+        provider: 'tavily',
+        attempts: ['tavily'],
+        latencyMs: 10,
+      })) as never,
+    };
+    const outcome = await readStudentLink('user_link1', 'https://example.com/a', deps as never);
+    expect(outcome.ok).toBe(true);
+    expect(outcome.title).toBe('STRING_AGG 官方文档');
+    expect(outcome.excerpt!.length).toBeLessThanOrEqual(1200);
+    expect(outcome.excerpt!.length).toBeGreaterThan(0);
+  });
+
+  it('401/403 → login-required（公众号/飞书私有文档的登录墙降级）', async () => {
+    const deps = {
+      fetchWeb: (async () => ({
+        results: [],
+        errors: [{ url: 'https://mp.weixin.qq.com/s/abc', message: 'HTTP 403 Forbidden' }],
+        provider: 'tavily',
+        attempts: ['tavily'],
+        latencyMs: 10,
+      })) as never,
+    };
+    const outcome = await readStudentLink('user_link2', 'https://mp.weixin.qq.com/s/abc', deps as never);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe('login-required');
+  });
+
+  it('无可读正文 → unreadable；超预算 → timeout；永不抛错', async () => {
+    const unreadable = await readStudentLink('user_link3', 'https://example.com/empty', {
+      fetchWeb: (async () => ({ results: [], errors: [], provider: 'tavily', attempts: ['tavily'], latencyMs: 5 })) as never,
+    } as never);
+    expect(unreadable.ok).toBe(false);
+    expect(unreadable.code).toBe('unreadable');
+
+    process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS = '2000';
+    try {
+      const hanging = await readStudentLink('user_link4', 'https://example.com/hang', {
+        fetchWeb: (async () => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout exceeded')), 3500))) as never,
+      } as never);
+      expect(hanging.ok).toBe(false);
+      expect(['timeout', 'unreadable']).toContain(hanging.code);
+    } finally {
+      delete process.env.MATERIAL_SUPPLEMENT_SYNC_BUDGET_MS;
+    }
   });
 });
 

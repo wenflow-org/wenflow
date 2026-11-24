@@ -1,12 +1,10 @@
 import { buildPromptFriendlyNormalizedInput } from '../index';
 
 /**
- * R8（2026-10-27）：path-planning 的提示词投影是逐字段白名单重建。
- * 既有实现只透传 totalWeeks/estimatedHours/sessionsPerWeek/sessionsLengthMin，
- * 把 objectiveScopeHours / deadlineDate / scopeAnchorHours 全丢掉 ⇒
- * `prompts/core/path-planning.yaml` 里的新锚规则是死引用。
+ * 2026-11-24 时间降维：path-planning 的提示词投影只保留两条物理边界
+ * （sessionsLengthMin / deadlineDate），不再把总学时、周数、阶段锚、任务分钟配额送进模型。
  */
-describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止日', () => {
+describe('时间降维 · path-planning 提示词只带单次坐姿与截止日', () => {
   const base = {
     version: '1.0',
     learnerProfile: { surfaceGoal: 'g' },
@@ -17,7 +15,7 @@ describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止�
     planningHints: null,
   };
 
-  it('timeDimensions 的 R8 权威字段进入提示词', () => {
+  it('timeDimensions 只保留 sessionsLengthMin / deadlineDate / timeModelVersion', () => {
     const built = buildPromptFriendlyNormalizedInput({
       ...base,
       timeDimensions: {
@@ -29,15 +27,15 @@ describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止�
         calendarCapacityHours: 120,
         totalSessions: 30,
       },
-    });
-    const td = built.normalizedInput.timeDimensions;
-    expect(td.objectiveScopeHours).toBe(18);
+    } as any);
+    const td = built.normalizedInput.timeDimensions as Record<string, unknown>;
+    expect(td.sessionsLengthMin).toBe(60);
     expect(td.deadlineDate).toBe('2027-01-05');
     expect(td.timeModelVersion).toBe(2);
-    expect(td.scopeAnchorHours).toBe(18);
-    expect(td.calendarCapacityHours).toBe(120);
-    expect(td.totalSessions).toBe(30);
-    expect(td.sessionsLengthMin).toBe(60);
+    expect(td).not.toHaveProperty('objectiveScopeHours');
+    expect(td).not.toHaveProperty('scopeAnchorHours');
+    expect(td).not.toHaveProperty('calendarCapacityHours');
+    expect(td).not.toHaveProperty('totalSessions');
   });
 
   it('resources.deadlineDate 也进入提示词（与 timeDimensions 同源）', () => {
@@ -46,16 +44,16 @@ describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止�
       resources: { deadlineDate: '2027-01-05' },
       timeDimensions: { timeModelVersion: 2, deadlineDate: '2027-01-05' },
     });
-    expect(built.normalizedInput.resources.deadlineDate).toBe('2027-01-05');
+    expect(built!.normalizedInput.resources.deadlineDate).toBe('2027-01-05');
   });
 
-  it('planningHints 的预算锚与 maxWeeksSource 进入提示词', () => {
+  it('planningHints 只给内容边界与单次分钟盒，不带学时/任务数配额', () => {
     const built = buildPromptFriendlyNormalizedInput({
       ...base,
       planningHints: {
         paceSignal: 'standard',
-        scopeSize: null,
-        milestoneRange: [2, 4],
+        scopeSize: 'medium',
+        milestoneRange: [3, 5],
         conceptRange: [2, 4],
         subtasksPerStageRange: [2, 4],
         subtaskMinutesRange: [30, 60],
@@ -67,11 +65,19 @@ describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止�
         targetHoursPerMilestone: 9,
         targetMinutesPerTask: 45,
       },
-    });
-    const hints = built.normalizedInput.planningHints;
-    expect(hints.targetTotalHours).toBe(27);
-    expect(hints.targetHoursPerMilestone).toBe(9);
-    expect(hints.targetMinutesPerTask).toBe(45);
-    expect(hints.maxWeeksSource).toBe('hard_cap');
+    } as any);
+    const hints = built!.normalizedInput.planningHints as Record<string, unknown>;
+    expect(hints.scopeSize).toBe('medium');
+    expect(hints.milestoneRange).toEqual([3, 5]);
+    expect(hints.conceptRange).toEqual([2, 4]);
+    expect(hints.subtaskMinutesRange).toEqual([30, 60]);
+    expect(hints).not.toHaveProperty('targetTotalHours');
+    expect(hints).not.toHaveProperty('targetHoursPerMilestone');
+    expect(hints).not.toHaveProperty('targetMinutesPerTask');
+    expect(hints).not.toHaveProperty('targetMilestones');
+    expect(hints).not.toHaveProperty('targetSubtasksPerStage');
+    expect(hints).not.toHaveProperty('maxWeeks');
+    expect(hints).not.toHaveProperty('maxWeeksSource');
+    expect(hints).not.toHaveProperty('paceSignal');
   });
 });

@@ -449,6 +449,9 @@ function assemblePack(input: {
     // sourceTier 以编排器的确定性分级为准（抽取侧看不准）
     sourceTier,
     sourceUrl,
+    // 来源权威分级（2026-11-23）：采集链产出一律 web——下游 task-design 只把它当参考/补充，
+    // 不套「资料里没有的内容不要写进去」（Case 2 实证：一篇跑偏网页把整门学科绑架成资料摘要课）。
+    origin: 'web',
     version: normalizeText(draft.version) || normalizeText(need.version) || null,
     fetchedAt: (options.now?.() ?? new Date()).toISOString(),
     license: normalizeText(draft.license) || null,

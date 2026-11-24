@@ -3,7 +3,7 @@
  *
  * 2026-09-29 实证：某阶段 12 课中 6 节标题逐字相同（「串联并联电功率计算的综合自测与查漏」），
  * 根因是把 `targetSubtasksForStage` 当"必须凑满的课数"用。提示词侧的修复是 path-task-design
- * 新增「同题复读禁令」规则；代码侧已有 detectStageFiller 观测（只观测不阻断）。
+ * 新增「同动作复读禁令」规则；代码侧已有 detectStageFiller 观测（只观测不阻断）。
  *
  * 两个不变量：
  * ① 提示词规则必须真的编译进 md 产物（否则改 yaml 是空改）——这是 core yaml → md 编译链的回归护栏；
@@ -19,14 +19,14 @@ const read = (p: string) => fs.readFileSync(path.join(REPO_ROOT, p), 'utf8');
 const CORE = read('prompts/core/path-task-design.yaml');
 const MD = read('prompts/skill.path-task-design.md');
 
-describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
+describe('R8-1 同动作复读禁令：提示词规则已编译进产物', () => {
   it('core yaml 含新规则', () => {
-    expect(CORE).toContain('同题复读禁令');
+    expect(CORE).toContain('同动作复读禁令');
   });
 
   it('编译产物 md 含新规则且编号未被顶掉（新规则只追加在末位，既有编号不动）', () => {
-    expect(MD).toContain('同题复读禁令');
-    const line = MD.split('\n').find((l) => l.includes('同题复读禁令')) || '';
+    expect(MD).toContain('同动作复读禁令');
+    const line = MD.split('\n').find((l) => l.includes('同动作复读禁令')) || '';
     // 编号随「在前方插入新规则」顺延（2026-10-26 之前的「主轴提权/体力活禁令」已把本区段
     // 从 31 推到 34）。这里只守「规则确实带编号且全表连续」，不锁死具体数字——
     // 锁死会让每次合法的中间插入都误报，反而逼人绕开测试改规则。
@@ -73,11 +73,11 @@ describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
   });
 
   it('core yaml 与 md 的规则内容一致（防 md 被手工改回而 yaml 没跟上）', () => {
-    const yamlRule = CORE.split('\n').find((l) => l.includes('同题复读禁令')) || '';
-    const mdRule = MD.split('\n').find((l) => l.includes('同题复读禁令')) || '';
+    const yamlRule = CORE.split('\n').find((l) => l.includes('同动作复读禁令')) || '';
+    const mdRule = MD.split('\n').find((l) => l.includes('同动作复读禁令')) || '';
     // md 行首是「31. 」，剥掉编号后正文应与 yaml 的 `- ` 之后一致
-    expect(mdRule.replace(/^\d+\.\s*/, '')).toContain('同题复读禁令');
-    expect(yamlRule.replace(/^\s*-\s*/, '')).toContain('同题复读禁令');
+    expect(mdRule.replace(/^\d+\.\s*/, '')).toContain('同动作复读禁令');
+    expect(yamlRule.replace(/^\s*-\s*/, '')).toContain('同动作复读禁令');
   });
 });
 
