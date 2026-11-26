@@ -115,7 +115,7 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     });
     const w = await mountReady();
     await w.find('.evaluation-transcript-toggle').trigger('click');
-    expect(w.findAll('.evaluation-transcript-stage__label').map((s) => s.text())).toEqual(['开场', '白板出现', '课堂检查点', '收束']);
+    expect(w.findAll('.evaluation-transcript-stage__label').map((s) => s.text())).toEqual(['开场', '白板出现', '课堂检查点', '完成']);
     expect(w.findAll('.evaluation-transcript-avatar').length).toBe(5);
     expect(w.find('.evaluation-transcript-avatar--assistant').text()).toBe('师');
     expect(w.find('.evaluation-transcript-avatar--user').text()).toBe('你');

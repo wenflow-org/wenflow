@@ -2991,7 +2991,7 @@ const liveControlRows = computed(() => {
       rows.push({
         label: '弃课恢复锁',
         value: distressAt ? `生效中（${distressAt} 触发，72h 内或完成下一节后解除）` : '生效中（72h 内或完成下一节后解除）',
-        hint: '近 72h 有主动弃课/崩溃事件：强制 paceMode=recover、难度封顶 low；只影响控制态，不改写分数',
+        hint: '近 72h 有主动弃课/崩溃事件：强制 paceMode=recover、难度封顶 low。只影响控制态，不改写分数',
         prior: false,
         derived: true,
       })
@@ -3006,11 +3006,11 @@ const liveControlRows = computed(() => {
     }
     if (typeof cs.conceptLoad === 'string') {
       const clZh: Record<string, string> = { low: '低（少引入新概念，先巩固）', medium: '中', high: '高' }
-      rows.push({ label: '概念密度', value: clZh[cs.conceptLoad] || String(cs.conceptLoad), hint: '本课新概念投放密度；low 不等于跳过契约必需 KC', prior: false, derived: true })
+      rows.push({ label: '概念密度', value: clZh[cs.conceptLoad] || String(cs.conceptLoad), hint: '本课新概念投放密度。low 不等于跳过契约必需 KC', prior: false, derived: true })
     }
     if (typeof cs.checkpointNeed === 'string') {
       const cpZh: Record<string, string> = { high: '高（趋势下滑/多点挣扎）', medium: '中', low: '低（恢复期减考测，契约闸门不受影响）' }
-      rows.push({ label: '考测需求', value: cpZh[cs.checkpointNeed] || String(cs.checkpointNeed), hint: '是否主动加检查点；代码闸门的强制出题不受此字段影响', prior: false, derived: true })
+      rows.push({ label: '考测需求', value: cpZh[cs.checkpointNeed] || String(cs.checkpointNeed), hint: '是否主动加检查点。代码闸门的强制出题不受此字段影响', prior: false, derived: true })
     }
     if (typeof cs.reviewPriority === 'string') {
       const rpZh: Record<string, string> = { high: '高', medium: '中', low: '低' }
