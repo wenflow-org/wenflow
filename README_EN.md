@@ -36,18 +36,26 @@ Why not just throw the question at an AI assistant? You get an answer fast, but 
 
 The thinking behind the project is on the [vision page](https://wenflow.org/vision) (Chinese).
 
-## Walk through a real goal
+## What kinds of goals fit
 
-Take the goal "my weekly Excel report takes too long; I want to automate it with Python":
+The platform is not built for "learning a tool's operations" — format conversions, batch calculations and menu-clicking are work that should be handed to AI. It is built for **judgment and understanding goals**: you draw the conclusion; AI builds the scaffold.
+
+For example: a child won't do homework, and every attempt to hurry them ends in a fight. The goal is to understand why — and to judge, next time, whether to step in and how.
+
+A goal like this doesn't stop at "learn some child psychology". AI asks about the child's grade, what the dawdling actually looks like, and how you handle it now; then it turns "lazy" into signals you can see. The path is three stages: tell the causes apart, see what hurrying does, then judge one real evening at home. The checkpoint hands you a new homework-conflict scene and asks for the likely cause, the evidence and your first sentence — not a definition.
+
+## Interface walkthrough (a judgment goal)
+
+The same goal, from one sentence to the end of the first lesson:
 
 | ![Goal clarification: the AI asks follow-up questions while the sidebar collects goal information](doc/images/goal-clarification.png) | ![Learning path: stages, tasks and progress](doc/images/learning-path.png) |
 |---|---|
-| ![Classroom whiteboard: a flow chart that updates with the explanation](doc/images/round-based-learning.png) | ![Learning state: training load, fatigue and overall state trends](doc/images/learning-state.png) |
+| ![Classroom whiteboard: an attribution table that fills in as the lesson advances](doc/images/round-based-learning.png) | ![Learning state: training load, fatigue and today's plan](doc/images/learning-state.png) |
 
-- **① Clarify the goal** (top left): questions before answers. Background, motivation, time available each day. After 7 rounds the goal narrows to "get a first working script within 4 weeks".
-- **② Generate the path** (top right): lessons are planned only after you confirm: 4 stages and 19 lessons, paced at 40 minutes on weekdays.
-- **③ Lessons with a whiteboard** (bottom left): flows, comparisons and mappings are drawn on the board as they come up and updated as the lesson advances; explain, then ask, with immediate feedback.
-- **④ Learning state** (bottom right): training load and fatigue trends, with a nudge to slow down when you push too hard.
+- **① Clarify the goal** (top left): questions before answers — the child's grade, what the dawdling looks like, what you want within two or three weeks. Seven fields are collected live; three of them were filled in by the platform from what you said, marked as tentative and editable.
+- **② Generate the path** (top right): lessons are planned only after you confirm — three stages, a two-to-three-week window, about 25 minutes per session. The first stage's three lessons are ready; the next two are generated from how you actually do. Lesson one starts by taking the word "lazy" apart.
+- **③ Lessons with a whiteboard** (bottom left): explain, then ask. The teacher puts "they're just lazy" beside three facts on the board and fills in internal/external, stable/unstable, controllable/uncontrollable cell by cell; the board grows as you answer, and a miss is named on the spot.
+- **④ Learning state** (bottom right): after 43 minutes on the lesson, training load and fatigue are 29.5 each and overall state is low, so the page says to keep today light; it also remembers which cell didn't hold and schedules it for the start of the next lesson.
 
 The screenshots are in Chinese; the UI is currently Chinese-only.
 
@@ -81,23 +89,37 @@ git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
 npm ci && npm --prefix backend ci && npm --prefix frontend ci
 
-# 2) Configure backend/.env
-#    Windows: interactive wizard; JWT_SECRET and the encryption key are generated, you only enter AI_API_KEY
+# 2) Configure backend/.env (Windows wizard; Linux / macOS see the fold below)
 npm run env:setup
-#    Linux / macOS: the wizard is a PowerShell script, so configure by hand
-#    cp backend/.env.example backend/.env
-#    Fill in at least these four:
-#      JWT_SECRET=<random string, 32+ chars>
-#      SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
-#      SECRET_ENCRYPTION_KEYS=v1:<32-byte Base64>
-#      AI_API_KEY=<real key>
-#    Generate random values:
-#      node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
-#      node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
 
 # 3) One-command start (migrates both databases, syncs built-in prompts, then starts both ends)
 npm run dev
 ```
+
+<details>
+<summary><b>Configuring backend/.env by hand on Linux / macOS</b></summary>
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Fill in at least these four (`JWT_SECRET` is a random string of 32+ chars; the encryption key is 32 bytes in Base64):
+
+```dotenv
+JWT_SECRET=<random string, 32+ chars>
+SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
+SECRET_ENCRYPTION_KEYS=v1:<32-byte Base64>
+AI_API_KEY=<real key>
+```
+
+Generate random values:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
+```
+
+</details>
 
 Then open:
 
@@ -169,12 +191,12 @@ Being AI-native comes down to the engineering decisions below. From here on, thi
 | Lesson round protocol | Explain, ask and quiz advance round by round; repeated stalls switch to peer reinforcement, and mastery evidence is written back to the learner profile | [Agent / Skill manual](doc/AGENT_SKILL_MANUAL.md) |
 | Learner model | Aggregates the long-term profile, recent state and per-path memory (FSRS-6 review scheduling) into one learner snapshot consumed by teaching and path replanning | [Learner model architecture](doc/LEARNER_MODEL_ARCHITECTURE.md) |
 | Learning load model | Borrows the load / fatigue / form idea from endurance training, advances per day, and uses relative measures to decide "can more be added" | [Learner center and state fusion](doc/LEARNER_CENTER_AND_STATE_FUSION.md) |
-| Virtual Learner Lab | Derives AI learners from role cards, runs the full learning flow black-box like a real user, then has an independent judge score the teaching | [Design](doc/VIRTUAL_LEARNER_DESIGN.md) · [Chain](doc/VIRTUAL_LEARNER_CHAIN.md) |
 | Educational theory map | Every teaching design registers its theory source, literature and code location | [Theory map](doc/EDUCATIONAL_THEORY_MAP.md) |
 | Path production and replanning | The contract for how paths are generated and when replanning is triggered | [Contract](doc/PATH_PRODUCTION_REPLAN_CONTRACT.md) |
 | Prompts and Skills | File-as-Truth: YAML source → compiled artifacts → database mirror, with gates and one-click rollback | [Skill protocol v4](doc/SKILL_PROTOCOL_V4.md) · [Development guide](doc/SKILL_DEVELOPMENT_GUIDE.md) |
 | Model gateway | OpenAI-compatible access with per-Agent / per-Skill model routing, SSE streaming, retry budget and thinking mode | [Gateway design](doc/MODEL_GATEWAY_DESIGN.md) |
-| Classroom whiteboard | Theory basis and evidence grading for teaching diagrams | [Diagram pedagogy research](doc/DIAGRAM_PEDAGOGY_RESEARCH.md) |
+| Classroom whiteboard | Structured teaching diagrams are drawn round by round and updated cell by cell, turning causal and contrast relations into a picture and cutting the text load | [Diagram pedagogy research](doc/DIAGRAM_PEDAGOGY_RESEARCH.md) |
+| Admin console | An operations and observability console (`/admin`) beyond the learner app, all backed by real APIs | [Scene list](frontend/src/views/admin-redesign/manifest.ts) |
 
 <details>
 <summary><b>How one lesson round runs</b></summary>
@@ -230,19 +252,7 @@ Without a large sample of real learners, how do you know whether the teaching wo
 - **Independent judge**: after teaching ends, a judge that took no part in teaching, together with a role-fidelity audit, scores the teaching quality.
 - **Role card library**: the repository ships cards covering academic subjects, engineering practice, exams, business diagnosis and more; a card is only a profile, and the account is created when a learner is derived from it.
 
-A limitation worth knowing: virtual learners come with biases, and they are currently the main evaluation corpus, so a bias can be misread as a product trait. Known biases are quantified one by one in section 11 of the [design document](doc/VIRTUAL_LEARNER_DESIGN.md).
-
-</details>
-
-<details>
-<summary><b>Admin console</b></summary>
-
-Beyond the learner app there is an operations and observability console (`/admin`), all backed by real APIs:
-
-- **Prompt Studio (File-as-Truth)**: edit prompts online, compile with gates, publish and roll back in one click; local YAML sources and the runtime mirror in the database stay in sync.
-- **End-to-end observability**: token cost, model latency, agent execution chains and retry timelines for every call.
-- **Model routing**: any OpenAI-compatible provider; fast or reasoning models can be assigned per Agent / Skill, and users can bring their own API key. Precedence: environment variables → platform defaults → Agent / Skill level → user overrides.
-- **Operations workbench**: teaching sessions, learning-state risks, review backlog, feedback and announcements.
+A limitation worth knowing: virtual learners come with biases, and they are currently the main evaluation corpus, so a bias can be misread as a product trait. Known biases are quantified one by one in section 11 of the [design document](doc/VIRTUAL_LEARNER_DESIGN.md); the run chain is documented in the [chain doc](doc/VIRTUAL_LEARNER_CHAIN.md).
 
 </details>
 
@@ -313,7 +323,7 @@ The personal centre lives under `/user/*`: account, settings (including API acce
 <details>
 <summary><b>Page map: admin console</b></summary>
 
-The admin console lives at `/admin`. The sidebar has five groups plus a pinned platform overview:
+The admin console lives at `/admin`, and every view is backed by real APIs: token cost, model latency, agent execution chains and retry timelines for each call are all visible here. The sidebar has five groups plus a pinned platform overview:
 
 - **Operations**: operations centre (to-dos, feedback, achievements, announcements, notifications), system settings (models and access, data export, session security, access and registration), user accounts
 - **Learning**: goal conversations, learning paths, teaching sessions, learning state, review backlog
@@ -321,11 +331,15 @@ The admin console lives at `/admin`. The sidebar has five groups plus a pinned p
 - **Skill**: field flow, Skill catalogue, plugins
 - **Observability and diagnosis**: execution logs, audit log, cost analysis, health centre
 
+The operations workbench covers teaching sessions, learning-state risks, review backlog, feedback and announcements.
+
 The authoritative scene list is [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts); the history of pages added, retired, and redirected lives in [`CHANGELOG.md`](CHANGELOG.md).
 
 </details>
 
 ## Operations
+
+Deployment topology (Docker / local Nginx), reverse proxy and frontend environment variables live in [`DEPLOYMENT.md`](DEPLOYMENT.md) (Chinese); this section keeps the in-repo operations entry points.
 
 <details>
 <summary><b>LAN development mode (phones / tablets)</b></summary>
@@ -336,31 +350,6 @@ npm run dev:lan                        # detect the LAN IP automatically
 ```
 
 Adds the LAN IP to `CORS_ORIGIN` for multi-device testing of the learner app; it does not change the admin `ADMIN_ACCESS_MODE` restriction.
-
-</details>
-
-<details>
-<summary><b>Local Nginx test deployment (HTTP)</b></summary>
-
-```bash
-npm run dev:nginx                          # requires nginx on PATH
-./start-dev.ps1 -UseNginx -Domain test.example.com
-./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
-```
-
-Builds the frontend and writes a runtime config to `runtime/nginx/wenflow.nginx.conf`; it checks that port 80 is free before starting.
-
-</details>
-
-<details>
-<summary><b>Docker deployment (Linux / macOS)</b></summary>
-
-```bash
-./docker-start.sh        # interactively completes backend/.env, then starts
-docker compose -f docker-compose.operations.yml run --rm backup   # DB backup (set WENFLOW_BACKUP_HOST_DIR first)
-```
-
-`docker-compose.yml` defines migrate / backend / nginx; it only publishes Nginx (80) and never publishes backend `3001`, and the backend is forced to `ADMIN_ACCESS_MODE=private`. See [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 </details>
 
@@ -383,9 +372,9 @@ CI (`.github/workflows/quality-check.yml`) runs on push to main/master/develop a
 </details>
 
 <details>
-<summary><b>Prompt bootstrap and maintenance (File-as-Truth)</b></summary>
+<summary><b>Prompt bootstrap and maintenance</b></summary>
 
-The source of truth is `prompts/core/*.yaml` (the only hand-edited entry point, tracked in git); compiled artifacts are `prompts/skill.*.md` (the only text the model reads); the `agent_prompts` table in the database is a runtime mirror. The edit → compile → publish chain (with gates and rollback) is operated from the admin Prompt Studio; the mechanism is documented in [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) and the directory notes in [`prompts/_README.md`](prompts/_README.md).
+The source of truth is `prompts/core/*.yaml`, compiled artifacts are `prompts/skill.*.md`, and the `agent_prompts` table is only a runtime mirror. The mechanism behind edit → compile → publish is in [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md), and the directory notes are in [`prompts/_README.md`](prompts/_README.md).
 
 ```bash
 cd backend
@@ -411,14 +400,6 @@ Two SQLite databases; relative URLs resolve against their own schema directory:
 - Backup and maintenance: `npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`
 - **After switching worktrees or moving the directory, the app may connect to the wrong database**: the generated Prisma client records the relative path at generation time in `node_modules/.prisma/client/index.js`, so the app can keep resolving to another tree's DB while the CLI migrates the current one. Fix it by regenerating in the current workspace: `npm --prefix backend run prisma:prepare`.
 - Do not use the legacy `file:./prisma/*.db`, and do not change the System URL to `file:./system.db`.
-
-</details>
-
-<details>
-<summary><b>Frontend API environment variables</b></summary>
-
-- By default the frontend calls the backend through the relative `/api` path, proxied by Vite or Nginx; keep the default unless you have a specific deployment need.
-- The only recognised setting is `VITE_API_BASE_URL` (`frontend/.env`); development always goes through the `/api` proxy, which is also the default.
 
 </details>
 
@@ -458,7 +439,7 @@ The full list lives in the root `package.json` and [`doc/DEV_SCRIPTS.md`](doc/DE
 
 ## Documentation
 
-- Documentation index: [`doc/README.md`](doc/README.md) (organised as “living specs / design traces / historical snapshots”; Chinese)
+- Documentation index: [`doc/README.md`](doc/README.md) (organised as “living specs / design docs / references / result ledgers”; Chinese)
 - Deployment / security / operations: [`DEPLOYMENT.md`](DEPLOYMENT.md) · [`SECURITY.md`](SECURITY.md) · [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
 - Development scripts: [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)

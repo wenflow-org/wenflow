@@ -4,8 +4,7 @@
 
 **先说清你想解决的事，再开始学习。**
 
-**问流 WenFlow** 是开源、可自托管的 AI 原生学习平台：先把模糊的目标聊清楚，再生成学习路径，
-用带白板的回合制课堂带你学，并按遗忘曲线安排复习、按训练负荷管住节奏。
+**问流 WenFlow** 是开源、可自托管的 AI 原生学习平台：先把模糊的目标聊清楚，再生成学习路径，用带白板的回合制课堂带你学，并按遗忘曲线安排复习、按训练负荷管住节奏。
 
 [![Demo](https://img.shields.io/badge/demo-wenflow.org-2563eb.svg)](https://wenflow.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -35,18 +34,26 @@
 
 背后的想法写在[愿景页](https://wenflow.org/vision)。
 
-## 用一个真实目标走一遍
+## 它适合什么样的目标
 
-以「每周做 Excel 周报太花时间，想用 Python 自动化」这个目标为例：
+平台的主场不是「学会某个工具的操作」——格式转换、批量计算、按菜单点这类重复劳动，本来就该交给 AI 代跑。它擅长的是**判断与理解型目标**：结论要你自己下，AI 只搭脚手架。
+
+比如：孩子不愿写作业，一催就吵。想搞清楚他到底为什么不愿意写，以后遇到类似情况能自己判断该不该管、怎么管。
+
+这类目标不会停在「了解一下儿童心理」。AI 先追问孩子的年级、磨蹭时的具体样子、你现在怎么处理，再把「懒」这个说法拆成能看见的信号；路径按「分清成因 → 看清催促的作用 → 拿自家一晚做判断」排成三个阶段；课堂检查点给的是一个新的作业冲突场景，让你说出成因、依据和第一句话，而不是背定义。
+
+## 界面走查（一个判断型目标）
+
+同一个目标，从一句话到上完第一节课：
 
 | ![目标澄清：AI 连续追问，左侧实时收集目标信息](doc/images/goal-clarification.png) | ![学习路径：阶段、任务与进度](doc/images/learning-path.png) |
 |---|---|
-| ![课堂白板：随讲解更新的流程图](doc/images/round-based-learning.png) | ![学习状态：训练负荷、疲劳度与整体状态趋势](doc/images/learning-state.png) |
+| ![课堂白板：随讲解更新的归因对照表](doc/images/round-based-learning.png) | ![学习状态：训练负荷、疲劳度与今天的安排](doc/images/learning-state.png) |
 
-- **① 聊清目标**（左上）：先追问再动手——基础、动机、每天能投入多久。7 轮问完，目标收窄成「4 周内跑通第一个可用脚本」。
-- **② 生成路径**（右上）：你确认之后才排课——4 个阶段、19 节课，按工作日 40 分钟的节奏排好。
-- **③ 带白板的课堂**（左下）：讲到流程、对照、映射这类结构性内容时直接画上白板，随讲随更新；讲一段、问一段，答完即时反馈。
-- **④ 学习状态**（右下）：训练负荷与疲劳度的趋势，冲太猛时提醒你减速。
+- **① 聊清目标**（左上）：先追问再动手——孩子几年级、磨蹭时具体是什么样、两三周内想拿到什么。左边 7 个字段实时收集，其中 3 个是平台根据你的话先填的，标成「平台暂定」，随时可改。
+- **② 生成路径**（右上）：你确认之后才排课——3 个阶段、两三周的窗口、一次 25 分钟；第一阶段的 3 节课已经备好，后面两个阶段按你的实际表现再生成。第一节课先拿「懒」这句话开刀。
+- **③ 带白板的课堂**（左下）：讲一段、问一段。老师把「就是懒」和三条事实并排摆到板上，逐格填内部/外部、稳定/不稳定、可控/不可控；你答完，板子跟着长，答偏了当场指出偏在哪。
+- **④ 学习状态**（右下）：这节课一共 43 分钟，训练负荷与疲劳度各 29.5、整体状态偏低，页面直接给出「以复习或轻量任务为主」；它也记得你这节课哪一格还没站稳，标到下节课开头优先巩固。
 
 另外：
 
@@ -78,23 +85,37 @@ git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
 npm ci && npm --prefix backend ci && npm --prefix frontend ci
 
-# 2) 配置 backend/.env
-#    Windows：交互式向导，JWT_SECRET 与加密密钥自动生成，只需填 AI_API_KEY
+# 2) 配置 backend/.env（Windows 交互式向导；Linux / macOS 见下方折叠）
 npm run env:setup
-#    Linux / macOS：向导是 PowerShell 脚本，改为手工配置
-#    cp backend/.env.example backend/.env
-#    至少填写四项：
-#      JWT_SECRET=<至少 32 位随机串>
-#      SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
-#      SECRET_ENCRYPTION_KEYS=v1:<32 字节 Base64>
-#      AI_API_KEY=<真实 key>
-#    生成随机值：
-#      node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
-#      node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
 
 # 3) 一键启动（双库迁移、同步内置 Prompt，再拉起前后端）
 npm run dev
 ```
+
+<details>
+<summary><b>Linux / macOS 手工配置 backend/.env</b></summary>
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+至少填写四项（`JWT_SECRET` ≥32 位随机串，加密键为 32 字节 Base64）：
+
+```dotenv
+JWT_SECRET=<至少 32 位随机串>
+SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
+SECRET_ENCRYPTION_KEYS=v1:<32 字节 Base64>
+AI_API_KEY=<真实 key>
+```
+
+生成随机值：
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
+```
+
+</details>
 
 启动后：
 
@@ -166,12 +187,12 @@ WenFlow 由个人独立研发，自 2026 年 4 月首个版本起持续迭代，
 | 课堂回合协议 | 讲解、提问、随堂检查按回合推进；连续卡壳时切到「伴学补强」，课后的掌握证据写回学习者画像 | [Agent / Skill 全景](doc/AGENT_SKILL_MANUAL.md) |
 | 学习者模型 | 把长期画像、近期状态、路径级记忆（FSRS-6 复习调度）聚合成一份学习者快照，供教学与路径重排消费 | [学习者模型架构](doc/LEARNER_MODEL_ARCHITECTURE.md) |
 | 学习负荷模型 | 借鉴耐力训练的负荷 / 疲劳 / 状态思路，按天推进，用相对量判断「还能不能加量」 | [学习者中心与状态融合](doc/LEARNER_CENTER_AND_STATE_FUSION.md) |
-| 虚拟学习者实验室 | 用角色卡派生 AI 学习者，像真实用户一样黑盒跑完整学习流程，再由独立裁判给教学打分 | [设计](doc/VIRTUAL_LEARNER_DESIGN.md) · [链路](doc/VIRTUAL_LEARNER_CHAIN.md) |
 | 教育理论映射 | 每条教学设计登记理论来源、文献与代码落点 | [教育理论地图](doc/EDUCATIONAL_THEORY_MAP.md) |
 | 路径生产与重排 | 路径怎么生成、何时触发重排的契约 | [契约](doc/PATH_PRODUCTION_REPLAN_CONTRACT.md) |
 | 提示词与 Skill | File-as-Truth：YAML 真源 → 编译产物 → 数据库镜像，带守门检查与一键回滚 | [Skill 协议 v4](doc/SKILL_PROTOCOL_V4.md) · [开发指南](doc/SKILL_DEVELOPMENT_GUIDE.md) |
 | 模型网关 | OpenAI 兼容接入，按 Agent / Skill 路由模型，SSE 流式、重试预算、思考模式 | [网关设计](doc/MODEL_GATEWAY_DESIGN.md) |
-| 课堂白板 | 教学图的理论依据与证据分级 | [教学图研究](doc/DIAGRAM_PEDAGOGY_RESEARCH.md) |
+| 课堂白板 | 结构化教学图按回合随讲随画、逐格更新，把因果与对照画出来，降低纯文字认知负荷 | [教学图研究](doc/DIAGRAM_PEDAGOGY_RESEARCH.md) |
+| 管理后台 | 学习端之外的运营与可观测后台（`/admin`），数据全部来自真实 API | [页面清单](frontend/src/views/admin-redesign/manifest.ts) |
 
 <details>
 <summary><b>课堂的一个回合是怎么跑的</b></summary>
@@ -227,19 +248,7 @@ flowchart TD
 - **独立裁判**：教学结束后，由不参与教学的裁判与角色保真审计给教学质量打分。
 - **角色卡库**：仓库自带覆盖学科、工程实操、应试、业务诊断等场景的角色卡；卡只是档案，派生学习者时才创建账号。
 
-需要知道的局限：虚拟学习者自带偏置，而它目前是主要的评测语料，偏置可能被误读成产品特性。已知偏差在[设计文档](doc/VIRTUAL_LEARNER_DESIGN.md)第 11 节逐条量化。
-
-</details>
-
-<details>
-<summary><b>管理后台</b></summary>
-
-学习端之外还有一套运营与可观测后台（`/admin`），数据全部来自真实 API：
-
-- **Prompt 设计台（File-as-Truth）**：在线编辑提示词、编译守门、发布与一键回滚；本地 YAML 源码与数据库运行镜像自动同步。
-- **全链路可观测**：每次调用的 Token 成本、模型耗时、Agent 执行链路与重试时间线。
-- **模型路由**：兼容所有 OpenAI 接口的供应商，可按 Agent / Skill 分配快模型或推理模型，也支持用户自带 API Key；配置优先级为环境变量 → 平台默认 → Agent / Skill 级 → 用户自定义。
-- **运营工作台**：教学会话、学习状态风险、复习积压、反馈与公告。
+需要知道的局限：虚拟学习者自带偏置，而它目前是主要的评测语料，偏置可能被误读成产品特性。已知偏差在[设计文档](doc/VIRTUAL_LEARNER_DESIGN.md)第 11 节逐条量化；链路实现见[链路说明](doc/VIRTUAL_LEARNER_CHAIN.md)。
 
 </details>
 
@@ -310,7 +319,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 <details>
 <summary><b>页面地图：管理端</b></summary>
 
-管理后台在 `/admin`，侧栏分五组，另有一个置顶的平台总览：
+管理后台在 `/admin`，数据全部来自真实 API：每次调用的 Token 成本、模型耗时、Agent 执行链路与重试时间线都能在这里查到。侧栏分五组，另有一个置顶的平台总览：
 
 - **运营**：运营中心（待办、反馈、成就、公告、站内通知）、系统设置（模型与接入、数据导出、会话安全、访问与注册）、用户账号
 - **学习**：目标对话、学习路径、教学会话、学习状态、复习积压
@@ -318,11 +327,15 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 - **Skill**：字段流转、Skill 目录、插件
 - **观测与排查**：执行日志、审计日志、成本分析、健康中心
 
+运营工作台覆盖教学会话、学习状态风险、复习积压、反馈与公告。
+
 页面清单以 [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts) 为准；页面新增、下线与旧链接重定向的历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 </details>
 
 ## 运维与进阶
+
+部署拓扑（Docker / 本机 Nginx）、反向代理与前端环境变量见 [`DEPLOYMENT.md`](DEPLOYMENT.md)；下面只留仓库内的运维入口。
 
 <details>
 <summary><b>局域网多设备调试（手机 / 平板真机）</b></summary>
@@ -333,31 +346,6 @@ npm run dev:lan                     # 自动获取局域网 IP
 ```
 
 会把局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不改变管理员登录的 `ADMIN_ACCESS_MODE` 限制。
-
-</details>
-
-<details>
-<summary><b>本机 Nginx 测试部署（HTTP）</b></summary>
-
-```bash
-npm run dev:nginx                        # 依赖本机已装 nginx 且在 PATH
-./start-dev.ps1 -UseNginx -Domain test.example.com
-./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
-```
-
-会自动构建前端并生成配置到 `runtime/nginx/wenflow.nginx.conf`，启动前校验 80 端口可用。
-
-</details>
-
-<details>
-<summary><b>Docker 部署（Linux / macOS）</b></summary>
-
-```bash
-./docker-start.sh          # 交互式补齐 backend/.env 后启动
-docker compose -f docker-compose.operations.yml run --rm backup   # 数据库备份（需先设 WENFLOW_BACKUP_HOST_DIR）
-```
-
-`docker-compose.yml` 提供 migrate / backend / nginx 三个服务，默认只发布 Nginx（80），不发布后端 3001；后端强制 `ADMIN_ACCESS_MODE=private`。详见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
 
 </details>
 
@@ -380,9 +368,9 @@ CI（`.github/workflows/quality-check.yml`）在 push main/master/develop 与 PR
 </details>
 
 <details>
-<summary><b>Prompt 初始化与维护（File-as-Truth）</b></summary>
+<summary><b>Prompt 初始化与维护</b></summary>
 
-真源是 `prompts/core/*.yaml`（唯一人工编辑入口，进 git），编译产物是 `prompts/skill.*.md`（模型唯一读取文本），数据库 `agent_prompts` 只是运行时镜像。编辑 → 编译 → 发布链路（含守门检查与回滚）在管理端「Prompt 设计台」操作，机制见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)，目录说明见 [`prompts/_README.md`](prompts/_README.md)。
+真源是 `prompts/core/*.yaml`，编译产物是 `prompts/skill.*.md`，数据库 `agent_prompts` 只是运行时镜像；编辑 → 编译 → 发布的机制见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)，目录说明见 [`prompts/_README.md`](prompts/_README.md)。
 
 ```bash
 cd backend
@@ -408,14 +396,6 @@ npm run prompts:lint && npm run prompts:core:check
 - 备份与维护：`npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`
 - **换 worktree 或移动目录后连错库**：Prisma 客户端会把生成时的相对路径写进 `node_modules/.prisma/client/index.js`，应用可能仍解析到另一棵树的库，表现为“迁移与运行数据分离”。修复方式是**在当前工作区**重新生成客户端并部署迁移：`npm --prefix backend run prisma:prepare`。
 - 不要继续使用旧的 `file:./prisma/*.db`，也不要把 System URL 改成 `file:./system.db`。
-
-</details>
-
-<details>
-<summary><b>前端 API 环境变量</b></summary>
-
-- 默认前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发；无特殊部署需求保持默认即可。
-- 配置只认 `VITE_API_BASE_URL`（`frontend/.env`）；开发模式固定走 `/api` 代理，缺省值也是 `/api`。
 
 </details>
 
@@ -455,7 +435,7 @@ npm run prompts:lint && npm run prompts:core:check
 
 ## 文档
 
-- 文档总索引：[`doc/README.md`](doc/README.md)（按「活规范 / 设计留痕 / 历史快照」分类）
+- 文档总索引：[`doc/README.md`](doc/README.md)（按「活规范 / 设计方案 / 参考资料 / 结果台账」分类）
 - 部署 / 安全 / 运营：[`DEPLOYMENT.md`](DEPLOYMENT.md) · [`SECURITY.md`](SECURITY.md) · [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
 - 开发脚本：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
 - 更新日志：[`CHANGELOG.md`](CHANGELOG.md)
