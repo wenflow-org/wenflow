@@ -115,10 +115,12 @@ describe('学习台到期/复习口径（走查 2026-10-08 #74）', () => {
 describe('学习台成就提示口径（走查 2026-10-08 #75）', () => {
   it('直接展示服务端中文描述，不再二次展开 KTL', () => {
     /* 2026-11-24：目标与进度拆成两个 span（320 下整句曾在「·」后断行），
-       服务端中文描述仍然原样展示。 */
+       服务端中文描述仍然原样展示；2026-11-25：分隔点在换行后起行，标点撤掉，
+       两段只靠 8px 间距分家。 */
     expect(source).toContain("goal: nearest.description || ''");
-    expect(source).toContain('progress: `· 进度 ${prog}`');
+    expect(source).toContain('progress: `进度 ${prog}`');
     expect(source).toContain('week__note-progress');
+    expect(source).not.toMatch(/progress: `·\s*进度/);
     expect(source).not.toContain("replace(/KTL/g");
   });
 });
@@ -131,7 +133,7 @@ describe('学习台成就提示口径（走查 2026-10-08 #75）', () => {
  * 底边根本不齐」；「左上角 56×56 的灰色大方块独占 64px 高」「3 个示例用了虚线边框，像填空题
  * 不像按钮」。
  *
- * 四条修法逐条锁死：① 7 天打卡条常驻（今日 0 分钟显示「待点亮」）；② 图标盘 40px 与标题同行；
+ * 四条修法逐条锁死：① 7 天打卡条常驻（今日 0 分钟显示「今天」）；② 图标盘 40px 与标题同行；
  * ③ 示例芯片实线细边 + 36px + ↗；④ 空态双栏两卡等高。
  */
 describe('学习台新手态：日历常驻 / 图标同行 / 芯片实线 / 双栏等高（走查 2026-11-07）', () => {
@@ -139,7 +141,7 @@ describe('学习台新手态：日历常驻 / 图标同行 / 芯片实线 / 双�
     expect(html, '.cal 又被 hasAnyMinutes 门槛挡住：0 分钟的新用户看不到日历').not.toMatch(/v-else-if="hasAnyMinutes"\s*\n?\s*class="cal"/);
     expect(html, '日历条不在模板里').toContain('class="cal"');
     expect(source, '虚线空态 .week__empty 应整块退役').not.toContain('week__empty');
-    expect(html, '今日 0 分钟应给「待点亮」，否则又是一个没有任何提示的空格').toContain("d.isToday ? '待点亮' : '—'");
+    expect(html, '今日 0 分钟应给「今天」，否则又是一个没有任何提示的空格').toContain("d.isToday ? '今天' : '—'");
   });
 
   it('② 空态图标盘 40px，且与标题同行（不再独占一行）', () => {
@@ -169,7 +171,7 @@ describe('学习台新手态：日历常驻 / 图标同行 / 芯片实线 / 双�
     expect(css, '右卡注释没沉到卡底，两卡底部对不齐').toContain('.dash--empty .week { align-content: space-between; }');
   });
 
-  it('移动端「待点亮」不被省略号切掉（列间距收到 3px）', () => {
-    expect(css, '窄屏列间距没收，三字的「待点亮」会溢出成「待点…」').toContain('.cal__grid { column-gap: 3px; }');
+  it('移动端今日格文字不被省略号切掉（列间距收到 3px）', () => {
+    expect(css, '窄屏列间距没收，今日格文字会溢出成省略号').toContain('.cal__grid { column-gap: 3px; }');
   });
 });

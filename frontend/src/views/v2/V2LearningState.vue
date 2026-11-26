@@ -290,9 +290,8 @@
               <svg class="advisory__star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/></svg>
               <strong>调控建议</strong>
               <span class="band__meta">{{ suggestSource }}</span>
-              <!-- 待确认角标（2026-11-05 用户定稿）：有可执行调整时亮出状态，
-                   与下方「采用建议 / 保持原计划」对上 -->
-              <span v-if="pendingAdjust.length" class="advisory__pending">待确认</span>
+              <!-- 2026-11-25：卡头「待确认」角标撤掉——下方「待我处理 1」已经是同一状态的
+                   唯一标签，两处都在说「这几条要你确认」。状态只留一处，卡片本身展示内容。 -->
             </div>
             <!-- 加载失败常显（收起也不许吞掉错误，P1 口径）：guidance 失败可见提示、可原地重试，
                  不再冒充"没有数据" -->
@@ -327,8 +326,11 @@
                     <span>{{ advicePlan }}</span>
                   </p>
                 </div>
-                <!-- 依据行保留：它是新信息（课堂证据），不在「重复说三遍」之列 -->
-                <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}</p>
+                <!-- 依据行保留：它是新信息（课堂证据），不在「重复说三遍」之列。
+                     2026-11-25 走查：有待确认卡时，卡内 .ctl-card__evidence 展示的是同一条
+                     课堂证据，紧随其后的卡又写一遍「依据：…」；此时以上方摘要不再复读，
+                     证据由卡片承担（两张卡相距不足 100px）。 -->
+                <p v-if="evidenceHint && !pendingAdjust.length" class="guide__evidence">依据：{{ evidenceHint }}</p>
                 <!-- 诊断自报无证据时建议降级为参考口径（state/iphone/6）：明说建议不再是
                      调整依据，动作按钮已随 hasAdvisoryAction 撤下 -->
                 <p v-if="reviewLacksEvidence" class="guide__evidence guide__evidence--warn">本次没有可依据的课堂证据，AI 建议仅供参考，暂不作为调整依据。</p>
@@ -1894,7 +1896,7 @@ function loadGuidance() {
    数字不再各走一套折线色——否则绿点配蓝数字、紫点配绿数字，看图时大脑对不上。
    暗色档补纯白（--wf-neutral-950 在暗色档 = #FFFFFF）：--ink 是 #efeff0 的柔白，
    与本页「关键数值纯白」的定稿差一档。 */
-.vitals--meta b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); }
+.vitals--meta b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
 [data-theme='dark'] .vitals--meta b { color: var(--wf-neutral-950); }
 .vitals--meta b i { font-size: var(--mk-fs-12); font-style: normal; font-weight: 600; color: var(--faint); }
 /* 分档标签 = 紧凑小方签（2026-11-05 全局去肥胖化；2026-11-06 审计 §1）：
@@ -1914,6 +1916,17 @@ function loadGuidance() {
    趋势卡满宽后 4 格一字排开正好填满横向。768~1023 是平板档，仍走 2×2。 */
 @media (min-width: 1024px) {
   .vitals--meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+/* 320 档（2026-11-25 走查）：卡内宽只剩 ~106px，「77.41 分」与「精力充沛」并排时
+   单位被拆到下一行（77.4 / 分），标签则被省略成「精力…」——两项都在丢信息。
+   这一档四张卡统一改成 label / 数值 / 档位三行：数值 + 单位不断开，4 字档位签放得下、
+   不再省略，四格的内部节奏也保持一致（不再只有第一格换行）。 */
+@media (max-width: 360px) {
+  .vitals--meta .vitals__foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
 }
 /* 胶囊底色用「前景 ink × 表面」混色：暗色主题自动降饱和（外部评审：原 rgba 撞色在暗底上刺眼） */
 .metric__note--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 13%, var(--surface)); }
@@ -2033,7 +2046,7 @@ function loadGuidance() {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px;
   padding: 14px 16px 16px;
   /* 4px 琥珀左边条已撤（2026-11-05 用户定稿）：诊断/建议/调控日志全卡共染一色后，
-     「需要确认的」和「系统已办完的」分不出轻重；状态交给右上「待确认」角标 */
+     「需要确认的」和「系统已办完的」分不出轻重；状态由下方「待我处理 N」承担 */
 }
 .advisory__head {
   display: flex; align-items: center; gap: 7px;
@@ -2043,16 +2056,6 @@ function loadGuidance() {
 .advisory__star { width: 15px; height: 15px; flex: 0 0 auto; color: var(--amber); }
 /* 卡头右侧的来源标注（AI 生成 / 系统建议）：跟 head 同色会抢星标语义，压回 meta 灰 */
 .advisory__head .band__meta { margin-left: auto; font-weight: 600; color: var(--faint); }
-/* 待确认小方签（2026-11-05；2026-11-06 审计 §1 收口）：12px 字 + 16px 行高 + 2px 内衬
-   = 20px 高，4px 圆角，琥珀 12% 半透明底、无描边 */
-.advisory__pending {
-  flex: 0 0 auto;
-  font-size: var(--mk-fs-12); font-weight: 800; line-height: 16px;
-  white-space: nowrap;
-  color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber-ink) 12%, var(--surface));
-  padding: 2px 6px; border-radius: var(--mk-radius-xs);
-}
 .advisory__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px; }
 .advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
 .advisory__multi { margin: 0; font-size: 12.5px; color: var(--muted); }
@@ -2281,6 +2284,36 @@ function loadGuidance() {
   .ctl-card__confirm .ctl-btn { min-height: 44px; flex: 1; }
   .adv-btn { min-height: 44px; flex: 1; }
   .ctl__rows li { flex-wrap: wrap; }
+  /* 卡头（2026-11-25 走查）：路径名药丸 + 「近 N 次课反复提示」+ 时间三者同排，
+     390 下药丸被截成「每周 Excel 报表合并…」——专有名词不该省略。允许换行后：
+     第一行药丸 + 时间（贴右），「近 N 次」自然落到第二行，药丸在 390/320 都能读全。 */
+  .ctl-card__head { flex-wrap: wrap; row-gap: 4px; }
+  .ctl-card__head time { order: 2; }
+  .ctl-card__merged { order: 3; }
+}
+
+/* 320 档（2026-11-25 走查）：复习清单条目名只剩 ~115px，「读入Excel为DataFrame」
+   被截成「读入Excel为Data…」，手机上也没有悬停看全称的退路。改成两行：
+   名称独占一行（可折行），进度条与百分比在下一行。 */
+@media (max-width: 360px) {
+  .rlist__row {
+    grid-template-columns: minmax(0, 1fr) 40px;
+    grid-template-areas: "name name" "bar pct";
+    row-gap: 6px;
+  }
+  .rlist__name {
+    grid-area: name;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.45;
+  }
+  .rlist__row .wf-bar { grid-area: bar; }
+  .rlist__pct { grid-area: pct; }
+  /* 卡头在 320 会折成两行：第一行路径名，第二行「近 N 次提示 + 时间」。
+     调换后两行的读法才是「是什么 → 提示了什么 → 什么时候」。 */
+  .ctl-card__head .ctl-card__merged { order: 2; }
+  .ctl-card__head time { order: 3; margin-left: auto; }
 }
 </style>
 
