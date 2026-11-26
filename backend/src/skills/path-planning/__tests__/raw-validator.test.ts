@@ -1,6 +1,7 @@
+import { vi } from 'vitest';
 import { validatePathPlanningOutput, validateScopeBinding } from '../index';
 import { resolveSubjectScope } from '../../../services/learning/subject-scopes';
-import { normalizeMilestonesWithConcepts } from '../../../services/learning/generation/path-generation.core';
+import { normalizeMilestonesWithConcepts, stripSubjectBookAnchor } from '../../../services/learning/generation/path-generation.core';
 import { logger } from '../../../utils/logger';
 
 describe('path-planning raw validator', () => {
@@ -253,7 +254,7 @@ describe('#171-3 落库层：去掉 conceptIds[0] 静默回退（不塌缩到 co
   };
 
   it('命中已声明 id 时正常绑定；未命中时置空（非 conceptIds[0]）并记 warning 暴露塌缩', () => {
-    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     try {
       const milestones = [
         { stageNumber: 1, title: 't1', coreConcept: 'concept-1' },
@@ -306,5 +307,50 @@ describe('范围绑定（Scope）：阶段概念必须落在学习范围内', ()
   it('没有范围（未命中注册表）→ 不做约束，保持旧行为', () => {
     const parsed = build(['任何概念'], ['任何阶段']);
     expect(validateScopeBinding(parsed, null).valid).toBe(true);
+  });
+});
+
+describe('subject 拓扑：单元透镜互异', () => {
+  const subjectOutput = (topology: string, stageConcepts: string[]) => ({
+    name: '初二物理·从测量到力与运动',
+    topology,
+    pathDeliverable: '能对整册各单元的概念与实验做出判断并独立写出实验报告',
+    milestones: stageConcepts.map((c, i) => ({ stageNumber: i + 1, title: `第${i + 1}单元`, coreConcept: c })),
+    cognitiveCore: {
+      coreConcepts: [
+        { id: 'concept-1', name: '机械运动·参照物依赖', role: 'hub' },
+        { id: 'concept-2', name: '质量与密度·同体积比质量', role: 'supporting' },
+        { id: 'concept-3', name: '声现象·介质与频率', role: 'supporting' },
+      ],
+    },
+  });
+
+  it('两个单元复用同一透镜 → PATH_PLANNING_DUPLICATE_LENS', () => {
+    const result = validatePathPlanningOutput(subjectOutput('subject', ['concept-1', 'concept-1', 'concept-2'])) as { valid: boolean; failureReason?: string };
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toContain('PATH_PLANNING_DUPLICATE_LENS');
+    expect(result.failureReason).toContain('concept=concept-1');
+  });
+
+  it('每个单元各有一副透镜 → 通过', () => {
+    expect(validatePathPlanningOutput(subjectOutput('subject', ['concept-1', 'concept-2', 'concept-3'])).valid).toBe(true);
+  });
+
+  it('builder 拓扑下 hub 复用不被这条门挡住（旧行为不变）', () => {
+    expect(validatePathPlanningOutput(subjectOutput('builder', ['concept-1', 'concept-1', 'concept-2'])).valid).toBe(true);
+  });
+});
+
+describe('subject 阶段 goal：删掉全书级括注', () => {
+  const textbook = '人教版《物理》八年级上册（2024新版），绪言+6章共26节';
+  it('括注里出现本次教材锚才删；单元级括注、无教材锚都不动', () => {
+    expect(stripSubjectBookAnchor(
+      '能按分度值读出长度（对照人教版《物理》八年级上册（2024新版），绪言+6章共26节·期末）',
+      textbook,
+    )).toBe('能按分度值读出长度');
+    expect(stripSubjectBookAnchor('能说清参照物怎么选（第 2 章 声现象）', textbook)).toBe('能说清参照物怎么选（第 2 章 声现象）');
+    expect(stripSubjectBookAnchor('能整理报告（含目的、步骤、数据、结论）', textbook)).toBe('能整理报告（含目的、步骤、数据、结论）');
+    // 没有 schoolAnchor（textbook 缺省）→ 不做文本手术
+    expect(stripSubjectBookAnchor('能按分度值读出长度（对照人教版《物理》八年级上册·期末）')).toBe('能按分度值读出长度（对照人教版《物理》八年级上册·期末）');
   });
 });

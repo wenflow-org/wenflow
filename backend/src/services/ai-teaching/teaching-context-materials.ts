@@ -119,11 +119,11 @@ export function resolveEntryStateForTeaching(
  */
 export function resolvePathTopologyForTeaching(
   aiPromptTemplate: string | null | undefined,
-): 'exploratory' | 'builder' | 'exam' | 'diagnostic' | null {
+): 'exploratory' | 'builder' | 'exam' | 'diagnostic' | 'subject' | null {
   const parsed = parsePathPromptTemplate(aiPromptTemplate || null);
   if (!parsed) return null;
   const value = (parsed as { pathTopology?: unknown }).pathTopology;
-  return value === 'exploratory' || value === 'builder' || value === 'exam' || value === 'diagnostic'
+  return value === 'exploratory' || value === 'builder' || value === 'exam' || value === 'diagnostic' || value === 'subject'
     ? value
     : null;
 }

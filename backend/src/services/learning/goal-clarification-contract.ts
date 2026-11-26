@@ -514,12 +514,17 @@ const MILESTONE_SERVES = ['core', 'baseline', 'stopping', 'constraint'] as const
 /**
  * MilestoneRationale 审计：每个 milestone 必须声明它服务契约的哪一条；
  * 最后一个 milestone 必须服务 stopping（否则路径终点不产出停机证据）。
+ *
+ * `options.requireStopping=false` 用于 subject（教材/多单元平行）拓扑：这类路径没有
+ * 「贯穿单一作品」的收口，末单元不是全书终评，强制 stopping 会把最后一章扭曲成全书大作业。
  * 纯结构检查；语义级“真的服务了”由 path-reviewer 的 LLM 评审负责。
  */
 export function auditMilestoneRationales(
   milestones: unknown,
-  clarification: unknown
+  clarification: unknown,
+  options?: { requireStopping?: boolean }
 ): MilestoneRationaleAudit {
+  const requireStopping = options?.requireStopping !== false;
   const contract = normalizeClarificationContract(clarification);
   const list = Array.isArray(milestones) ? milestones : [];
   const missingRationale: number[] = [];
@@ -556,7 +561,7 @@ export function auditMilestoneRationales(
   if (invalidServes.length > 0) {
     reasons.push(`milestones[${invalidServes.join(',')}] 的 serves 不在 ${MILESTONE_SERVES.join('|')}`);
   }
-  if (list.length > 0 && !stoppingCovered) {
+  if (list.length > 0 && requireStopping && !stoppingCovered) {
     reasons.push('最后一个 milestone 没有 serves=stopping，路径终点不产出停机证据');
   }
 

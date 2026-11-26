@@ -153,6 +153,130 @@ export function validateStageDesignerOutput(parsed: any) {
 }
 
 /**
+ * subject（教材/多单元）阶段的小节覆盖审计（2026-11-25）。
+ *
+ * 实证：八年级上册第一阶段 description 明写「第一章 1.1–1.4」，第一节任务却只给了
+ * 绪言 / 读数 / 误差 / 参照物四节，1.3 运动的快慢与 1.4 测量平均速度整节消失——
+ * 阶段 goal 还承诺了平均速度判断。prompt 规则管不住时，至少要在任务层看见缺口。
+ *
+ * 只认**区间写法**（1.1–1.4 / 4.1–4.5），不做单点数字匹配：教材正文里的「1.5 倍」
+ * 只认**列表/区间写法**，不扫全文小数：教材正文里的「1.5 倍」「2.5 米」会被误判成小节号。
+ * 支持两种清单：
+ *   ① 区间：`1.1–1.4`、`4.1–4.5`
+ *   ② 逐条列举：`本章小节：1.1 集合的概念；1.2 集合间的基本关系；…`（2026-11-25 数学实跑——
+ *      模型按「节号+小节名」列举而不是区间，旧解析器返回空，覆盖门静默失效，1.5 量词整节消失）
+ */
+export function extractStageSections(milestone: any): string[] {
+  const text = [milestone?.title, milestone?.description, milestone?.goal]
+    .filter((item) => typeof item === 'string' && item)
+    .join('\n');
+  if (!text) return [];
+  const found = new Set<string>();
+  const rangeRe = /(\d+)\.(\d+)\s*[–—\-~～至到]\s*(?:(\d+)\.)?(\d+)/g;
+  for (const match of text.matchAll(rangeRe)) {
+    const chapter = match[1];
+    const from = Number(match[2]);
+    const toChapter = match[3] ?? chapter;
+    const to = Number(match[4]);
+    if (toChapter !== chapter) continue;
+    if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    if (hi - lo > 15) continue;
+    for (let i = lo; i <= hi; i += 1) found.add(`${chapter}.${i}`);
+  }
+  if (found.size === 0) {
+    // 列举式清单：优先取「小节清单/本章小节/本章主干：」后的清单段（可能不在第一句——
+    // 数学路径首句是章名，清单在第二句）；没有标记时退回第一句。
+    // 至少出现 2 个小节号才认——单个小数（「放大 1.5 倍」）不会被当成章节清单。
+    const checklist = text.match(/(?:小节清单|本章小节|本章主干)[：:]([^。]*)/)?.[1]
+      ?? text.split('。')[0]
+      ?? '';
+    const singles = [...checklist.matchAll(/(\d+)\.(\d+)/g)]
+      .map((match) => ({ chapter: Number(match[1]), section: Number(match[2]) }))
+      .filter((item) => item.chapter >= 1 && item.chapter <= 30 && item.section >= 1 && item.section <= 40);
+    const unique = new Map(singles.map((item) => [`${item.chapter}.${item.section}`, item]));
+    if (unique.size >= 2) {
+      for (const key of unique.keys()) found.add(key);
+    }
+  }
+  return [...found].sort((a, b) => {
+    const [ac, as] = a.split('.').map(Number);
+    const [bc, bs] = b.split('.').map(Number);
+    return ac - bc || as - bs;
+  });
+}
+
+/**
+ * 本阶段的「单元清单」：优先取 ①②③ 形式的条目，其次取节号清单（1.1–1.4 / 列举）。
+ * 清单是**结构化契约**的锚点：任务用 `covers: [序号]` 声明自己覆盖了哪几条，
+ * 覆盖校验只看序号，不做「任务文本里有没有出现某关键词」的模糊匹配。
+ */
+export function extractStageChecklist(milestone: any): string[] {
+  const text = [milestone?.title, milestone?.description, milestone?.goal]
+    .filter((item) => typeof item === 'string' && item)
+    .join('\n');
+  if (!text) return [];
+  // ①②③ 只有出现在**教材语境**里才当单元清单：builder/diagnostic 的阶段描述也常用
+  // ①②③ 列工作步骤，那不是在讲“这一个单元有哪几节”，不能据此要求 covers。
+  const unitContext = /(本章|这一章|单元|小节|教材|第\s*[0-9一二三四五六七八九十]+\s*章)/.test(text);
+  const circle = unitContext
+    ? [...text.matchAll(/([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳])([^①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]*)/g)]
+      .map((match) => match[2].replace(/^[：:、\s]+/u, '').split('。')[0].trim())
+      .filter(Boolean)
+    : [];
+  if (circle.length >= 2) return circle;
+  return extractStageSections(milestone);
+}
+
+/**
+ * 阶段清单覆盖校验（2026-11-25 结构化收口）。
+ *
+ * 任务输出 `covers: number[]`（清单序号，1 起）声明覆盖；本函数只核对序号集合，
+ * 不再从任务文案里正则找小节号/关键词——那样既会漏（文案不写节号就静默失效），
+ * 又无法区分「提了一句」和「真的教了」。
+ */
+export function validateStageChecklistCoverage(parsed: any, input: any) {
+  const checklist = extractStageChecklist(input?.milestone);
+  if (checklist.length === 0) return { valid: true as const };
+  const subtasks = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
+  if (subtasks.length === 0) return { valid: true as const };
+
+  const covered = new Set<number>();
+  let declaresCovers = false;
+  for (const task of subtasks) {
+    const list = Array.isArray(task?.covers) ? task.covers : [];
+    for (const value of list) {
+      const index = Number(value);
+      if (Number.isFinite(index) && index >= 1) {
+        covered.add(Math.floor(index));
+        declaresCovers = true;
+      }
+    }
+  }
+
+  const missing = checklist
+    .map((label, index) => ({ index: index + 1, label }))
+    .filter((item) => !covered.has(item.index));
+  if (missing.length === 0) return { valid: true as const };
+
+  const labels = missing
+    .map((item) => `${item.index}. ${item.label}`.slice(0, 40))
+    .join('；');
+  return {
+    valid: false as const,
+    failureReason: declaresCovers
+      ? `STAGE_CHECKLIST_UNCOVERED(missing=${missing.map((item) => item.index).join(',')}): `
+        + `本阶段清单里这些条目没有任务认领：${labels}。`
+        + '请补任务或在现有任务的 covers 里补上对应序号（清单条目不得整条丢掉）。'
+      : 'STAGE_CHECKLIST_COVERS_MISSING: 任务没有输出 covers 数组。'
+        + '本阶段 description 列出了单元清单，每个 subtask 必须用 covers: [序号] 声明覆盖了哪几条（1 起），'
+        + '并保证清单每一条至少被一个任务覆盖。',
+    violations: missing.map((item) => `checklist_uncovered:${item.index}`),
+  };
+}
+
+/**
  * 规则 39 以 `milestone.loadTarget` 为键，但 path 层只把它写在
  * `cognitiveCore.loadProfile.stageLoadDistribution[]`（按 stageNumber 索引）里——
  * 此前两个调用点都不注入该键 ⇒ 规则永不生效（审计 §3.19 P1⑤）。
@@ -313,7 +437,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       // 也永远只字不提。并列后一次重试能拿到全部问题。
       // 注意：本回调是**同步契约**，全仓有同步消费方（见 teaching-turn board-deixis-guard 测试）。
       // 「材料语义判定」（2026-11-07）是一次模型调用，不能塞进来——它放在下方生成流程的异步段里。
-      softValidateParsedOutput: (parsed) => {
+      softValidateParsedOutput: (parsed, input) => {
         const subtasks = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
         const problems: Array<{ failureReason: string; violations?: string[] }> = [];
         const materialBody = assessStageMaterialCompleteness(subtasks);
@@ -338,6 +462,14 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         });
         if (!coverage.valid) {
           problems.push({ failureReason: coverage.failureReason, violations: coverage.violations });
+        }
+        // 单元清单覆盖（2026-11-25）：阶段清单（小节号或 ①②③ 条目）必须被任务的 covers 认领。
+        const checklistCoverage = validateStageChecklistCoverage(parsed, input);
+        if (!checklistCoverage.valid) {
+          problems.push({
+            failureReason: checklistCoverage.failureReason as string,
+            violations: checklistCoverage.violations,
+          });
         }
         if (problems.length === 0) return { valid: true };
         return {
@@ -376,6 +508,14 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
               '改法：把这些任务合并进产生素材的那节课（如「做完 10 道题并逐题写明排除理由、错因归入四类」），或换成有独占能力增量的新任务；',
               '阶段尾部最多保留 1 节收口课（收拢成果/错因回收），且它必须有自己的产出物。',
             ].join('\n'));
+          }
+          if (failureReason.includes('STAGE_CHECKLIST_')) {
+            blocks.push([
+              '上一个版本没有把 milestone 列出的单元清单认领完整。',
+              '改法：给每个 subtask 加 `covers` 数组（清单序号，1 起）；清单里每一条至少被一个任务覆盖，',
+              '两节合并成一课时把两个序号都写进同一个 covers；不要删清单条目、不要把清单条目并进“综合”却不写序号。',
+              'covers 的序号必须与 milestone description 里的清单顺序一致。',
+            ].join(String.fromCharCode(10)));
           }
           if (failureReason.includes('MATERIAL_REFS_MISSING_')) {
             blocks.push('本阶段资料与目标相关时，每个 subtask 至少给 1 条 materialRefs：sectionId 取自资料 sections[].id，quote 逐字复制该章节标题或 keyPoints[].cite；不得改写、不得编造。与目标明显无关的资料可以整体不引用。');

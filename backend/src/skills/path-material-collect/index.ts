@@ -127,6 +127,25 @@ const DOCUMENT_HINT_PATTERN = /(全文|原文|附件|下载|电子版|pdf|docx?|
  * 不惩罚非文档源（通知页可能是入口），只把"更像原文"的往前放；万一放错，
  * 抽取侧的"资料名对不上 ⇒ not_found"仍会兜住（不冒充）。
  */
+/**
+ * 体裁闸（2026-11-25）：教材/课标类资料需求下，研究论文、教研综述、教材对比研究一律不采。
+ *
+ * 实证：找「人教版高中英语必修第一册」时抓到《人教版高中英语教材的对比与传承——以必修一阅读为例》
+ * （期刊 PDF），任务层把论文的「引言/结语」硬绑到句子课，课堂上下文被污染。
+ * 这是**体裁判断**，不是学科/关键词白名单：需求本身就是要研究论文时（标题含研究/综述）不拦。
+ */
+const META_LITERATURE_PATTERN = /(教材对比|对比与传承|研究|综述|反思|探析|调研|调查|学报|期刊|Advances in|Journal of|DOI)/;
+const META_LITERATURE_NEED_PATTERN = /(研究|综述|论文|文献|学报|期刊)/;
+
+export function isMetaLiteratureSource(url: string, title: string): boolean {
+  const text = `${normalizeText(title)} ${normalizeText(url)}`;
+  return META_LITERATURE_PATTERN.test(text);
+}
+
+export function matchesMetaLiteratureNeed(needTitle: string): boolean {
+  return META_LITERATURE_NEED_PATTERN.test(normalizeText(needTitle));
+}
+
 export function documentSourceScore(url: string, title = ''): number {
   const lowerUrl = normalizeText(url).toLowerCase();
   const lowerTitle = normalizeText(title);
@@ -509,7 +528,14 @@ export async function collectMaterialPack(
     }
   }
 
-  const ranked = rankSources(candidates, { whitelist, blocklist });
+  const rankedRaw = rankSources(candidates, { whitelist, blocklist });
+  const ranked = matchesMetaLiteratureNeed(title)
+    ? rankedRaw
+    : rankedRaw.filter((source) => {
+        if (!isMetaLiteratureSource(source.url, source.title || '')) return true;
+        notes.push(`体裁闸丢弃元文献（研究/综述/教材对比）：${source.title || source.url}`);
+        return false;
+      });
   if (ranked.length === 0) {
     return notFound(emptyCoverage, [
       ...notes,

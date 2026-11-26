@@ -163,6 +163,45 @@ export { detectUnjudgeableAcceptance, type UnjudgeableAcceptanceViolation } from
 
 import { detectArtifactProductionTasks, looksLikeCraftSubject } from './stage-artifact-guard';
 
+/**
+ * 规划层实际引用的资料 id 集合（milestone.materialRefs 的并集）。
+ * 这是资料相关性的**代码证据**：只看规划是否真的引用了它，不做学科/关键词判断。
+ */
+export function collectPlanningMaterialIds(template: any): Set<string> {
+  const ids = new Set<string>();
+  const milestones = Array.isArray(template?.suggestedMilestones) ? template.suggestedMilestones : [];
+  for (const milestone of milestones) {
+    const refs = Array.isArray(milestone?.materialRefs) ? milestone.materialRefs : [];
+    for (const ref of refs) {
+      const id = typeof ref?.materialId === 'string' ? ref.materialId.trim() : '';
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * 把落地输入里的资料包收口到「规划引用过的」范围（原地过滤）。
+ * 规划零引用 = 这份资料没有被路径使用（例如附件与目标学科无关）→ 下游不再注入。
+ * 物理教材路径的规划逐阶段引用了 s-4..s-10，因此不受影响；经济/英语路径规划零引用 → 清空。
+ */
+export function applyPlanningMaterialScope(normalizedInput: any, template: any): void {
+  const materials = normalizedInput?.resources?.materials;
+  if (!Array.isArray(materials) || materials.length === 0) return;
+  const referenced = collectPlanningMaterialIds(template);
+  const kept = materials.filter((item: any) => {
+    const id = typeof item?.pack?.materialId === 'string' ? item.pack.materialId.trim() : '';
+    return !!id && referenced.has(id);
+  });
+  if (kept.length === materials.length) return;
+  normalizedInput.resources.materials = kept;
+  logger.info('[stage-enrichment] 资料按规划引用收口', {
+    before: materials.length,
+    after: kept.length,
+    referenced: [...referenced],
+  });
+}
+
 export async function enrichLearningPathWithAnderson(
   pathId: string,
   runId: string,
@@ -332,6 +371,10 @@ async function enrichLearningPathWithAndersonInner(
     const normalizedInput = getSceneFramingNormalizedInput(sceneFraming)
       || resolvePersistedNormalizedInput(parsedTemplate)
       || null;
+    // 资料按 path-planning 的实际引用收口（2026-11-25）：规划层对每个里程碑给出的
+    // materialRefs 是「这份资料确实被用到了」的唯一证据。规划零引用的资料不得进任务层——
+    // 否则上游文案写着「附件与目标无关」，下游仍会把它的章节硬绑到每节课（经济/英语实跑）。
+    applyPlanningMaterialScope(normalizedInput, parsedTemplate);
     // 颗粒度硬上界防御性再钳（2026-11-09 装配缝隙修复）：normalizedInput.planningHints 产生于
     // planning 阶段，旧会话续聊 / 缓存 analysis 的 hints 可能早于 scope_size 前缀链路落地，
     // 1.2h/6h 帽从未生效过。这里按 confirmedProposal.scopeSizeRaw（落库原文，见
@@ -727,7 +770,7 @@ async function enrichLearningPathWithAndersonInner(
       const rawStageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
       // hints 硬执行：模型把 subtasksPerStageRange 当软参考（实测 hints=[2,2] 仍给 5 任务/段），
       // 这里按上界兜底裁剪，否则体量锚在上端失效（输出不随锚变化 ⇒ 连校准都测不了）。
-      let stageTasks = clampStageTasksToHints(rawStageTasks, stageHints || (normalizedInput as any)?.planningHints);
+      let stageTasks = clampStageTasksToHints(rawStageTasks, stageHints || (normalizedInput as any)?.planningHints, { skipCountCap: true });
       if (stageTasks.length !== rawStageTasks.length) {
         logger.warn(`[stage-hints-clamp] 任务数按 hints 兜底裁剪：stage${milestone.stageNumber} ${rawStageTasks.length} → ${stageTasks.length}`);
       }
@@ -785,7 +828,7 @@ async function enrichLearningPathWithAndersonInner(
             requireTypeNovelty: 'taskType',
           });
           if (added.length > 0) {
-            stageTasks = clampStageTasksToHints(merged, stageHints || (normalizedInput as any)?.planningHints);
+            stageTasks = clampStageTasksToHints(merged, stageHints || (normalizedInput as any)?.planningHints, { skipCountCap: true });
           }
           supplementAudit = {
             requested: wantedLessons,
@@ -864,7 +907,7 @@ async function enrichLearningPathWithAndersonInner(
           if (retryTasks.length > 0) {
             const after = detectCrossStageActionRepeat(retryTasks, priorTasks);
             if (!after.repeated) {
-              stageTasks = clampStageTasksToHints(retryTasks, stageHints || (normalizedInput as any)?.planningHints);
+              stageTasks = clampStageTasksToHints(retryTasks, stageHints || (normalizedInput as any)?.planningHints, { skipCountCap: true });
               logger.warn('[stage-action-diversity] 修复重调采纳', {
                 pathId: learningPath.id,
                 stageNumber: milestone.stageNumber,
@@ -917,7 +960,7 @@ async function enrichLearningPathWithAndersonInner(
           if (retryTasks.length > 0) {
             const remaining = detectUnjudgeableAcceptance(retryTasks);
             if (remaining.length < violations.length) {
-              stageTasks = clampStageTasksToHints(retryTasks, stageHints || (normalizedInput as any)?.planningHints);
+              stageTasks = clampStageTasksToHints(retryTasks, stageHints || (normalizedInput as any)?.planningHints, { skipCountCap: true });
               logger.warn('[stage-judgeability] 验收修复重调采纳', {
                 pathId: learningPath.id,
                 stageNumber: milestone.stageNumber,

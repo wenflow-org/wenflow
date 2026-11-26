@@ -21,6 +21,7 @@ import { callPrompt } from '../../composers/prompt-composer';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { assessPlanningSourceHonesty } from '../../services/learning/generation/stage-subtask-quality';
+import { resolvePathTopologyPolicy } from '../../services/learning/path-topology-policy';
 import {
   auditMilestoneRationales,
   isClarificationEnforceEnabled,
@@ -156,8 +157,11 @@ export function coercePathPlanningParsed(parsed: any, materials?: PromptMaterial
  * - sum > 1.8×targetTotalHours → 按比例缩小；
  * - 放大/缩小的上界受**结构容量**钳制：阶段数 × 每阶段任务上限（subtasksPerStageRange[1]）
  *   × 单课分钟上界（subtaskMinutesRange[1]，已按用户会话档校准）；
- * - 容量 < 0.6×预算 → 放大到容量并产出**缺口声明**（gapNote，追加到路径 summary）：
- *   向用户诚实说明结构承载上限与建议，禁止虚标完整覆盖（法考 56h 案例教训）。
+ * - 容量 < 0.6×预算 → 只放大到容量，`report.clampReason = 'capacity'` 留痕。
+ *   **不再向用户拼「容量说明」**（2026-11-25 实跑）：那段文案把「坐学次数/阶段结构容量」
+ *   这类内部口径印在路径摘要里，还会拿日历预算反过来责怪一份 4-5 小时就能学完的设计
+ *   「装不下 12 小时」，并误称「其余主题另行安排」。用户侧只保留真实内容与路径级说明。
+ *   取舍：欠填时仍可能被放大到容量（历史法考 56h 案例的兜底），但不写内部算术。
  *
  * 直接原地改写 milestone.estimatedHours（一位小数）；下游 stage-enrichment 按改写后的
  * 阶段学时逐阶段反推任务数，守恒由此传导为课数。
@@ -207,9 +211,9 @@ export interface BudgetConservationReport {
 export function enforceBudgetConservation(
   milestones: any,
   hints: any,
-): { totalAfter: number; gapNote: string | null; report: BudgetConservationReport | null } {
+): { totalAfter: number; report: BudgetConservationReport | null } {
   const round1 = (v: number) => Math.round(v * 10) / 10;
-  const noop = { totalAfter: 0, gapNote: null as string | null, report: null as any };
+  const noop = { totalAfter: 0, report: null as any };
   if (!Array.isArray(milestones) || milestones.length === 0) return noop;
   const target = Number(hints?.targetTotalHours);
   // 垃圾锚防护（2026-09-29 R4）：target < 2h 只对 1-2 阶段的「一节课」路径成立
@@ -220,7 +224,7 @@ export function enforceBudgetConservation(
   if (!Number.isFinite(target) || target <= 0 || junkAnchor) {
     // 无预算锚（或垃圾锚）：只汇总，不做校正（保持历史行为）
     const sum = milestones.reduce((acc: number, m: any) => acc + (Number(m?.estimatedHours) || 0), 0);
-    return { totalAfter: round1(sum), gapNote: null, report: null };
+    return { totalAfter: round1(sum), report: null };
   }
   const perStageCap = ((Number(hints?.subtasksPerStageRange?.[1]) || 8) * (Number(hints?.subtaskMinutesRange?.[1]) || 60)) / 60;
   const n = milestones.length;
@@ -273,12 +277,8 @@ export function enforceBudgetConservation(
     if (m && typeof m === 'object') m.estimatedHours = after[i];
   });
   const totalAfter = round1(after.reduce((a: number, b: number) => a + b, 0));
-  const gapNote = capacitySum < floor
-    ? `容量说明：按你的周期与每日投入，学习预算约 ${Math.round(target)} 小时；当前阶段结构最多承载约 ${Math.round(capacitySum)} 小时。建议增加坐学次数或阶段数；本路径优先覆盖主干，其余主题需另行安排。`
-    : null;
   return {
     totalAfter,
-    gapNote,
     report: {
       target: round1(target),
       before: round1(before),
@@ -332,6 +332,16 @@ const PATH_VALIDATION_REPAIR_HINTS: Record<string, string> = {
     '上一次的整条路径都是「元认知/策略」本身当核心概念（自检、清单、挂起、复盘、校准这类）。'
     + '策略目标可以保留，但每个阶段的核心概念必须落在一个**学科实体**上（例如「受力分析中的摩擦力方向判定」「多数派提交与角色变更」），'
     + '把自检/清单/校准降级为任务的验收标准，而不是阶段概念。请按这个骨架重出：' + PATH_OUTPUT_SKELETON,
+  PATH_PLANNING_PATH_DELIVERABLE_MISSING:
+    '上一次缺少 pathDeliverable（整条路径学完能拿到的总成果）。教材/多单元路径必须写一句**覆盖全部阶段**的成果：'
+    + '判断题写「能独立判断/解释哪些内容」，作品题写最终能拿出什么；不得只写第一阶段或末阶段的成果。'
+    + '请按这个骨架重出：' + PATH_OUTPUT_SKELETON,
+  PATH_PLANNING_DUPLICATE_LENS:
+    '上一次有多个阶段复用了同一个 coreConcept。学科/教材路径里每个单元必须有自己的透镜（该单元头号误区），'
+    + '不能拿同一个 hub 概念顶替多个阶段：请先数一遍核心概念个数，**概念数不得少于阶段数**，'
+    + '给重复的阶段各补一条独立 coreConcept（id 形如 "concept-N"，名称写成「单元主题·本单元透镜」），'
+    + 'coreConcepts 数组里也要同步补上这些新 id；若两个单元确实只能共用一副透镜，就把这两个阶段合并成一个。'
+    + '请严格按这个骨架重出：' + PATH_OUTPUT_SKELETON,
   PATH_PLANNING_COGNITIVE_CORE_MISSING:
     `上一次缺少 cognitiveCore。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
   PATH_PLANNING_COGNITIVE_CORE_EMPTY:
@@ -734,6 +744,12 @@ export function validatePathPlanningOutput(
     return { valid: false as const, failureReason: 'PATH_PLANNING_COGNITIVE_CORE_MISSING' };
   }
 
+  // 路径级总成果（2026-11-25）：教材/多单元路径的「走完会拿到」必须覆盖全部阶段，
+  // 不能沿用目标确认时的近端 firstDeliverable（实测只写第一阶段或漏中间阶段）。
+  if (parsed?.topology === 'subject' && (typeof parsed.pathDeliverable !== 'string' || !parsed.pathDeliverable.trim())) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_PATH_DELIVERABLE_MISSING' };
+  }
+
   const coreConcepts = Array.isArray(parsed.cognitiveCore.coreConcepts)
     ? parsed.cognitiveCore.coreConcepts.filter((c: any) => c && typeof c === 'object')
     : [];
@@ -789,6 +805,10 @@ export function validatePathPlanningOutput(
   }
   let hubReuseCount = 0;
   const milestonesArray = parsed.milestones;
+  // 拓扑策略：教材/多单元路径要求逐阶段换透镜（复用 hub 会把多章压成同一节课）；
+  // 单作品/主线类拓扑允许 hub 回捞，不做此门。
+  const topologyPolicy = resolvePathTopologyPolicy(parsed?.topology);
+  const stageLensSeen = new Map<string, number>();
   for (const milestone of milestonesArray) {
     if (!milestone || typeof milestone !== 'object') {
       return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_INVALID' };
@@ -802,6 +822,16 @@ export function validatePathPlanningOutput(
     if (typeof milestone.coreConcept === 'string' && milestone.coreConcept
       && !conceptIds.has(milestone.coreConcept)) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND' };
+    }
+    // 拓扑策略要求透镜互异时：逐阶段核对（prompt「透镜互异」的代码化）。
+    if (topologyPolicy.requiresUniqueStageLens && typeof milestone.coreConcept === 'string' && milestone.coreConcept) {
+      if (stageLensSeen.has(milestone.coreConcept)) {
+        return {
+          valid: false as const,
+          failureReason: `PATH_PLANNING_DUPLICATE_LENS(concept=${milestone.coreConcept}, stages=${stageLensSeen.get(milestone.coreConcept)},${milestone.stageNumber})`,
+        };
+      }
+      stageLensSeen.set(milestone.coreConcept, Number(milestone.stageNumber) || 0);
     }
     // hub 复用统计（rule 66：hub 必须被"非首阶段"milestone 显式复用，不含首阶段）
     const isFirstStage = milestone.stageNumber === 1;
@@ -818,7 +848,7 @@ export function validatePathPlanningOutput(
   // 直接阻断会打回 86% 路径破坏生产 → 当前为"警告级"审计：记录 warning 不阻断，积累数据后再决定收紧。
   const warnings: string[] = [];
   const hubRequired = milestonesArray.length >= 3 ? 2 : milestonesArray.length === 2 ? 1 : 0;
-  if (hubConceptId && hubRequired > 0 && hubReuseCount < hubRequired) {
+  if (topologyPolicy.requiresHubReuseInLaterStages && hubConceptId && hubRequired > 0 && hubReuseCount < hubRequired) {
     warnings.push(`PATH_PLANNING_HUB_REUSE_INSUFFICIENT(reused=${hubReuseCount}, required=${hubRequired})`);
   }
 
@@ -1328,13 +1358,6 @@ ${replan ? renderReplanSection(replan) : ''}
       // （追加到 summary，向用户诚实说明），禁止虚标完整覆盖。
       const hints = (input as any)?.metadata?.normalizedInput?.planningHints || null;
       const conservation = enforceBudgetConservation(pathData.milestones, hints);
-      if (conservation.gapNote) {
-        logger.warn('[path-planning] 结构容量低于学习预算，已产出缺口声明', {
-          userId,
-          targetTotalHours: conservation.report?.target,
-          capacitySum: conservation.report?.capacitySum,
-        });
-      }
       const estimatedHours = Math.round(conservation.totalAfter) || clampHours(pathData.estimatedHours);
       // 里程碑级 materialRefs 覆盖度（只观测）：路径层的任务引用由 path-task-design 产出，
       // 这里零引用不等于整条路径没有资料引用，故不告警、不触发重试。
@@ -1357,9 +1380,12 @@ ${replan ? renderReplanSection(replan) : ''}
       return {
         id: `path_${Date.now()}`,
         name: pathData.name,
-        summary: typeof pathData.summary === 'string'
-          ? (conservation.gapNote ? `${pathData.summary}\n\n${conservation.gapNote}` : pathData.summary)
-          : conservation.gapNote || undefined,
+        summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
+        // 路径级总成果（2026-11-25）：白名单归一必须显式透传——raw 输出里有、这里漏带，
+        // 前端就永远只能回退到提案期的近端 firstDeliverable（经济只写第一阶段、高数漏中间阶段）。
+        pathDeliverable: typeof pathData.pathDeliverable === 'string' && pathData.pathDeliverable.trim()
+          ? pathData.pathDeliverable.trim()
+          : undefined,
         subject: analysis.subject,
         totalMilestones: pathData.totalMilestones,
         estimatedHours,
@@ -1397,7 +1423,10 @@ ${replan ? renderReplanSection(replan) : ''}
       // Phase 3：有澄清契约时，rationale 缺失直接作为校验失败 → 带反馈重试一次。
       const clarification = readClarificationFromPathInput(input);
       if (clarification && isClarificationEnforceEnabled()) {
-        const audit = auditMilestoneRationales(readMilestonesForRationaleAudit(parsed), clarification);
+        const audit = auditMilestoneRationales(readMilestonesForRationaleAudit(parsed), clarification, {
+          // 拓扑策略：没有单一收口作品的拓扑（教材/多单元）不强制末阶段 serves=stopping。
+          requireStopping: resolvePathTopologyPolicy(parsed?.topology).requiresStoppingRationale,
+        });
         if (!audit.ok) {
           return {
             valid: false,

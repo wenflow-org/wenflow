@@ -234,7 +234,7 @@ export interface PathCognitiveConcept {
 }
 
 /** 路径拓扑：决定阶段推进公式（path-planning 选择，reviewer/task-design 沿用）。 */
-export type PathTopology = 'exploratory' | 'builder' | 'exam' | 'diagnostic';
+export type PathTopology = 'exploratory' | 'builder' | 'exam' | 'diagnostic' | 'subject';
 
 /**
  * 学科基准锚（2026-11-18）：领域公认的理论真名 / 分析载体 / 新手头号误区。

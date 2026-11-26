@@ -6,6 +6,7 @@
  * 场景摘要 / 实际投入分钟等视图组装件。行为与拆分前 learning.service 同名方法逐一等价。
  */
 import prisma from '../../../config/database';
+import { resolvePathTopologyPolicy } from '../path-topology-policy';
 import { loadTeachingMessagesForIds } from '../../ai-teaching/teaching-session-message-store';
 import { logger } from '../../../utils/logger';
 import stateTrackingService from '../learning-state.service';
@@ -688,10 +689,22 @@ export async function getLearningPath(pathId: string) {
       generationRun: buildGenerationRunStatus(activeRun),
       sceneSummary: getPathSceneSummary(path.aiPromptTemplate, normalized.milestones),
       cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
-      // 路径拓扑（2026-11-18）：前端展示拓扑徽标；旧路径缺省时不显示
-      pathTopology: (pathTemplate as any)?.pathTopology || (pathTemplate as any)?.cognitiveCore?.topology || null,
-      // 终局交付物（方向五）：路径页常驻卡片的锚点；取用户确认过的 firstDeliverable
-      firstDeliverable: pathMaterialsNormalizedInput?.confirmedProposal?.firstDeliverable || null,
+      // 路径拓扑（2026-11-18）：前端展示拓扑徽标；旧路径缺省时不显示。
+      // 交付物取法随策略下发（2026-11-25）：前端不再自己写 topology === 'builder'。
+      ...(() => {
+        const topology = (pathTemplate as any)?.pathTopology || (pathTemplate as any)?.cognitiveCore?.topology || null;
+        return {
+          pathTopology: topology,
+          deliverableFromLastStage: resolvePathTopologyPolicy(topology).deliverableFromLastStage,
+        };
+      })(),
+      // 终局交付物（方向五）：路径页常驻卡片的锚点。
+      // 2026-11-25：优先取规划层合成的 pathDeliverable（覆盖全部阶段的核心能力）；
+      // 它缺省时才回退到目标确认时的 firstDeliverable——后者是提案期的近端成果，
+      // 实测会只写第一阶段（经济）或漏掉中间阶段（高数），不能当整条路径的总成果。
+      firstDeliverable: (pathTemplate as any)?.pathDeliverable
+        || pathMaterialsNormalizedInput?.confirmedProposal?.firstDeliverable
+        || null,
       adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
       adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
       processDetail: {
