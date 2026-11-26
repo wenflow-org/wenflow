@@ -1,15 +1,11 @@
 # Skill 开发指南（开发者向）
 
-> 📌 类型：活规范（新建/改造 Skill 指南）｜最后核验：2026-11-02（§2 已改 CLI 优先）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（新建/改造 Skill 的流程与规格：选型 → scaffold → 接线 → 加字段 → 门禁 → 发布 → 测试）｜索引见 [doc/README.md](./README.md)。
 
 > 面向「新建 / 改造 Skill」的开发者。从选型 → scaffold → 接线 → 加字段 → 门禁 → 发布 → 测试，
 > 一条龙说明。平台定位：**字段级管理能力**（core.yaml 与编排文件双声明，字段级原子增/改/删 API）。
 >
-> 相关设计文档：
-> - 字段级编辑、户口簿规格、扩展设计等历史过程文档已清理不保留（曾位于 `doc/archive/` 与 `doc/history/`，2026-09-05 起不在仓库）
-> - 完成度状态机：`backend/src/services/skill-registry/skill-completion.service.ts`
->
-> 日期：2026-08-12
+> 完成度状态机：`backend/src/services/skill-registry/skill-completion.service.ts`（见 §3）。
 
 ---
 
@@ -28,7 +24,7 @@
 |---|---|---|---|
 | 定位 | 阶段主流程产出（goal/path/teaching/profile/simulation 五阶段） | 旁挂能力（开场文案/课程设计/评估等），经 runAux 框架执行 | 无 LLM prompt 的纯函数/工具（profile-learner-model、mcp-tool） |
 | 进字段路由 | ✅ 是（编排文件 routings 有 `skill:<id>` 产出行） | ❌ 否（不进字段路由） | ❌ 否 |
-| 户口簿必填 | `kind` + `stage`（∈ 五阶段）+ `parentAgent` + `handlerRef` + `coreFile` | `kind` + `coreFile` + `handlerRef`（stage/parentAgent 可选） | `kind` + `handlerRef`（**禁填 coreFile**；默认 `noPromptFile: true`，有独立提示词产物 `prompts/skill.<id>.md` 时填 `promptArtifact` 且 `noPromptFile: false`，#235） |
+| 户口簿必填 | `kind` + `stage`（∈ 五阶段）+ `parentAgent` + `handlerRef` + `coreFile` | `kind` + `coreFile` + `handlerRef`（stage/parentAgent 可选） | `kind` + `handlerRef`（**禁填 coreFile**；默认 `noPromptFile: true`，有独立提示词产物 `prompts/skill.<id>.md` 时填 `promptArtifact` 且 `noPromptFile: false`） |
 | 编排文件 | 必须出现在对应 stage 的 `contracts`（F3 铁律，双向校验） | 不要求 | 不要求 |
 | 注册点 | `skillHandlers`（skills/index.ts）+ manifest（F12） | `v4-aux-skills/index.ts` 的 META 表 + `auxSkillHandlers` | `skillHandlers` + manifest（F12） |
 | 运行时 prompt | 发布 core → agent_prompts ACTIVE | 发布 core → agent_prompts ACTIVE | 无（豁免） |
@@ -42,10 +38,10 @@
 
 ## 2. scaffold：CLI / POST /api/admin/skills/scaffold
 
-> 定位（2026-09 拍板）：从 0 新建是代码级动作（生成物之外还需 §4 的三处手工接线），
-> **已迁出管理台**，由 CLI / API 承接；管理台只做轻运营调整（改已有 prompt/参数/发布/回滚/试跑）。
+> 定位：从 0 新建是代码级动作（生成物之外还需 §4 的三处手工接线），
+> 由 CLI / API 承接；管理台只做轻运营调整（改已有 prompt/参数/发布/回滚/试跑）。
 
-推荐走 CLI（与管理台原表单同一服务层，幂等，输出生成文件与注册片段）：
+推荐走 CLI（幂等，输出生成文件与注册片段）：
 
 ```bash
 cd backend
@@ -231,7 +227,7 @@ judge）→ **发布**（`POST /api/admin/prompt-lab/publish-core`）。
 
 | 层 | 命令 | 关键用例 |
 |---|---|---|
-| 后端单测 | `npx jest --runInBand`（backend） | 字段 API：`prompt-lab.field-add.test.ts`（M1）/ `prompt-lab.field-edit.test.ts`（M3：PATCH 改/DELETE 保护检查/双写回滚/落库 update 语义/幂等） |
+| 后端单测 | `npx jest --runInBand`（backend） | 字段 API：`prompt-lab.field-add.test.ts` / `prompt-lab.field-edit.test.ts`（PATCH 改 / DELETE 保护检查 / 双写回滚 / 落库 update 语义 / 幂等） |
 | 类型检查 | `npx tsc -p tsconfig.build.json --noEmit`（backend）/ `npm run typecheck`（frontend） | 全量 |
 | 前端构建 | `npm run build`（frontend） | 产物可部署 |
 | 门禁 | `npm run prompts:check:all` | 第 6 节全链 |

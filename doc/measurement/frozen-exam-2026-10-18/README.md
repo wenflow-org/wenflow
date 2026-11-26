@@ -1,4 +1,6 @@
-# 冻结评判样本集（#84）
+# 冻结评判样本集
+
+> 📌 类型：参考资料（冻结评判样本集的语料说明）｜索引见 [doc/README.md](../../../README.md)。
 
 来源：三批 ab-class-audit verdict（2026-10-02 / 10-04），原样拷贝，逐文件 sha256 写在 manifest.json。
 用途：改判分前后各跑一次同一集合，比较 `wrongAnswerPassed`（错答放行）率；集合不得改动。

@@ -5,7 +5,7 @@
  * 但提示词合规 ≠ 产出合格。是否「把老师原话换个说法当任务」（复述）、是否在学员仍在挣扎时
  * 抬难度（负荷反着用）、是否对准真实盲区（干预合理），都是**语义判断**，只能交给独立判官。
  *
- * 判官材料四块（与 docs/EXTERNAL_REVIEW_BRIEF_2026-11-10.md §9 第三刀一致）：
+ * 判官材料四块：
  *   ① 课堂真相：personaSeed + visibleDialogueContext（虚拟学习者会话可用时）
  *   ② profile-lesson-enrich 产出：blockedFoundations / recurringConfusions / knowledgeStateSummary
  *      （无 enricher 日志时回退到 path-planning prerequisiteTree.unknownConcepts，并在 provenance 标注）

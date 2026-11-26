@@ -1,13 +1,11 @@
 # 教育理论地图（理念宪法）
 
-> 📌 类型：参考资料｜最后核验：2026-11-02（§二/§五 实现状态口径已对齐）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：参考资料（教育理论基座：教学法条文的文献、证据与代码落点索引）｜索引见 [doc/README.md](./README.md)。
 
 > 本文档为 Wenflow 教育 Agent 的**理论基座**：所有教学法/心理学/神经科学/LLM 方向的理念、引用文献与落点索引。
 > 用途：prompt 规则编写、学习状态指标设计、learn agent 调度策略设计的**理论依据引用源**。
-> 规范：新增任何教学法条文或指标时，应在此登记理论来源（含 DOI/arXiv ID）与代码落点，防止"理论漂移"。
-> 核实说明：本文档中所有标注 ✅ 的文献均经联网核查（2026-08，Crossref / arXiv / Wikisource / Wikipedia）；标注 ⚠️ 的为存在出入的引用。
-> 复核说明：2026-09-05 对照代码复核落点（引用改按"文件 + 规则/字段名"定位，行号仅作示意并可能漂移）；已被后续实现吸收的状态已更新。
-> 复核基线：**2026-10-19**（对照当时 HEAD 复跑 §二 逐条口径与 §五 缺口表；SRL ⑫ / 睡眠巩固 ⑭ / 元认知训练 ⑬ 三项由「完全缺失」改判「部分实现」，见 §五）；**2026-11-02** 复核 ③/⑦/⑩/⑮ 的实现状态并统一为 §五 口径。
+> 规范：新增任何教学法条文或指标时，应在此登记理论来源（含 DOI/arXiv ID）与代码落点，防止"理论漂移"；引用按「文件 + 规则/字段名」定位，行号仅作示意并可能漂移。
+> 文献状态：标注 ✅ 的文献均已核实（Crossref / arXiv / Wikisource / Wikipedia）；标注 ⚠️ 的为存在出入的引用。
 
 ---
 
@@ -28,7 +26,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 
 ## 二、教学 / 心理 / 神经科学理论清单
 
-> **复核基线：2026-11-02**（③/⑦/⑩/⑮ 的实现状态已与 §五 表口径对齐；其余条目沿用 2026-10-19 复核结论。落点以「文件 + 字段/函数名」为准，行号仅作示意并可能漂移）。
+> 落点以「文件 + 字段/函数名」为准，行号仅作示意并可能漂移。
 
 ### ① 自我决定论（Self-Determination Theory, SDT）
 - **文献**：Deci & Ryan (1985) *Intrinsic Motivation and Self-Determination in Human Behavior*；Ryan & Deci (2000) *Self-determination theory and the facilitation of intrinsic motivation*（[DOI 10.1037/0003-066X.55.1.68](https://doi.org/10.1037/0003-066X.55.1.68)）。✅ Crossref 核实
@@ -45,7 +43,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ③ 成长型思维（Growth Mindset / Implicit Theories）
 - **文献**：Hong, Chiu & Dweck (1995) *Implicit theories of intelligence*（[DOI 10.1007/978-1-4899-1280-0_10](https://doi.org/10.1007/978-1-4899-1280-0_10)）；Dweck (2006) *Mindset*。✅ Crossref 核实
 - **核心观点**：能力可塑信念（incremental theory）→ 更愿意接受挑战、从失败恢复；过程导向表扬（努力/策略）优于能力导向表扬。
-- **Wenflow 落点**：**部分（2026-11-02 复核）**——`teaching-turn.yaml`「成长型思维语言规范（表扬与纠错通用，全策略继承）」已落地过程表扬 / 失败归因于策略 / "还没"框架 / 禁特质语言，并进"自检五件事"第 ④ 条；仍缺 wrapup 反馈语言接同一规范。
+- **Wenflow 落点**：**部分**——`teaching-turn.yaml`「成长型思维语言规范（表扬与纠错通用，全策略继承）」已实现过程表扬 / 失败归因于策略 / "还没"框架 / 禁特质语言，并进"自检五件事"第 ④ 条；仍缺 wrapup 反馈语言接同一规范。
 - **建议**：Learn 层反馈语言规范（process praise 条文）。
 
 ### ④ 生成效应（Generation Effect）
@@ -57,7 +55,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ⑤ ICAP 框架（Interactive-Constructive-Active-Passive）
 - **文献**：Chi & Wylie (2014) *The ICAP framework: Linking cognitive engagement to active learning outcomes*（[DOI 10.1080/00461520.2014.965823](https://doi.org/10.1080/00461520.2014.965823)）；Chi (2009) 前身（[DOI 10.1111/j.1756-8765.2008.01005.x](https://doi.org/10.1111/j.1756-8765.2008.01005.x)）。✅ Crossref 核实
 - **核心观点**：学习活动按认知参与度分四档：**交互 > 建构 > 主动 > 被动**；建构（自己解释/产出）与交互（对话协商）显著优于被动接受。
-- **Wenflow 落点**：**已实现（2026-09-05 复核，未显式挂理论名）**——`stage-designer.yaml`（subtask 7 类型 + "ICAP 档位映射（用于自检）"："acquire/execute 只做阅读→active、要求复述解释→constructive；deconstruct/diagnose/refine/model 默认 constructive；consolidate 整合或讨论→constructive/interactive"；"ICAP 递进约束：同一阶段 subtasks 的 icapLevel 非递减，首阶段首任务最低 active"）。teaching-turn 的产出请求实际是建构/交互驱动。
+- **Wenflow 落点**：**已实现（未显式挂理论名）**——`stage-designer.yaml`（subtask 7 类型 + "ICAP 档位映射（用于自检）"："acquire/execute 只做阅读→active、要求复述解释→constructive；deconstruct/diagnose/refine/model 默认 constructive；consolidate 整合或讨论→constructive/interactive"；"ICAP 递进约束：同一阶段 subtasks 的 icapLevel 非递减，首阶段首任务最低 active"）。teaching-turn 的产出请求实际是建构/交互驱动。
 - **建议**：为 teaching-turn 提问阶梯补 ICAP 档位标注；设计"ICAP 最低档门槛"（每轮至少 Active 以上）。
 
 ### ⑥ 心流理论（Flow Theory）
@@ -69,8 +67,8 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ⑦ Yerkes-Dodson 唤醒度定律（Inverted-U）
 - **文献**：Yerkes & Dodson (1908) *The relation of strength of stimulus to rapidity of habit-formation*（[DOI 10.1002/cne.920180503](https://doi.org/10.1002/cne.920180503)）。✅ 公认文献
 - **核心观点**：表现随唤醒度倒U变化——唤醒不足→动机低；过度唤醒→表现崩溃；中等唤醒最优。
-- **Wenflow 落点**：**已实现但未命名（无理论注释，2026-11-02 复核）**。LSS/LSB 阈值设计依据来自 2026-05 历史分析（已清理不保留）；现行 `services/learner/LearnerSnapshotService.ts`（`paceMode：lf≥6 或 lsb<0 → recover；趋势向好 → push`）是倒U的量化实现。
-- **已知缺陷（2026-08-29 修正记录）**：admin 学习者详情"压力曲线"曾错误使用**学习分钟数 EWMA**（运动科学 Banister 隐喻，无学习场景效度）且与指标卡（LSS/LF 0-10 体系）量纲冲突——已改为 `learning_metrics` 真实指标历史（`getStateTrendWindow`，与用户侧 `/state/trends` 同源），见 `LearnerDetail.vue` 压力记录卡片。
+- **Wenflow 落点**：**已实现但未命名（无理论注释）**。LSS/LSB 阈值设计沿用倒U假设；现行 `services/learner/LearnerSnapshotService.ts`（`paceMode：lf≥6 或 lsb<0 → recover；趋势向好 → push`）是倒U的量化实现。
+- **压力曲线口径**：admin 学习者详情"压力曲线"使用 `learning_metrics` 真实指标历史（`getStateTrendWindow`，与用户侧 `/state/trends` 同源），见 `LearnerDetail.vue` 压力记录卡片；不使用学习分钟数 EWMA（运动科学 Banister 隐喻，无学习场景效度，且与指标卡 LSS/LF 0-10 体系量纲冲突）。
 - **建议**：给 `LearnerSnapshotService` 阈值与 LSS/LSB 指标补理论注释；"不愤不启"三路由的唤醒度映射；EWMA 系数（0.95/0.05、0.7/0.15）待真实数据拟合。
 
 ### ⑧ 认知负荷理论（Cognitive Load Theory, CLT）
@@ -78,61 +76,61 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 - **核心观点**：工作记忆容量有限；负荷三分——**内在（intrinsic）/ 外在（extraneous）/ 生成（germane）**；生成负荷需要"有益困难"（desirable difficulty）而非信息冗余。
 - **Wenflow 落点**：**已实现**——外在负荷管理：单焦点≤5 知识点（`teaching-turn.yaml`"knowledge.points 最多输出 5 个、单焦点主讲"）、回复形态预算（`teaching-turn.yaml`"形态预算：默认不超过 3 个短块"）、长对话压缩（`TeachingContextCompressionService.ts`）、conceptLoad=low 不引新概念（`teaching-turn.yaml`"conceptLoad=low 时不要引入新核心概念"）；内在负荷量测：loadIndex（前端交互特征，`TeachingContextBuilder.ts`"loadIndex 仅供 LLM 判断"）。
 - **缺口**：**生成负荷（desirable difficulty）未系统化**——只靠 `teaching-turn.yaml`"轻量升级条文"；"认知负荷三路由"的"低压升维"是生成负荷的正规化实现。
-- **已知缺陷（已修复 2026-09-05 复核）**：此前 interactionProfile 构建后未注入（`AITeachingCoordinator.ts` scenario 组装漏字段、`teaching-turn/index.ts` 恒 null），loadIndex 4 条规则空转；现已注入（`AITeachingCoordinator.ts` scenario 组装含 `interactionProfile`，`teaching-turn/index.ts` 拆包并传入 KV 前缀缓存尾部）。
-- **相关落点（2026-08-29）**：`knowledgeStateSummary`（`lesson-knowledge-enricher.yaml` 第 6 输出字段）为 LBM 式文本化知识状态摘要，作为 loadIndex 之外的**会话级状态浓缩**通道，供预测器与教学决策直接读取（理论依据见第四节 LBM 行）。
+- **interactionProfile 注入**：`AITeachingCoordinator.ts` scenario 组装含 `interactionProfile`，`teaching-turn/index.ts` 拆包并传入 KV 前缀缓存尾部；漏注入会让 loadIndex 的 4 条规则空转。
+- **相关落点**：`knowledgeStateSummary`（`lesson-knowledge-enricher.yaml` 第 6 输出字段）为 LBM 式文本化知识状态摘要，作为 loadIndex 之外的**会话级状态浓缩**通道，供预测器与教学决策直接读取（理论依据见第四节 LBM 行）。
 
 ### ⑨ 测试效应 / 检索练习（Testing Effect / Retrieval Practice）
 - **文献**：Karpicke & Roediger (2007) *Expanding retrieval practice... equally spaced retrieval enhances long-term retention*（[DOI 10.1037/0278-7393.33.4.704](https://doi.org/10.1037/0278-7393.33.4.704)）；Karpicke & Roediger (2008) *The critical importance of retrieval for learning*（[DOI 10.1126/science.1152408](https://doi.org/10.1126/science.1152408)）；Smith, Roediger & Karpicke (2013)（[DOI 10.1037/a0033569](https://doi.org/10.1037/a0033569)）。✅ Crossref 核实
 - **核心观点**：检索 > 重读；**等距检索比递增检索更利于长期记忆**；无反馈的检索仍有收益但带反馈更强。
 - **Wenflow 落点**：**已实现**——`session-wrapup.yaml`"actionPlan 至少 1 条检索式自测"、`teaching-turn.yaml`"开场承接检索题"（priorLearningContext 承接）、费曼 reflect（"用自己的话讲给一个不懂的人听"）、checkpoint（`teaching-turn.yaml`"本轮流程控制信号"内 checkpoint 字段）。
-- **建议**：复习闭环（due API + 复习课）是测试效应的完整落地——**已闭环（2026-08-30）**：`review:completed` 事件 + 复习课降级（`KnowledgeStateService.allowDegrade`）；间隔策略参考 Karpicke（等距 vs 递增的权衡，现状取目标保留期 15% 中间值）。
+- **复习闭环**：due API + 复习课已具备——`review:completed` 事件 + 复习课降级（`KnowledgeStateService.allowDegrade`）；间隔策略参考 Karpicke（等距 vs 递增的权衡，现状取目标保留期 15% 中间值）。
 
 ### ⑩ 交错学习（Interleaving）
 - **文献**：Rohrer & Taylor (2007) *The shuffling of mathematics problems improves learning*（[DOI 10.1007/s11251-007-9015-8](https://doi.org/10.1007/s11251-007-9015-8)）；Rohrer (2006) 分块 vs 混合。✅ Wikipedia 核实
 - **核心观点**：混合不同类型练习 > 分块练习（学会"何时用哪个方法"）；与间隔效应同为 desirable difficulty 家族。
-- **Wenflow 落点**：**部分（2026-11-02 复核）**——`teaching-turn.yaml`「复习题的策略选择框架（交错学习）」已落地"不预告方法 + 对比式回捞"；跨里程碑 hub 回捞（`path-planning.yaml`"hub concept 必须被非首阶段 milestone 显式复用"）与 consolidate 任务（`stage-designer.yaml`"每阶段至少 1 个 consolidate 类型任务回捞前一阶段概念"）仍是间隔/检索而非交错；`teaching-turn.yaml`"knowledge.points 最多 5 个单焦点主讲"约束与回合内交错存在张力。
+- **Wenflow 落点**：**部分**——`teaching-turn.yaml`「复习题的策略选择框架（交错学习）」已实现"不预告方法 + 对比式回捞"；跨里程碑 hub 回捞（`path-planning.yaml`"hub concept 必须被非首阶段 milestone 显式复用"）与 consolidate 任务（`stage-designer.yaml`"每阶段至少 1 个 consolidate 类型任务回捞前一阶段概念"）仍是间隔/检索而非交错；`teaching-turn.yaml`"knowledge.points 最多 5 个单焦点主讲"约束与回合内交错存在张力。
 - **建议**：交错应在**任务/会话粒度**落地（学习预算台账的轮换编排、复习课混合概念），不破坏回合内单焦点。
 
 ### ⑪ 有效失败（Productive Failure）
 - **文献**：Kapur (2009) *Productive failure in mathematical problem solving*（[DOI 10.1007/s11251-009-9093-x](https://doi.org/10.1007/s11251-009-9093-x)）；Kapur (2010)（[DOI 10.1007/s11251-010-9144-3](https://doi.org/10.1007/s11251-010-9144-3)）；Kapur (2012)（[DOI 10.1007/s11251-012-9209-6](https://doi.org/10.1007/s11251-012-9209-6)）。✅ Crossref 核实
 - **核心观点**：先让学生尝试解决（即使失败），再提供指导，比直接讲解产生更深学习；失败激活相关图式。
-- **Wenflow 落点**：**已系统实现（2026-08-30 条文）**——`teaching-turn.yaml`"有效失败模式（Productive Failure）"完整条文：Phase 1 生成期（不给标准解法、只给情感支持与最多 1 个轻量脚手架、鼓励多解法尝试并记录 `analysis.rsmAttempts`）→ Phase 2 整合期（学生解法与标准解法对比）→ 逃生舱（连续 2 轮 frustrated 或 loadIndex>0.85 退出为 scaffold）；配合"认知负荷三路由"条文。
+- **Wenflow 落点**：**已系统实现**——`teaching-turn.yaml`"有效失败模式（Productive Failure）"完整条文：Phase 1 生成期（不给标准解法、只给情感支持与最多 1 个轻量脚手架、鼓励多解法尝试并记录 `analysis.rsmAttempts`）→ Phase 2 整合期（学生解法与标准解法对比）→ 逃生舱（连续 2 轮 frustrated 或 loadIndex>0.85 退出为 scaffold）；配合"认知负荷三路由"条文。
 - **建议**：与"不愤不启"三路由天然契合（精准点拨前给学生挣扎空间）；苏格拉底阶梯即有效失败的对话形态。
 
 ### ⑫ 自我调节学习（Self-Regulated Learning, SRL）
 - **文献**：Zimmerman (1989) *Models of self-regulated learning*（[DOI 10.1007/978-1-4612-3618-4_1](https://doi.org/10.1007/978-1-4612-3618-4_1)）；Zimmerman & Risemberg (1997)（[DOI 10.1006/ceps.1997.0919](https://doi.org/10.1006/ceps.1997.0919)）。✅ Crossref 核实
 - **核心观点**：三阶段循环——**前思（Forethought：规划/目标）/ 表现（Performance：自我监控）/ 反思（Self-Reflection：归因/调整）**。
-- **Wenflow 落点**：**部分（2026-10-19 复核）**——① metacognitive knowledgeType 完整链路（`teaching-turn.yaml`"knowledgeType=metacognitive 优先 reflect/diagnose/motivate"；`pedagogy.config.ts` metacognitive 块）；画像 `metacognitionLevel`（`learner-model-agent/types.ts`）。② **三阶段已有字段与派生**：`agents/learner-model-agent/types.ts:171` `srlPhase: 'forethought' | 'performance' | 'self-reflection'`（注释引 Zimmerman 2000），`services/learner/LearnerSnapshotService.ts:44` `deriveSrlPhase(latestSession)`——无会话→forethought、active/paused→performance、其余→self-reflection，在快照 `:425` / `:549` 两条路径写入；投影层透传 `LearnerProjectionService.ts:145`（learner-state-review 诊断载荷）。
-- **缺口（如实标注）**：无**用户可见**的三阶段视图（`frontend/src` 无 `srlPhase` 消费点；`grep -rni srl prompts/` 无命中——提示词层不引用该字段）；判据是**会话状态粗派生**而非学习者自我监控证据；三阶段**未接干预路由**（前思/表现/反思无对应教学动作）。
+- **Wenflow 落点**：**部分**——① metacognitive knowledgeType 完整链路（`teaching-turn.yaml`"knowledgeType=metacognitive 优先 reflect/diagnose/motivate"；`pedagogy.config.ts` metacognitive 块）；画像 `metacognitionLevel`（`learner-model-agent/types.ts`）。② **三阶段已有字段与派生**：`agents/learner-model-agent/types.ts:171` `srlPhase: 'forethought' | 'performance' | 'self-reflection'`（注释引 Zimmerman 2000），`services/learner/LearnerSnapshotService.ts:44` `deriveSrlPhase(latestSession)`——无会话→forethought、active/paused→performance、其余→self-reflection，在快照 `:425` / `:549` 两条路径写入；投影层透传 `LearnerProjectionService.ts:145`（learner-state-review 诊断载荷）。
+- **缺口**：无**用户可见**的三阶段视图（`frontend/src` 无 `srlPhase` 消费点；`grep -rni srl prompts/` 无命中——提示词层不引用该字段）；判据是**会话状态粗派生**而非学习者自我监控证据；三阶段**未接干预路由**（前思/表现/反思无对应教学动作）。
 - **建议**：wrapup actionPlan 可作为反思阶段产物，下一节开场承接（`teaching-turn.yaml`"开场承接检索题"）即下一循环的前思输入；learn agent 出口提供 SRL 三阶段状态视图（字段/派生已就位，缺呈现与阶段化动作）。
 
 ### ⑬ 元认知训练（Metacognition）
 - **文献**：Flavell (1979) *Metacognition and cognitive monitoring*（[DOI 10.1037/0003-066X.34.10.906](https://doi.org/10.1037/0003-066X.34.10.906)）。✅ 公认文献
 - **核心观点**：对自身认知过程的计划、监控、评估；元认知监控可被刻意训练。
-- **Wenflow 落点**：**部分（2026-10-19 复核）**——① metacognitive 链路完整；`teaching-turn.yaml`"理解/负荷须可引用证据"（自检五件事）即元认知证据纪律。② **校准闭环已有数据驱动实现**：`services/learner/calibration.service.ts:20` `computeCalibrationBias`（由 `memory_traces` 的 masteryScore × FSRS stability/difficulty 判 overconfident / underconfident，样本 <5 保持 accurate，并并入最近 10 次完结会话的隐藏自评信号）→ 画像覆盖 `cognitive.selfAssessmentAccuracy`（`agents/learner-model-agent/profile-aggregator.ts:178-180`）→ 教学链消费（`services/ai-teaching/teaching-session-lifecycle.ts:1130` 取偏置 → `services/memory/memory-trace.service.ts:177-179`：overconfident 降 0.1 / underconfident 升 0.05）；管理端可见该项（`frontend/src/views/admin-redesign/LearnerDetail.vue:1827`「自评准确度」）。
-- **缺口（如实标注）**：**无面向学习者的"自评→对照→校准"训练环节**——`selfAssessmentSignal` 仍是隐藏信号（prompt 明示不主动询问、不在 reply 提及），学习者看不到自己的校准结论与偏置。
+- **Wenflow 落点**：**部分**——① metacognitive 链路完整；`teaching-turn.yaml`"理解/负荷须可引用证据"（自检五件事）即元认知证据纪律。② **校准闭环已有数据驱动实现**：`services/learner/calibration.service.ts:20` `computeCalibrationBias`（由 `memory_traces` 的 masteryScore × FSRS stability/difficulty 判 overconfident / underconfident，样本 <5 保持 accurate，并并入最近 10 次完结会话的隐藏自评信号）→ 画像覆盖 `cognitive.selfAssessmentAccuracy`（`agents/learner-model-agent/profile-aggregator.ts:178-180`）→ 教学链消费（`services/ai-teaching/teaching-session-lifecycle.ts:1130` 取偏置 → `services/memory/memory-trace.service.ts:177-179`：overconfident 降 0.1 / underconfident 升 0.05）；管理端可见该项（`frontend/src/views/admin-redesign/LearnerDetail.vue:1827`「自评准确度」）。
+- **缺口**：**无面向学习者的"自评→对照→校准"训练环节**——`selfAssessmentSignal` 仍是隐藏信号（prompt 明示不主动询问、不在 reply 提及），学习者看不到自己的校准结论与偏置。
 - **建议**：复习课加入"自评→对照→校准"环节；Learn 层出口展示校准结论（字段与闭环已就位，缺训练呈现）。
 
 ### ⑭ 记忆巩固与睡眠（Memory Consolidation / Sleep）
 - **文献**：Rasch & Born (2013) *About sleep's role in memory*（[DOI 10.1152/physrev.00032.2012](https://doi.org/10.1152/physrev.00032.2012)）；Walker & Stickgold (2004) sleep-dependent consolidation。✅ 公认文献
 - **核心观点**：睡眠期突触重放与巩固；跨日间隔复习受益于巩固窗口。
-- **Wenflow 落点**：**部分（2026-10-19 复核）**——① 复习调度跨日递增（2026-08-30）：`services/memory/actr.ts:28` `reviewIntervalDays`——Cepeda 10-20% 中间值 15% + SM-2 式 `intervalFactor`（复习成功倍增，clamp 上限 32×）。② **睡眠窗口锚定已实现**：`services/memory/memory-trace.service.ts:191` `snapToActiveWindow`——dueAt 落在 23:00-07:00 睡眠区（常量 `:185-188`）推至次日 09:00 活跃窗口；**首次提取保证至少跨 1 个睡眠周期**（注释引 Rasch & Born 2013 / Gais 2006），`computeDueAt`（`:217-220` / `:260`）统一调用。
-- **缺口（如实标注）**：**无"今日复习"与睡眠建议的联动**——`services/metrics/LearningMetricService.ts:312` 仍是一句泛健康建议；到期日为何跳过夜间无用户可读解释；无就寝时间感知的提醒或复习窗口提示。
+- **Wenflow 落点**：**部分**——① 复习调度跨日递增：`services/memory/actr.ts:28` `reviewIntervalDays`——Cepeda 10-20% 中间值 15% + SM-2 式 `intervalFactor`（复习成功倍增，clamp 上限 32×）。② **睡眠窗口锚定已实现**：`services/memory/memory-trace.service.ts:191` `snapToActiveWindow`——dueAt 落在 23:00-07:00 睡眠区（常量 `:185-188`）推至次日 09:00 活跃窗口；**首次提取保证至少跨 1 个睡眠周期**（注释引 Rasch & Born 2013 / Gais 2006），`computeDueAt`（`:217-220` / `:260`）统一调用。
+- **缺口**：**无"今日复习"与睡眠建议的联动**——`services/metrics/LearningMetricService.ts:312` 仍是一句泛健康建议；到期日为何跳过夜间无用户可读解释；无就寝时间感知的提醒或复习窗口提示。
 - **建议**：把已含睡眠窗口的 dueAt 接进用户可见的"今日/明日复习"，与睡眠建议同屏联动（后端锚定已就位，缺呈现与联动）。
 
 ### ⑮ 自我解释效应（Self-Explanation Effect）
 - **文献**：Chi, de Leeuw, Chiu & LaVancher (1994) *Eliciting self-explanations improves understanding*（Cognitive Science 18:439-477）。✅ 公认文献（Crossref 检索有噪声但该文为领域经典）
 - **核心观点**：要求学习者解释"为什么"显著提升理解与迁移。
-- **Wenflow 落点**：**已实现但未命名（2026-11-02 复核）**——`teaching-turn.yaml`"用自己的话讲给一个不懂的人听"；`peer-reinforcement.yaml`（feynman 策略）。README「把教育学理论落进代码」现只写"费曼技巧 + 检索练习"，未再挂"自我解释"理论名。
+- **Wenflow 落点**：**已实现但未命名**——`teaching-turn.yaml`"用自己的话讲给一个不懂的人听"；`peer-reinforcement.yaml`（feynman 策略）。README「把教育学理论落进代码」现只写"费曼技巧 + 检索练习"，未再挂"自我解释"理论名。
 - **建议**：在费曼 reflect 条文旁补"自我解释效应"理论注释，与 §五 未命名表同步。
 
 ### ⑯ 预测校准方法论（可证伪置信度 / Empirical Calibration）
 - **文献**：Popper (1959) *The Logic of Scientific Discovery*（可证伪性方法论）；UKT 不确定性感知 KT（pykt.org/ukt）；CIKT（[arXiv 2505.17705](https://arxiv.org/abs/2505.17705)，预测-反馈迭代）；学习分析荟萃（[DOI 10.1177/21582440251336707](https://doi.org/10.1177/21582440251336707)，干预须闭环才有效）。✅ arXiv/DOI 核实
 - **核心观点**：对学习者的任何量化断言（掌握度/风险/置信度）必须**可被现实检验**——断言留档、结果回写、命中率统计；无 ground truth 的自报置信度没有认知价值。
-- **Wenflow 落点**：**已实现（2026-08-29）**——`learning-predictor` skill（任务前预测 stallRisk/tone/depth，含自洽约束与保守兜底）+ `PredictionCalibrationService.ts`（`prediction_records` 表：预测留档 → task:completed 回写实际结果 → `empiricalStats` 命中率/校准桶）+ 实证可靠性随预测交付（`learnerPrediction.reliability`，样本 <5 置 null）+ 教学 Agent 消费规则（`teaching-turn.yaml` learnerPrediction 条）+ 后台校准可视化（`GET /admin/learner-models/:userId/predictions`，LearnerDetail 校准卡片）。
-- **替换的旧做法**：`profile-aggregator.calculateConfidence` 拍脑袋公式（(sessions/10+0.5+0.5)/3）仍存在于画像聚合（**待收敛**：其输出仅作展示，不再作为决策置信度使用）；预测器置信度已全部走实证命中率。
+- **Wenflow 落点**：**已实现**——`learning-predictor` skill（任务前预测 stallRisk/tone/depth，含自洽约束与保守兜底）+ `PredictionCalibrationService.ts`（`prediction_records` 表：预测留档 → task:completed 回写实际结果 → `empiricalStats` 命中率/校准桶）+ 实证可靠性随预测交付（`learnerPrediction.reliability`，样本 <5 置 null）+ 教学 Agent 消费规则（`teaching-turn.yaml` learnerPrediction 条）+ 后台校准可视化（`GET /admin/learner-models/:userId/predictions`，LearnerDetail 校准卡片）。
+- **替换的旧做法**：`profile-aggregator.calculateConfidence` 拍脑袋公式（(sessions/10+0.5+0.5)/3）仍存在于画像聚合（其输出仅作展示，不作为决策置信度使用）；预测器置信度已全部走实证命中率。
 - **校验纪律**：校准桶应**单调递增**（预测风险越高实际困难率越高）——非单调即预测器失效信号；命中率统计必须带样本数 n，n<5 不得引用。
-- **建议**：积累 3-6 个月真实校准数据后复核单调性；对 session-wrapup 评估做人工标注对标（LLM vs 人类专家一致性）。
+- **证据缺口**：单调性需要 3-6 个月真实校准数据才能检验；session-wrapup 评估尚无 LLM 与人类专家的一致性对标。
 
 ---
 
@@ -172,15 +170,15 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 
 ---
 
-## 五、理论 → 规则映射缺口清单（现状盘点）
+## 五、理论 → 规则映射缺口清单
 
-### 已实现且命名（README 理论条目 + 近期落地）
-README「把教育学理论落进代码」现行 5 个条目（认知负荷 / 最近发展区+支架 / 费曼技巧+检索练习 / 有效失败 / 间隔效应与复习闭环）**全部有代码落点**；另已在代码中命名、状态与本节一致的近期落地：
+### 已实现且命名（README 理论条目 + 代码命名）
+README「把教育学理论落进代码」现行 5 个条目（认知负荷 / 最近发展区+支架 / 费曼技巧+检索练习 / 有效失败 / 间隔效应与复习闭环）**全部有代码落点**；另已在代码中命名的：
 
 - **ICAP ⑤**：`stage-designer.yaml`（subtask 类型 ICAP 档位映射 + 阶段内非递减约束 + 首阶段首任务最低 active）
 - **有效失败 ⑪**：`teaching-turn.yaml`「有效失败模式（Productive Failure）」（Phase 1 生成期 / Phase 2 整合期 / 逃生舱）
-- **预测校准 ⑯**：`learning-predictor` + `PredictionCalibrationService`（2026-08-29 落地）
-- **测试效应复习闭环 ⑨**：`review:completed` + 复习课降级（2026-08-30 落地）
+- **预测校准 ⑯**：`learning-predictor` + `PredictionCalibrationService`
+- **测试效应复习闭环 ⑨**：`review:completed` + 复习课降级
 
 ### 已实现但未命名（需补注释）
 | 理论 | 落点 | 注释位置建议 |
@@ -189,7 +187,7 @@ README「把教育学理论落进代码」现行 5 个条目（认知负荷 / �
 | Yerkes-Dodson ⑦ | `services/learner/LearnerSnapshotService.ts`（paceMode / conceptLoad 推导）；LSS/LSB 阈值 | 服务头部注释 |
 | 自我解释 ⑮ | `teaching-turn.yaml`（"用自己的话讲给一个不懂的人听"）；`peer-reinforcement.yaml`（feynman 策略） | teaching-turn.yaml 费曼 reflect 条文旁 |
 
-### 部分实现（机制已有落点，覆盖不全）｜复核基线 2026-11-02（③/⑩ 行复核；其余沿用 2026-10-19）
+### 部分实现（机制已有落点，覆盖不全）
 
 | 理论 | 已有落点 | 仍缺的部分 |
 |---|---|---|
@@ -201,25 +199,9 @@ README「把教育学理论落进代码」现行 5 个条目（认知负荷 / �
 | 睡眠巩固 ⑭ | `services/memory/memory-trace.service.ts:191` `snapToActiveWindow`（23-07 睡眠区让位、首次提取保证跨 1 睡眠周期）+ `services/memory/actr.ts:28` 跨日递增调度 | 与"今日复习"/睡眠建议无联动；无就寝时间感知的提醒；到期日跳过夜间无用户可读解释 |
 | 元认知训练 ⑬ | `services/learner/calibration.service.ts:20` `computeCalibrationBias` → 画像覆盖 `selfAssessmentAccuracy`（`profile-aggregator.ts:178-180`）→ 教学链消费（`teaching-session-lifecycle.ts:1130`）；管理端可见（`LearnerDetail.vue:1827`） | 无面向学习者的"自评→对照→校准"训练环节；`selfAssessmentSignal` 仍是隐藏信号 |
 
-### 完全缺失（最大增量空间）｜复核基线 2026-10-19
+### 完全缺失（最大增量空间）
 
-（本轮 2026-10-19 复核后为**空**：原列 SRL ⑫ / 睡眠巩固 ⑭ / 元认知训练 ⑬ 三项均已核到机制落点，移入上表「部分实现」；剩余增量空间见上表「仍缺的部分」列——均为呈现/联动/训练环节，不是机制从零建。）
-
----
-
-## 六、蓝图引用核实记录
-
-对用户提供文档（超学科动态认知流控）中学术引用的联网核查结果（2026-08 时点的背景材料，仅存档供查证）：
-
-| 引用 | 结果 |
-|---|---|
-| Cepeda 等 2008 间隔效应（间隔=目标保留期 10-20%） | ✅ 真实（[DOI 10.1111/j.1467-9280.2008.02209.x](https://doi.org/10.1111/j.1467-9280.2008.02209.x)） |
-| Khawaja 语言特征测认知负荷 | ✅ 真实（[DOI 10.1080/10447318.2013.860579](https://doi.org/10.1080/10447318.2013.860579) + 2009/2007 两篇） |
-| Anderson & Schooler 幂律衰减 | ✅ 真实（[DOI 10.1111/j.1467-9280.1991.tb00174.x](https://doi.org/10.1111/j.1467-9280.1991.tb00174.x)） |
-| Gkintoni 2025"超学科认知神经教育模型" | ⚠️ **部分**：Gkintoni（Patras 大学）真实且 2025 年有神经教育+AI 论文（INTED2025、Biomimetics 2025 等），但 Crossref 未检索到该**确切标题**论文，应为转述/融合引用 |
-| Klein 超学科定义 / Ebbinghaus 公式 / Cowan 4±1 / "不愤不启" | ✅ 均符合公认文献；"不愤不启"原文见《论语·述而第七》七之八 |
-| DeepSeek-V3 MLA / MoE | ✅ 真实（V2 论文 [arXiv 2405.04434](https://arxiv.org/abs/2405.04434) 明确；V3 沿用） |
-| "Wenflow 四层级架构"描述 | ⚠️ 与仓库现实不符：当前为 goal/path/teaching 三主阶段 + 编排器架构，"四层"是字段路由迁移的阶段划分 |
+当前无完全缺失条目：全部理论均已有机制落点，剩余增量空间见上表「仍缺的部分」列——均为呈现/联动/训练环节，不是机制从零建。
 
 ---
 
@@ -228,4 +210,4 @@ README「把教育学理论落进代码」现行 5 个条目（认知负荷 / �
 1. **新增教学法条文**：先在本文档登记理论（含 DOI/arXiv ID），再写 prompt 规则，最后在规则旁注释引用本文档条目号。
 2. **指标/阈值设计**：任何学习状态阈值（LSS/LSB/loadIndex 档位）须注明理论来源（CLT/Yerkes-Dodson/心流）。
 3. **引文纪律**：引用文献须可核实（提供 DOI）；无法核实的一律标注 ⚠️。
-4. **定期复核**：每季度或重大架构改动时，重跑本表"已实现/缺失"状态，与 doc/ 现行文档索引同步（历史过程文档仅存本地，不入库）。
+4. **定期复核**：每季度或重大架构改动时，重跑本表"已实现/缺失"状态，与 doc/ 现行文档索引同步。

@@ -1,6 +1,6 @@
 # Path Production Scenario Refactoring Notes (Unified Architecture)
 
-> 📌 类型：活规范（英文同步版，与中文同样存在已知待办）｜最后核验：2026-11-02（校正 replan/regenerate 的 409 判定，补记 compress 与 rebuild-all 模式）。索引见 [doc/README.md](./README.md)。
+> 📌 Type: Living spec (path production and replan / regenerate contracts: inputs, outputs, replan modes and mutation-blocking rules) | Index: [doc/README.md](./README.md).
 
 ## Scope
 
@@ -40,7 +40,7 @@ When learning.service calls path-agent, besides base fields need to pass through
 
 ## Anderson Annotation Strategy
 
-- Annotation field source is the deterministic function `generateDisplayLabel` (produces `displayLabel` by looking up `DISPLAY_LABEL_MAP` with `knowledgeType × cognitiveLevel`); the `label-generator` skill was retired in 2026-07 and `shortLabel` is no longer written anywhere.
+- Annotation field source is the deterministic function `generateDisplayLabel` (produces `displayLabel` by looking up `DISPLAY_LABEL_MAP` with `knowledgeType × cognitiveLevel`); the `label-generator` skill is retired and `shortLabel` is no longer written anywhere.
 - Annotation failure uses fail-open: path continues generating, not interrupted by annotation failure.
 
 ## existingPathId Overwrite Strategy
@@ -69,8 +69,8 @@ Service and route contract:
 | `regenerate` + `mode=rebuild-all` | ✅ | Explicit "start over": even with `completed` tasks it takes replace-path full rebuild (old sessions/records are orphaned but kept in DB); `in_progress` → 409 `PATH_MUTATION_HAS_IN_PROGRESS` |
 | `regenerate` + `adjustments` | ✅ | `adjustments` is **not a branch switch** (branching is decided by learning progress); it is injected as `reason` and as `normalizedInput.understanding.adjustments`, taking highest priority during re-planning |
 | `replan` + `mode=overwrite` | ✅ Default mode | In-place redesign of a **single target stage** (`resolveStageReplanTarget` locates the active stage): delete unfinished tasks of that stage, keep completed ones (order continues), freeze learning evidence, rollbackSnapshot recoverable; emits `path:adjusted` event |
-| `replan` + `mode=compress` | ✅ Compress mode (bidirectional since 2026-10-15) | Same single-stage redesign, but compresses the target stage into fewer tasks: task-count ratio 0.5 (`REPLAN_TASK_RATIO.compress`, injected via `resolveReplanTaskRatio` into `planningHints.targetSubtasksForStage`); core tasks are protected when compressing, flexible ones are trimmed first |
-| `replan` + `mode=new_version` | ❌ Not implemented (throws `PATH_VERSIONING_NOT_SUPPORTED` 409) | First-version contract promised "create new path version"; never landed. Per 2026-08-31 decision **versioning/rollback will NOT be implemented** (no user-side need for old versions; overwrite + freeze semantics suffice) |
+| `replan` + `mode=compress` | ✅ Compress mode | Same single-stage redesign, but compresses the target stage into fewer tasks: task-count ratio 0.5 (`REPLAN_TASK_RATIO.compress`, injected via `resolveReplanTaskRatio` into `planningHints.targetSubtasksForStage`); core tasks are protected when compressing, flexible ones are trimmed first |
+| `replan` + `mode=new_version` | ❌ Not implemented (throws `PATH_VERSIONING_NOT_SUPPORTED` 409) | **Versioning/rollback is NOT implemented** (no user-side need for old versions; overwrite + freeze semantics suffice) |
 
 Contract fields:
 
@@ -114,6 +114,6 @@ Constraints:
 Hard rules:
 
 - Learned content frozen (`completed` tasks cannot be rewritten)
-- **replan-stage is blocked only by "open teaching sessions within scope"** (409 `PATH_MUTATION_HAS_OPEN_SESSION`, response carries the session list so the frontend can run the "clear → auto-retry" loop). Since P0-1 (2026-10-15) it **no longer treats the `in_progress` flag alone as a blocker** — end_only abandonment and timeout wrap-up leave tasks in `in_progress` as fossil markers, and treating them as blockers made "clear → retry" hit 409 forever (`path-mutation-safety.ts:260-277`)
+- **replan-stage is blocked only by "open teaching sessions within scope"** (409 `PATH_MUTATION_HAS_OPEN_SESSION`, response carries the session list so the frontend can run the "clear → auto-retry" loop). It **no longer treats the `in_progress` flag alone as a blocker** — end_only abandonment and timeout wrap-up leave tasks in `in_progress` as fossil markers, and treating them as blockers made "clear → retry" hit 409 forever (`path-mutation-safety.ts:260-277`)
 - **replace-path is blocked by "learning progress (`completed`/`in_progress`) or completed teaching-session evidence"** (409); an explicit full rebuild (`mode=rebuild-all`) lets `allowCompleted` through for completed tasks and only blocks `in_progress`
 - Default replan mode is `overwrite`

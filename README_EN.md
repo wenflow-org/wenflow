@@ -109,7 +109,7 @@ Then open:
 > For everything that can be configured from zero to a working deployment (required / optional enhancements / access topology), see [`DEPLOYMENT.md`](DEPLOYMENT.md) (Chinese).
 
 <details>
-<summary><b>Fresh-machine checklist (tested 2026-11-11: empty AI key + no plugin keys)</b></summary>
+<summary><b>Fresh-machine checklist (tested: empty AI key + no plugin keys)</b></summary>
 
 | Item | Required? | Test result |
 |---|---|---|

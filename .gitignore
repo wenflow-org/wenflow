@@ -220,9 +220,8 @@ nul
 
 # Local architecture docs (track only current spec/result docs; archive, history, design drafts, survey snapshots & changelogs stay untracked locally)
 doc/*
-# 例外：管理端视觉层规范（守卫规则 10/11/12 与巡检脚本按路径引用它作为判据）
+# 例外：管理端视觉层规范（terminology-guard 等守卫按路径做存在性校验）
 !doc/ADMIN_VISUAL_LAYER_SPEC.md
-# 例外：文案语义审查标准（copy:dump 的审阅依据，代码注释与脚本引用）
 # 例外：Prompt 缓存优化技术文档（缓存口径与运维配置的权威引用）
 !doc/PROMPT_CACHE_OPTIMIZATION.md
 !doc/SKILL_PROTOCOL_V4.md
@@ -232,6 +231,10 @@ doc/*
 !doc/pipeline-map.json
 !doc/README.md
 !doc/EDUCATIONAL_THEORY_MAP.md
+# 例外：教学图证据分级与图型盘点（README 文档表按路径引用）
+!doc/DIAGRAM_PEDAGOGY_RESEARCH.md
+# 例外：Goal / Path 澄清契约（目标澄清与路径规划的现行契约）
+!doc/GOAL_PATH_CLARIFICATION_CONTRACT.md
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.md
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.en.md
 !doc/VIRTUAL_LEARNER_CHAIN.md
@@ -249,13 +252,12 @@ doc/*
 !doc/UPGRADE_DIRECTION_20Q.md
 !doc/LEARNER_CENTER_AND_STATE_FUSION.md
 !doc/MODEL_GATEWAY_DESIGN.md
-!doc/MODEL_SETUP_AND_CONFIG_DESIGN.md
 # 例外：KC 概念身份/图 与 多路径信号作用域（协议与架构文档按路径引用）
 !doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md
 !doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md
 # 例外：管理端列宽规范（活规范）
 !doc/ADMIN_COLUMN_WIDTH_SPEC.md
-# 例外：管理端表头规范（活规范：守卫规则 20–22 与巡检按路径引用）
+# 例外：管理端表头规范（活规范：守卫按路径做存在性校验）
 !doc/ADMIN_TABLE_HEADER_SPEC.md
 # 例外：模型接入与配置设计（模型设置弹层/默认模型单档化的设计依据）
 !doc/MODEL_SETUP_AND_CONFIG_DESIGN.md
@@ -266,7 +268,7 @@ doc/*
 !doc/SESSION_JSON_INCREMENTAL_DESIGN.md
 # 例外：开发脚本手册
 !doc/DEV_SCRIPTS.md
-# 例外：平台测量质量常设化（#85：冻结考卷语料 + 双臂协议 + 质量报告；runner/CI 包装测试按路径校验该语料 sha256）
+# 例外：平台测量语料（冻结考卷语料 + 双臂协议；runner/CI 包装测试按路径校验该语料 sha256）
 !doc/measurement/
 doc/local/
 
@@ -338,21 +340,20 @@ backend/scripts/measurement-probe/out*/
 # 纪元重置前的全库归档（epoch-1 备份，6.5GB，严禁入库）
 backend/prisma/archive/
 
-# 原型稿目录（拍板 2026-10-08：不入库，仅本地保留）
+# 原型稿目录（不入库，仅本地保留）
 newui/
 
-# 设计体系交接包（2026-10-17 用户拍板「不需要进入 git」：本地只读参考，含 PNG/2.7MB zip）
+# 设计体系交接包（不入库：本地只读参考，含 PNG 与压缩包）
 # 通配同时覆盖解压目录与压缩包两种形态（.rar / .zip 都可能被再次放进来）
 WenFlow-Design-System*
-!doc/DIAGRAM_PEDAGOGY_RESEARCH.md
 
 # 本地跑批/实验产物（日志、状态 JSON、备份）
 outputs/
 
-# 单实例锁文件（架构优化批 #3：backend/.runtime/）
+# 单实例锁文件（backend/.runtime/）
 backend/.runtime/
 
-# 后台走查的运行时证据（DOM 探针 / 截图，2026-10-26）
+# 后台走查的运行时证据（DOM 探针 / 截图）
 .audit-probe/
 .audit-probe-data/
 .audit-shots/
@@ -361,12 +362,12 @@ backend/.runtime/
 # 用户旅程走查的证据目录（每一步大截图 / 接口取数 / DOM 体检 / 图文报告，可重跑）
 walkthrough/
 
-# 小红书单词卡侧项目（2026-10-19 用户：不是平台项目、不上 GitHub；只有 *.png 被上面的通配挡住，
+# 小红书单词卡侧项目（不是平台项目、不上 GitHub；只有 *.png 被上面的通配挡住，
 # py/mjs/json/csv/svg 仍会进 git status，故整目录忽略）
 小红书/
 
 # 浏览器自动化认证残留（含本地登录 token，禁止入库）
 gui-test-screenshots/
 
-# 课堂实录评审材料（12MB 截图/PDF，临时材料不入库）
-docs/classroom-transcripts-*/
+# 过程材料目录（审计 / 战役报告 / 调研快照 / 设计过程稿 / 课堂实录）：结论沉淀进 doc/，过程只留本机
+docs/

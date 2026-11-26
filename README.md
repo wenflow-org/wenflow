@@ -106,7 +106,7 @@ npm run dev
 > 从 0 部署到可用需要配哪些（必需 / 按需增强 / 访问拓扑三档），见 [`DEPLOYMENT.md`](DEPLOYMENT.md) 的「从 0 到可用：必需与可选配置」。
 
 <details>
-<summary><b>新机启动清单（2026-11-11 实测：空 AI Key + 无插件密钥）</b></summary>
+<summary><b>新机启动清单（实测：空 AI Key + 无插件密钥）</b></summary>
 
 | 项 | 是否必需 | 实测说明 |
 |---|---|---|

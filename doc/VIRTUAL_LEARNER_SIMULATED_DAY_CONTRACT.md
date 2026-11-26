@@ -1,11 +1,9 @@
 # 虚拟学习者 · 日期模拟 接口冻结清单（系统层 ↔ 页面层）
 
-> 📌 类型：活规范（页面侧已落地 `e2af8f7`/`ce8c983`/`b57c480`；接口 ①②③ 已实现，系统层 ④ 状态以正文为准）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（系统层与页面层之间日期模拟的机制契约与冻结接口）｜索引见 [doc/README.md](./README.md)。
 
-> 目的：把"学习分散在各自然天"的仿真的**分工边界与数据契约**钉死，避免系统层与页面层各写一半。
-> 状态：**待系统层 owner 确认**（本页由页面侧提出）。
-> 设计全文：`doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md`。
-> 已落地（页面侧，commits `e2af8f7` / `ce8c983` / `b57c480`）：只读聚合 + 全局设置 + 前端挂载 + Path 评审修复。
+> **定位**：钉死"学习分散在各自然天"仿真的分工边界与数据契约，避免系统层与页面层各写一半。
+> **设计全文**：`doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md`。
 
 ---
 
@@ -15,12 +13,12 @@
 
 - 写入：把"第 dayIndex 天"的业务时间戳写成 `timestamp = baseDate + dayIndex`（`updateLearningMetrics({timestamp})`、`subtasks.completedAt`、`teaching_sessions.startTime/endTime`、`learner_evidence.occurredAt`）。
 - 读取：一律按 `asOf = endOfDay(baseDate + dayIndex)`（应用时区日末）读回。
-- **模拟日可进入真实未来**（产品拍板 2026-10-07）：`baseDate + dayIndex` 允许超过真实 `now`，用于跨日/长程模拟；原「未来日拒绝」护栏已移除。
+- **模拟日可进入真实未来**：`baseDate + dayIndex` 允许超过真实 `now`，用于跨日/长程模拟；未来日不拒绝。
 - **真实时间窗统计必须设上界**：任何面向真人运维/学习者的「近 N 天/今日」查询，除下界外还必须带 `lte: now`（或用 `asOf` 读回），不得把未来模拟日的完成记录当成已发生事实。
 - **隔离**：只对 `isVirtualLearner = 1`；`asOf` 上界（`calculatedAt <= asOf`）天然排除真实行。VL 数据进入真实时间窗时以 `now` 为上界。
 - **推进顺序向前**（day0→day1→…）；审计/运维列（`createdAt/updatedAt`）保持真墙钟。
 
-依据：`learning-state.service.ts:399-401`（窗口 `lte: asOf`）、`scripts/simulate-learner-days.ts`（6 条断言已在跑）、commit `9c3fd45`。
+依据：`learning-state.service.ts:399-401`（窗口 `lte: asOf`）、`scripts/simulate-learner-days.ts`（6 条断言已在跑）。
 
 ---
 
@@ -29,13 +27,13 @@
 | 归属 | 负责内容 |
 |---|---|
 | **系统层（对方）** | ① 各时间读取点接受 `asOf/now`（见 §四）；② `advance-day` 的**重放执行**（写当天业务时间戳并跑任务）；③ `simulationClock` 下推与 `history` 维护；④ 跨日续跑的调度切口。 |
-| **页面层（本侧，已完成）** | ① 只读聚合 `simulated-day.service`（`getAggregatedState/derivePacing/ReviewQuotaService/learner_evidence/memory_traces` 口径）；② 全局设置 `dateSimulation`；③ 前端 `DayTimeline` / 日程 tab / 设置区；④ Path 评审不拦截修复。 |
+| **页面层（本侧）** | ① 只读聚合 `simulated-day.service`（`getAggregatedState/derivePacing/ReviewQuotaService/learner_evidence/memory_traces` 口径）；② 全局设置 `dateSimulation`；③ 前端 `DayTimeline` / 日程 tab / 设置区；④ Path 评审不拦截修复。 |
 
 **页面层只读**：不写任何业务表；进度字段服务端唯一写者。
 
 ---
 
-## 三、冻结接口（页面已实现 ①②；③ 系统层已实现；④待系统层）
+## 三、冻结接口（①②③ 已实现；④ 未实现）
 
 ### ① `GET /api/admin/virtual-learners/sessions/:sessionId/simulation-clock` ✅ 已实现
 ```jsonc
@@ -63,19 +61,17 @@
 ```
 > 实现 `backend/src/routes/admin/virtual-learners.assisted-simulation.ts`（经 `virtual-learners.assisted-runtime.ts` 挂载）；当前只消费 `days`/`runTasks`，不含 `maxMinutesPerDay`/`stopOnIntervention`。
 
-### ④ `GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|intervention`（待系统层）
+### ④ `GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|intervention`（未实现）
 
 ---
 
-## 四、系统层必须补的注入点（`asOf/now`）
+## 四、时间注入点（`asOf/now`）
 
-**2026-10-18 逐条复核（#88）**：8 处全部已注入——形态统一为**环境模拟钟 `simulatedNowOr()`**
-（`virtual-lab/simulation-clock-context`），不额外加 `asOf` 参数；无模拟上下文时回落真实时钟，
-现网行为不变。行号是 2026-09 的旧值，实现文件已迁移（下表「位置」列为现行位置）。
+8 处时间读取点全部经环境模拟钟 `simulatedNowOr()` 注入（`virtual-lab/simulation-clock-context`），不额外加 `asOf` 参数；无模拟上下文时回落真实时钟，现网行为不变。
 
-| # | 位置（现行） | 契约要求 | 复核 |
+| # | 位置（现行） | 契约要求 | 实现 |
 |---|---|---|---|
-| 1 | `services/learning/goals/goal-schedule.service.ts:86 getTodaySchedule` | `asOf?: Date` | ✓ 日窗走 `simulatedNowOr()`；**2026-10-18 修掉一处残留**：进行中会话「已学分钟」原用 `Date.now()`（墙钟），模拟日重放会读成真实时长 |
+| 1 | `services/learning/goals/goal-schedule.service.ts:86 getTodaySchedule` | `asOf?: Date` | ✓ 日窗走 `simulatedNowOr()`；进行中会话「已学分钟」也走模拟钟（不用 `Date.now()`） |
 | 2 | 同文件 `:171 planTodaySchedule` | `asOf` + 本地日界 | ✓ `dayKeyOf(simulatedNowOr())`（台账 date 键）；`updatedAt` 等审计列保留墙钟 |
 | 3 | `services/learning/tasks/task-completion.service.ts:470` → 纯函数 `tasks/streak.ts advanceStreak` | `asOf` + 日界 | ✓ `data.asOf ?? new Date()`；日界用 `dayKeyOf/dayDiffInDays`（应用时区） |
 | 4 | `services/memory/memory-trace.service.ts recordExtraction` / `applyKtEstimate` | `now?: Date` | ✓ `simulatedNowOr()`；读侧 `getDueTraces({ now })` 已带参 |
@@ -85,7 +81,7 @@
 | 8 | `services/ai-teaching/teaching-session-lifecycle.ts loadRetrievabilityHints` | `asOf` | ✓ `simulatedNowOr()`（FSRS 可提取度） |
 
 > 只读侧已就绪（`getCurrentState/getPreviousMetrics({pathId,asOf})`、`getAggregatedState({asOf})`、`buildReviewPlan({now})`）。
-> 仍未做的是系统层的 batch day-timeline 路由（§三 ④）与 §六 待确认 5 项（属接口与产品裁决，不在注入点清单内）。
+> 仍未做的是系统层的 batch day-timeline 路由（§三 ④）。
 
 ---
 
@@ -101,20 +97,6 @@
 
 ---
 
-## 六、待确认（请系统层 owner 回复）
+## 六、日界与会话锚点
 
-> **已定案（系统层 2026-09-22，收敛此前 2026-09-16 的 UTC 口径）**：日界统一为**应用时区本地日**（单一真理源 `backend/src/services/time/day-boundary.ts`；commit `482012f1` 把应用日界收敛为单一真理源）。日期模拟脚手架已复用本侧的 `resolveDayWindow` 作为**规范助手**（commit `fcf651b`）。本页以下为该结论后的剩余项。
-
-- [x] 日界统一为**应用时区本地日** —— 已实现（`getNaturalDayDiff` 走 `day-boundary` 的 `dayDiffInDays`；与 `getAggregatedState.dayLoad` / `ReviewQuotaService` / `resolveDayWindow` 同口径）。
-- [ ] `baseDate` 归属：系统层按 `now - maxTotalDays` 自动生成，还是由会话 `createdAt`？页面侧建议：**默认为会话创建日，可在画像级/会话级覆盖**（会话级配置已实现）。
-- [ ] `advance-day` 是否复用 `simulate-learner-days.ts` 的重放写法（独立模拟路径 vs 真实会话路径）？
-- [ ] `runTasks` 的日时长上限（`maxMinutesPerDay`）由谁裁决（系统层顺延策略）？
-- [ ] `history[]` 直接存 `stageResults.simulationClock.history` 可否（页面回放用）？
-- [ ] 技能层还需给 `session-wrapup` 注入 `temporalContext`（教学会话 → 虚拟会话时钟的映射由谁提供）？
-
----
-
-## 七、变更记录
-
-- 2026-09-16 v1：首版（页面侧提出，待系统层确认）。
-- 2026-11-02：按当前代码核验更新——日界改为应用时区本地日（`day-boundary`）、§三 ③ `advance-day` 记为已实现并订正 body、移除不存在符号 `dailyMinutesCap`。
+日界统一为**应用时区本地日**（单一真理源 `backend/src/services/time/day-boundary.ts`；`getNaturalDayDiff` 走 `dayDiffInDays`，与 `getAggregatedState.dayLoad` / `ReviewQuotaService` / `resolveDayWindow` 同口径）。`baseDate` 默认取**会话创建日**，可在会话级覆盖；`advance-day` 在模拟时钟上下文内走真实会话路径（写 `baseDate + dayIndex`、按 `asOf` 读回）。

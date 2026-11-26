@@ -19,7 +19,7 @@
 | `mechanical` | 机械脚本 / QA 自动化 / 数据工厂 e2e（`pe-*`、`ev2_*`、`e2e*`、`uitest*`、`qa_*` 等） | true |
 | `vl` | 虚拟学习者（`virtual_*@test.local`/`vl-*`）；批次细分 `campaign`（旧战役）/`r1b`（R1 对比组）/`r1-measure`（R1 新建），附 `r2Reused` | true |
 | `demo` | 内置演示（`builtin_*@preset.local`） | true |
-| `test-round` | 本轮实测（`gu-r1-*`/`s?r1-*`/`seq-r2-*`/`f1-r3-*`/`mv-*` + 2026-10-05(+08) 后出现的实测账号） | true |
+| `test-round` | 实测账号（`gu-r1-*`/`s?r1-*`/`seq-r2-*`/`f1-r3-*`/`mv-*` + 2026-10-05(+08) 后出现的实测账号） | true |
 | `human` | 已人工确证真人（白名单，目前为空） | false |
 | `human-candidate` | 无法确证（**不硬标 human**，进人工复核清单） | false |
 | `unknown` | 邮箱缺失/不合法（正常库内应为 0） | false |
@@ -65,7 +65,7 @@ SELECT * FROM v_session_provenance WHERE measurement_sealed = 1 AND ... mastery/
 1. **命名约定**（跑批/实测/QA 必须遵守，否则会被误标 `human-candidate`）：
    - 虚拟学习者：`virtual_<id>@test.local` 或 `vl-<用途>-<id>@...`（R1 对比组用 `vl-r1b-<档位>-<n>`）；
    - 内置演示：`builtin_<场景>@preset.local`；
-   - 本轮实测：`<轮次前缀>-r<轮>-<随机>`（如 `f1-r3-xxxxx`、`seq-r2-xxxxx`、`s1r1-xxxxx`）；
+   - 实测账号：`<轮次前缀>-r<轮>-<随机>`（如 `f1-r3-xxxxx`、`seq-r2-xxxxx`、`s1r1-xxxxx`）；
    - 机械脚本 / QA：`pe-*`、`ev2_*`、`e2e*`、`uitest*`、`qa_*` 等（见 `provenance-rules.mjs` 规则表）。
 2. **登记流程**：新批次跑完后重跑
    `node backend/scripts/data-governance/build-registry.mjs`（注册表）与

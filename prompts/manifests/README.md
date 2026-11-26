@@ -17,7 +17,7 @@
 说明：
 
 - 运行参数（temperature/maxTokens/model/thinkingMode/reasoningEffort/tier）**不再写入 manifest**：
-  唯一写源 = `prompts/core/<skillId>.yaml` 的 `params`（P0-1 参数四写收敛，2026-08）。
+  唯一写源 = `prompts/core/<skillId>.yaml` 的 `params`。
 - `ownership.tier` 代表作者态治理或发布分层
 
 ## 为什么单独拆出来
@@ -42,14 +42,9 @@ manifests/<skillId>.yaml
 
 - 文件名中的 `<skillId>` 是最终真相标识
 - 文件内容中的 `skillId` 应与文件名一致
-- （已废弃）`runtimeDefaults.tier` 旧约定值为 `chat | reasoning | light`——历史文件若残留该段，
-  仅兼容读取不再写出，运行参数以 core.yaml `params` 为准
+- `runtimeDefaults.tier`（旧约定值 `chat | reasoning | light`）只兼容读取、不再写出；
+  运行参数以 core.yaml `params` 为准
 
-## 状态说明
+## 谁在消费
 
-当前目录已经被正式定义，但后端流程仍在逐步接入中。
-
-也就是说：
-
-- 架构上：`manifests/` 已是 metadata truth
-- 实现上：后续需要让 compile / publish API 正式消费这里的内容
+后端直接读写本目录：`services/prompt-lab/manifest.ts` 负责读写，`resolve-prompt-contract.ts` / `resolve-runtime-contract.ts` / `core-prompt-metadata.ts` / `pipeline-map.ts` 等从中取元数据。

@@ -1,6 +1,6 @@
 # 开发脚本手册（DEV_SCRIPTS）
 
-> 📌 类型：活规范（跑批脚本唯一索引）｜最后核验：2026-11-02（86 条路径引用零失效）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（脚本目录定位、虚拟学习者跑批链路与可复用工具索引）｜索引见 [doc/README.md](./README.md)。
 
 > 面向**二次开发**：本地几百个脚本怎么找、怎么用、哪些别当工具用。
 > 本文只写**稳定的定位与约定**；具体清单以目录为准（脚本会漂移，动手前先 `git log -- <脚本>` 确认它还在维护）。
@@ -118,7 +118,7 @@ node scripts/<名字>.mjs [参数]
 | 脚本 | 用途 | 入口 |
 |---|---|---|
 | `check-core-hash-parity.ts` | core ↔ 编译产物 ↔ DB 的 hash 对账 | `npm run prompts:core:check` |
-| `check-input-handoffs.ts` | inputs 声明 ↔ 字段路由 handoff 双向对账 + 声明边 ↔ 抽取器对账（#189） | `prompts:check-handoff` / `:strict` |
+| `check-input-handoffs.ts` | inputs 声明 ↔ 字段路由 handoff 双向对账 + 声明边 ↔ 抽取器对账 | `prompts:check-handoff` / `:strict` |
 | `check-core-fields-sync.ts` | 产出字段 ↔ core fields 一致性 | `prompts:fields-sync:check` |
 | `check-payload-prefix-stability.ts` | 稳定键前置护栏（KV 前缀缓存） | `prompts:payload-prefix:check[:strict]` |
 | `check-skills-file.ts` | 技能户口簿 `prompts/skills.yaml` 全量门禁 | `prompts:skills:check` |
@@ -132,7 +132,7 @@ node scripts/<名字>.mjs [参数]
 | `check-prompt-runtime-contract-metadata-parity.ts` | 运行时契约元数据 parity | `prompts:runtime-contract:check` |
 | `check-route-db-boundary.mjs`（在 `backend/scripts/`） | 路由层不得直连 DB | `boundaries:check`（`--update` **只允许收缩**） |
 
-> ⚠️ 上表中若干门禁（constants / core-fields-sync / core-hash-parity / yaml-vocabulary / runtime-contract / agent-snapshots / compile-core-files）的**实现已迁到 `services/prompt-manifest/`**，脚本只是运维 CLI 入口（审计 #8）。
+> ⚠️ 上表中若干门禁（constants / core-fields-sync / core-hash-parity / yaml-vocabulary / runtime-contract / agent-snapshots / compile-core-files）的**实现已迁到 `services/prompt-manifest/`**，脚本只是运维 CLI 入口。
 
 ### 3.2 只读审计（`audit-*`，安全，可对生产库跑）
 

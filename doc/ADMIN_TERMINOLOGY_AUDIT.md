@@ -1,6 +1,6 @@
-# Admin 运营台术语治理审计（ADMIN_TERMINOLOGY_AUDIT）
+# Admin 运营台术语治理审计
 
-> 📌 类型：活规范（叫法 SSOT，不可归档）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（admin 运营台术语叫法 SSOT 与守卫规则）｜索引见 [doc/README.md](./README.md)。
 
 > 本文是 admin 运营台术语治理的**单源依据**。`frontend/src/views/admin-redesign/terms.ts`、
 > `statusText.ts` 与守卫测试 `backend/src/services/__tests__/terminology-guard.test.ts` 均以本文为准。
@@ -18,7 +18,7 @@
 
 | 族 | 主叫法 | 说明 |
 |---|---|---|
-| 不一致族 | 不一致 / 文件与线上不一致 / 编译产物不一致（限定「哈希不一致」）/ 运行时不一致 | 各义**不得合并**为同一文案（2026-10-14 文案审查：原「漂移」族改人话） |
+| 不一致族 | 不一致 / 文件与线上不一致 / 编译产物不一致（限定「哈希不一致」）/ 运行时不一致 | 各义**不得合并**为同一文案 |
 | 同步族 | 同步（到 DB）/ 同步完成 / 保存到编排文件 / 发布 / 一致性核查 | 文件→DB 生效动作统一「同步」 |
 | 状态族 | 缺项 / 孤儿 / 字段已同步 | 「缺声明」「未路由」「fields-synced」为禁用叫法 |
 | 健康族 | 健康中心（独立页）/ 健康区（编排页内嵌）/ 今日成功率 | 原「健康分」撞词已改名 |
@@ -54,7 +54,7 @@ node_config_changes / orchestration-prune、落库对账、合同维度、健康
 ### §4.5 文档引用
 源码中出现的 `doc/*.md` 引用必须真实存在（本文即真源）。
 
-### §4.6 状态词单源（本次新增）
+### §4.6 状态词单源
 `running` 的展示词统一「**进行中**」（单源 `statusText.ts`）。页面**不得**再写私有字典 / 格式化函数把它译成「运行中」。
 
 守卫（`terminology-guard.test.ts`）按**译名位置**断言，而不是禁「运行中」这个子串：
@@ -70,16 +70,6 @@ node_config_changes / orchestration-prune、落库对账、合同维度、健康
 
 | 位置 | 语义 | 例 |
 |---|---|---|
-| 自由文本 | 运行时 / 线上 | 「源文件与**运行中**的 Prompt 不一致」（原 `SkillDesignPage`，该页已退役并入 `SkillDetail`，见 git 历史）、「是否已在系统**运行中**注册」（`SkillReconciliation`） |
+| 自由文本 | 运行时 / 线上 | 「源文件与**运行中**的 Prompt 不一致」、「是否已在系统**运行中**注册」（`SkillReconciliation`） |
 | 动词进行态 | 「运行」这个动作正在发生 | 「**运行中**…」（`skill-design/trial-tab.vue` 试跑按钮） |
 | 内部注释 | 非 UI 文案 | `live.ts` / `vlab.ts` 注释里的「运行中会话」 |
-
-## §5 已知的历史疏漏（已修）
-
-- 会话状态 `running` **一处「进行中」（`statusText` 徽章）、一处「运行中」（页内私有字典 / 计数说明）** —— 同义不同词（`ADMIN_PAGE_TEMPLATES` 已移出仓库，见 git 历史；其附 C 也记过「顶栏 `进行中` 与右栏 `运行状态 运行中`」）→ **统一「进行中」**，并把 `BatchExperiments`（已退役并删除，见 git 历史）私有 `statusText`、`GoalConversations` 私有 `statusLabel`、`VirtualProfile.formatRunResult` 的 running 分支改为引用共享单源（48 处文案）。
-
-- `degraded` 在会话座舱一处翻译、一处直出 → 统一「降级」。
-- 版本表 `{{ v.status }}` 直出 `ACTIVE` → `versionStatusText()`。
-- 字段路由图例 `visible` / `hidden` 直出 → 「可见 / 隐藏」+ 括号保留 `render`。
-- `HealthCenter` / `FieldAddWizard` 硬编码 `TERMS` 值 → 改引用常量。
-- `FieldRoutingTable` 引用不存在的 `doc/FIELD_ROUTING_UX_REDESIGN.md` → 删除。
