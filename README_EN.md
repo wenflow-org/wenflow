@@ -20,15 +20,15 @@ Try it at [wenflow.org](https://wenflow.org). The demo is for evaluation only; a
 
 ## What makes it "AI-native"
 
-Most learning trouble is not a lack of effort: the goal is too big, there is too much material, and the first step is unclear. Traditional platforms start from supplying content, with courses, question banks and paths prepared in advance. WenFlow has no pre-built courses: clarifying the goal, planning the path, teaching and the post-session summary are all done by AI around the problem you actually have.
+WenFlow ships no courses or question banks. You state a problem you want to solve; a conversation turns it into a clear goal, and the path and each lesson are generated from there.
 
 ## How is it different from just asking an AI?
 
-Why not just throw the question at an AI assistant? You get an answer fast, but these parts are still on you:
+You can ask ChatGPT or DeepSeek and get an answer, but setting the goal, breaking it into a plan, checking whether you really understood it, and reviewing it days later are all left to you.
 
 | | Asking a general AI assistant | Using WenFlow |
 |---|---|---|
-| **Set the goal** | You decide what to learn and how far | Questions turn a vague goal into a verifiable one; you confirm it |
+| **Set the goal** | You decide what to learn and how far | Questions turn a vague goal into a clear one and define what counts as done; you confirm it |
 | **Plan** | The plan is yours to keep and push forward | A phased path is generated; today's task is right there |
 | **Learn** | Question and answer, with no check that you really got it | Round-based lessons: explain, then ask; a new angle or missing prerequisites when stuck |
 | **Remember you** | Your learning progress is not tracked by default | Weak spots are remembered and picked up next lesson; reviews follow the forgetting curve |
@@ -36,34 +36,32 @@ Why not just throw the question at an AI assistant? You get an answer fast, but 
 
 The thinking behind the project is on the [vision page](https://wenflow.org/vision) (Chinese).
 
-## What kinds of goals fit
+## When it fits
 
-The platform is not built for "learning a tool's operations" — format conversions, batch calculations and menu-clicking are work that should be handed to AI. It is built for **judgment and understanding goals**: you draw the conclusion; AI builds the scaffold.
+If you just want to learn how a piece of software works, or have a script written to batch-process files, hand it to AI — there is no need to spend time learning it. WenFlow is for problems where you have to make the judgment and understand the underlying logic: a homework conflict at home, a business decision, or getting to grips with a new field.
 
-For example: a child won't do homework, and every attempt to hurry them ends in a fight. The goal is to understand why — and to judge, next time, whether to step in and how.
+## One real question, end to end
 
-A goal like this doesn't stop at "learn some child psychology". AI asks about the child's grade, what the dawdling actually looks like, and how you handle it now; then it turns "lazy" into signals you can see. The path is three stages: tell the causes apart, see what hurrying does, then judge one real evening at home. The checkpoint hands you a new homework-conflict scene and asks for the likely cause, the evidence and your first sentence — not a definition.
+For example: "My child won't do homework, and every attempt to hurry them ends in a fight. I want to understand why, so next time I know whether to step in and how."
 
-## Interface walkthrough (a judgment goal)
-
-The same goal, from one sentence to the end of the first lesson:
+From one sentence to the end of the first lesson:
 
 | ![Goal clarification: the AI asks follow-up questions while the sidebar collects goal information](doc/images/goal-clarification.png) | ![Learning path: stages, tasks and progress](doc/images/learning-path.png) |
 |---|---|
 | ![Classroom whiteboard: an attribution table that fills in as the lesson advances](doc/images/round-based-learning.png) | ![Learning state: training load, fatigue and today's plan](doc/images/learning-state.png) |
 
-- **① Clarify the goal** (top left): questions before answers — the child's grade, what the dawdling looks like, what you want within two or three weeks. Seven fields are collected live; three of them were filled in by the platform from what you said, marked as tentative and editable.
-- **② Generate the path** (top right): lessons are planned only after you confirm — three stages, a two-to-three-week window, about 25 minutes per session. The first stage's three lessons are ready; the next two are generated from how you actually do. Lesson one starts by taking the word "lazy" apart.
-- **③ Lessons with a whiteboard** (bottom left): explain, then ask. The teacher puts "they're just lazy" beside three facts on the board and fills in internal/external, stable/unstable, controllable/uncontrollable cell by cell; the board grows as you answer, and a miss is named on the spot.
-- **④ Learning state** (bottom right): after 43 minutes on the lesson, training load and fatigue are 29.5 each and overall state is low, so the page says to keep today light; it also remembers which cell didn't hold and schedules it for the start of the next lesson.
+- **① Clarify the goal** (top left): the AI asks about the child's grade, what the dawdling looks like, and how you handle it now. Seven fields are collected as you talk; three are filled in from what you said, marked as tentative, and can be edited.
+- **② Generate the path** (top right): lessons are planned only after you confirm: three stages, two to three weeks, about 25 minutes each. The first stage's three lessons are ready; the next two are generated from how you actually do.
+- **③ Lessons with a whiteboard** (bottom left): the board puts "they're just lazy" beside three concrete behaviours and updates the attribution cell by cell after each exchange; when an answer misses, it says which cell doesn't line up.
+- **④ Learning state** (bottom right): the lesson took 43 minutes; training load and fatigue are 29.5 each and overall state is low, so the page suggests review or light work today. It also notes the point that didn't hold and schedules it for the start of the next lesson.
 
 The screenshots are in Chinese; the UI is currently Chinese-only.
 
 Also:
 
-- **Your own materials**: upload the course notes or book you are studying, and lessons retrieve and quote the relevant passages instead of stuffing the whole book into the model.
-- **Your own key**: any OpenAI-compatible provider works, and learners can bring their own API key in settings.
-- **Your own data**: SQLite files with no external database service; MIT licensed and fully self-hostable.
+- Upload course notes or a book, and lessons retrieve and quote the relevant passages.
+- Any OpenAI-compatible provider works, and learners can bring their own API key.
+- SQLite files with no external database service; MIT licensed and fully self-hostable.
 
 ## Quick Start
 
@@ -184,7 +182,7 @@ Validation relies mainly on the built-in AI Virtual Learner Lab; the public demo
 
 ## Under the Hood
 
-Being AI-native comes down to the engineering decisions below. From here on, this is written for developers and edtech peers; each item gets one sentence, and the details live in the linked documents (mostly Chinese).
+The engineering decisions behind the experience above (details in the linked docs, mostly Chinese):
 
 | Topic | In one sentence | Go deeper |
 |---|---|---|
@@ -454,7 +452,3 @@ Copyright (c) 2026 wenflow-org
 ## Acknowledgements
 
 Thanks to the [Linux.do](https://linux.do/) community for their long-term support and feedback.
-
----
-
-*When AI can answer every standard question, the people who ask good questions will define the future.*
