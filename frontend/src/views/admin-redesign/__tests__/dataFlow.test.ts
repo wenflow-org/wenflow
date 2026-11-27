@@ -232,7 +232,14 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('(r.left - sr.left) / z')
     expect(DataFlowGraphSource).not.toContain('view.scrollLeft / z')
     // 布局未落地前量到的是中间态：等到层自有宽 === 基准宽再画
-    expect(DataFlowGraphSource).toContain('Math.abs(rr.width / z - dfgBaseW.value) > 1')
+    // 2026-11-25：基准宽是逻辑 px，rect 还含页面 zoom（.ac 1.15/1.3），判据要把两层一起除掉
+    expect(DataFlowGraphSource).toContain('Math.abs(rr.width / (z * pageZoom) - dfgBaseW.value) > 1')
+  })
+
+  it('滚轮锚点与拖动位移把视觉 px 折回逻辑 px（页面 zoom 不再让拖动过冲）', () => {
+    expect(DataFlowGraphSource).toContain('(e.clientX - r0.left) / pageZoom')
+    expect(DataFlowGraphSource).toContain('(e.clientX - r1.left) / pageZoom')
+    expect(DataFlowGraphSource).toContain('/ dfgPanStart.zoom')
   })
 
   it('对端跳转收在入口/出口卡题上：卡题即「切到对端阶段」，与卡本身同色调', () => {

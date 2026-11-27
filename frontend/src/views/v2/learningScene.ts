@@ -46,7 +46,13 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
       if (rel === 'prev-milestone') return `上节课在「${sc.recap?.sourceTitle || '上一阶段'}」结束，这节课是它的下一步。`;
       return '上一课刚结束，这节课接着往下推进。';
     }
-    if (k === 'relearn') return sc.attempt && sc.attempt > 1 ? `这是你第 ${sc.attempt} 次学这节课，重点补上次没掌握的。` : '从头再学一遍这节课。';
+    if (k === 'relearn') {
+      // 不报裸次数（「第 7 次学」只会提醒重修）：有真实遗留点就点名，没有就平静说再过一遍。
+      const unresolved = Array.isArray(sc.recap?.unresolved) ? sc.recap.unresolved.filter(Boolean) : [];
+      return unresolved.length
+        ? `上次「${unresolved[0]}」还没稳，这次接着补。`
+        : '把这节课再过一遍。';
+    }
     if (k === 'review') return '先巩固快忘记的知识点，再继续新内容。';
     return '';
   });

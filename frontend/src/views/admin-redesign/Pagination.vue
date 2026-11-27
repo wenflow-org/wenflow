@@ -67,6 +67,7 @@
 import { computed, ref, watch } from 'vue'
 import { totalPagesOf } from './live'
 import MkSelect from '@/components/mk/MkSelect.vue'
+import { resolveVisualScale } from '@/utils/zoom'
 
 const props = withDefaults(
   defineProps<{
@@ -150,7 +151,11 @@ watch(
     const shell = host.closest<HTMLElement>('.mshell__content')
     const card = host.closest<HTMLElement>('.mk-card')
     if (shell && card && shell.scrollTop > 0) {
-      const top = card.getBoundingClientRect().top + shell.scrollTop - 12
+      /* rect 是视觉 px、scrollTop 是逻辑 px；.ac 的 1.15/1.3 要除掉，且差值以滚动容器
+         自身为原点（之前直接用视口 top，在页面滚动后也会偏）。 */
+      const shellRect = shell.getBoundingClientRect()
+      const zoom = resolveVisualScale(shell) || 1
+      const top = (card.getBoundingClientRect().top - shellRect.top) / zoom + shell.scrollTop - 12
       shell.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
     }
   }

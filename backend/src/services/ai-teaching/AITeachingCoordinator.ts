@@ -95,16 +95,30 @@ export interface TeachingSessionStartInput {
   allowWebSupplement?: boolean;
 }
 
+/** 开场材料卡（2026-11-27）：材料不混进老师气泡，作为独立引用卡渲染。 */
+export interface TeachingOpeningMaterial {
+  title: string;
+  text: string;
+}
+
 export interface TeachingOpening {
   message: string;
   /**
-   * 可选的一行思考引导（渲染在动作选项上方一行）。不配控件，因此 **不得出现动作指向词**；
-   * quickReplies 恒为非空（2026-11-02 起由 ensureOpeningActionLine 确定性兜底），
-   * 动作出口永远由 quickReplies 承担——两者不是二选一，各自负责"想什么 / 往哪走"。
+   * 开场引导（渲染在开场气泡之后）。2026-11-26 口径：
+   * - predict：question 是待表态的预测题，可与 quickReplies 并存——选项就是本题的候选立场；
+   * - example-first / self-assess：有动作选项时 question 为空（一条行动线）；
+   * - predict 抽不到可枚举候选时，quickReplies 允许为空，由 question 单独成线；
+   *   其它模式由 ensureOpeningActionLine 按本课内容补齐动作。
    */
   question?: string;
   quickReplies: Array<{ text: string }>;
   mode: 'self-assess' | 'predict' | 'example-first';
+  /**
+   * 本课材料卡（可选）：代码从 taskMaterial 抽第一组/表头+首行，前端渲染成独立卡片。
+   * 不再把材料块硬拼进 message——「老师说一段人话 + 系统贴一段文档」会被读成两张皮，
+   * 也容易和正文里的「课上摆到板上」打架。
+   */
+  material?: TeachingOpeningMaterial;
 }
 
 export type SessionResumeMode = 'new' | 'resumed';

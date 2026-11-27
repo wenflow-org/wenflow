@@ -1112,8 +1112,8 @@ watch(
 .sdp-codehl__pre::-webkit-scrollbar { display: none; }
 /* 整屏档：长 Prompt 通读（2.7 万字量级），高度按视口给，仍保持两层 padding 一致 */
 .sdp-codehl--tall {
-  min-height: min(84vh, 1200px);
-  max-height: min(92vh, 1400px);
+  min-height: min(calc(84vh / var(--admin-zoom, 1)), 1200px);
+  max-height: min(calc(92vh / var(--admin-zoom, 1)), 1400px);
 }
 .sdp-codehl__ta {
   position: relative;

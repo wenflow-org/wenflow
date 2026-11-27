@@ -163,7 +163,7 @@ async function mountLd(sessions: ReturnType<typeof sessionRow>[]) {
         // 命名 + 接 props：路径视角用例要断言页级作用域已接管（show-path-rail=false）
         MkGraphExplorer: { name: 'MkGraphExplorer', props: ['nodes', 'edges', 'paths', 'pathId', 'showPathRail'], template: '<div class="stub-graph" />' },
         RouterLink: { template: '<a><slot /></a>' },
-        Teleport: { template: '<teleport to="body"><slot /></teleport>' },
+        Teleport: { template: '<div class="stub-teleport"><slot /></div>' },
       },
     },
   });
@@ -300,7 +300,7 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
           MkChart: { template: '<div class="stub-chart" />' },
           MkGraphExplorer: { template: '<div class="stub-graph" />' },
           RouterLink: { template: '<a><slot /></a>' },
-          Teleport: { template: '<teleport to="body"><slot /></teleport>' },
+          Teleport: { template: '<div class="stub-teleport"><slot /></div>' },
         },
       },
     });

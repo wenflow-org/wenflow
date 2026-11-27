@@ -72,7 +72,7 @@ afterEach(async () => {
 
 async function mountDetail(extra: Record<string, unknown> = {}) {
   getPathDetail.mockResolvedValue(pathPayload(extra));
-  const w = mount(V2LearningPathDetail, { global: { stubs: { 'router-link': true } } });
+  const w = mount(V2LearningPathDetail, { global: { stubs: { 'router-link': true, teleport: true } } });
   mountedWrappers.push(w);
   await flushPromises();
   return w;
@@ -189,7 +189,10 @@ describe('V2LearningPathDetail 调整历史（replanLineage）', () => {
     // 默认折叠（v-show → 内联 display:none）
     expect(body.attributes('style')).toContain('none');
     await card!.find('.sidecard__head').trigger('click');
-    expect(body.attributes('style')).not.toContain('none');
+    await flushPromises();
+    // Teleport stub 下卡片 wrapper 不会就地刷新，重新查询一次再断言展开态
+    const cardAfter = w.findAll('.sidecard').find((c) => c.text().includes('调整历史'))!;
+    expect(cardAfter.find('.sidecard__body').attributes('style') || '').not.toContain('none');
     expect(card!.text()).toContain('覆盖原路径');
     expect(card!.text()).toContain('AI 教学建议');
     expect(card!.text()).toContain('第二阶段太难');

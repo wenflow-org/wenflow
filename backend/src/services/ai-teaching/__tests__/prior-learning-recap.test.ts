@@ -12,6 +12,7 @@ jest.mock('../../../config/database', () => ({
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
+    teaching_session_messages: { findMany: jest.fn() },
   },
 }));
 
@@ -32,6 +33,8 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
     prisma.subtasks.findMany.mockReset();
     prisma.teaching_sessions.findMany.mockReset();
     prisma.teaching_sessions.findFirst.mockReset();
+    prisma.teaching_session_messages.findMany.mockReset();
+    prisma.teaching_session_messages.findMany.mockResolvedValue([]);
   });
 
   const base = {
@@ -147,27 +150,50 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
     expect(recap?.sameTaskHistory?.lastUnresolvedPoints).toEqual(['难点Z']);
   });
 
-  it('上次没走完（paused，无 wrapup）也产出最小 same-task 上下文（2026-11-12 口径修正）', async () => {
+  it('上次没走完（paused，无 wrapup）→ 不再生成 same-task 回顾（半途重开当新课）', async () => {
     mockMilestones();
     mockTasksInMilestone([{ id: 'task-b', title: '任务B' }]);
     // 第一次 findMany（completed+wrapup）：0；第二次（attempts 计数）：1 条 paused
     prisma.teaching_sessions.findMany
       .mockResolvedValueOnce([])
       .mockResolvedValue([
-        { status: 'paused', endTime: null, createdAt: new Date('2026-11-11T15:48:28Z') },
+        { id: 's-paused', status: 'paused', endTime: null, createdAt: new Date('2026-11-11T15:48:28Z') },
       ]);
     prisma.subtasks.findMany.mockResolvedValue([{ id: 'task-b', title: '任务B' }]);
     prisma.teaching_sessions.findFirst.mockResolvedValue(null);
+    // 学生在暂停前确实发过两轮言（侧表权威）——但没学完就不产出回顾
+    prisma.teaching_session_messages.findMany.mockResolvedValue([
+      { sessionId: 's-paused', payload: JSON.stringify({ role: 'user', content: '第一问' }) },
+      { sessionId: 's-paused', payload: JSON.stringify({ role: 'user', content: '第二问' }) },
+      { sessionId: 's-paused', payload: JSON.stringify({ role: 'assistant', content: '讲解' }) },
+    ]);
 
     const { recap, sameTaskSessions } = await fetchPriorLearningRecap(base);
+    // 计数仍保留（有效学习次数），但不给开场提供「你之前开过、没走完」的回顾
     expect(sameTaskSessions).toBe(1);
-    expect(recap?.relation).toBe('same-task');
-    expect(recap?.sameTaskHistory?.attemptCount).toBe(1);
-    expect(recap?.sameTaskHistory?.lastStatus).toBe('paused');
-    expect(recap?.sameTaskHistory?.lastUnresolvedPoints).toEqual([]);
-    expect(recap?.topicSummary).toBeNull();
-    // 开场模型据此能承认「第 2 次学」，而不是当第一次讲
-    expect(recap?.sameTaskHistory?.lastSummary).toBeNull();
+    expect(recap).toBeNull();
+  });
+
+  it('0–1 轮的空开/浅试探（含点重新开始）不计次，也不产出 same-task 上下文', async () => {
+    mockMilestones();
+    mockTasksInMilestone([{ id: 'task-b', title: '任务B' }]);
+    prisma.teaching_sessions.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { id: 's-empty', status: 'timeout', endTime: null, createdAt: new Date('2026-11-11T15:00:00Z') },
+        { id: 's-shallow', status: 'paused', endTime: null, createdAt: new Date('2026-11-10T15:00:00Z') },
+      ]);
+    prisma.subtasks.findMany.mockResolvedValue([{ id: 'task-b', title: '任务B' }]);
+    prisma.teaching_sessions.findFirst.mockResolvedValue(null);
+    // s-empty 一句话没说；s-shallow 只有一轮试探
+    prisma.teaching_session_messages.findMany.mockResolvedValue([
+      { sessionId: 's-shallow', payload: JSON.stringify({ role: 'user', content: '开始吧' }) },
+      { sessionId: 's-shallow', payload: JSON.stringify({ role: 'assistant', content: '开场' }) },
+    ]);
+
+    const { recap, sameTaskSessions } = await fetchPriorLearningRecap(base);
+    expect(sameTaskSessions).toBe(0);
+    expect(recap).toBeNull();
   });
 
   it('无任何前序时回退最近任意完成课（last-any）', async () => {
@@ -208,6 +234,8 @@ describe('fetchPriorLearningRecap（复盘要点双形读取 · P1-8）', () => 
     prisma.subtasks.findMany.mockReset();
     prisma.teaching_sessions.findMany.mockReset();
     prisma.teaching_sessions.findFirst.mockReset();
+    prisma.teaching_session_messages.findMany.mockReset();
+    prisma.teaching_session_messages.findMany.mockResolvedValue([]);
   });
 
   const base = {

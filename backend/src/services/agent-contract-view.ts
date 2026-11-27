@@ -120,6 +120,10 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // 课堂材料本体（2026-11-18，2026-11-19 审计修正键位）：buildTeachingTurnInput 把它装配在
     // scenario.taskMaterial（来自 aiPromptTemplate.taskMaterials.byTask），提示词规则按同键消费。
     'scenario.taskMaterial',
+    // 2026-11-24：teaching-opening / teaching-exit-ticket 的 inputs 声明
+    // `sandbox:teaching.task.material`（与 teaching-turn 的 scenario.taskMaterial 同源，
+    // 由 generateOpening / generateExitTicketForLesson 直接注入扁平 taskMaterial 键）。
+    'task.material',
     'scenario.interactionProfile',
     'interactionProfile',
     'teachingState.classroomContext',

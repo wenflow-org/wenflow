@@ -103,6 +103,11 @@ export async function buildTeachingScenarioContext(
      * 会让「判完成看到的掌握度」与「终评写回的掌握度」错位。
      */
     forceLearnerSnapshotRefresh?: boolean;
+    /**
+     * 学习表现预测并行化（2026-11-26）：true 时不 await 预测，改挂在 `context.pendingLearnerPrediction`
+     * 上由调用方在合适的时点 await（教学回合与板书设计并行）。其余调用方缺省同步，行为不变。
+     */
+    deferPrediction?: boolean;
   }
 ): Promise<TeachingScenarioContext> {
   return runInAgentScope(AI_TEACHING_AGENT_ID, () => buildTeachingScenarioContextImpl(
@@ -126,6 +131,11 @@ async function buildTeachingScenarioContextImpl(
      * 会让「判完成看到的掌握度」与「终评写回的掌握度」错位。
      */
     forceLearnerSnapshotRefresh?: boolean;
+    /**
+     * 学习表现预测并行化（2026-11-26）：true 时不 await 预测，改挂在 `context.pendingLearnerPrediction`
+     * 上由调用方在合适的时点 await（教学回合与板书设计并行）。其余调用方缺省同步，行为不变。
+     */
+    deferPrediction?: boolean;
   }
 ): Promise<TeachingScenarioContext> {
   const task = await prisma.subtasks.findUnique({
@@ -423,10 +433,8 @@ async function buildTeachingScenarioContextImpl(
       description: task.description || null,
       acceptanceCriteria: (task as any).acceptanceCriteria || null,
     },
-    // 课堂契约时间预算（2026-11-19）：任务计划分钟；缺失时契约不设时间硬门。
-    taskEstimatedMinutes: Number.isFinite(Number((task as any).estimatedMinutes))
-      ? Math.max(1, Number((task as any).estimatedMinutes))
-      : null,
+    // 2026-11-25 去时间化：任务分钟不再进课堂契约。它是生成期的估算，不是学习者给的
+    // 硬约束；带进课堂会让模型到点收束，把一场完整争论切成两半。
     // 课堂材料本体（2026-11-18）：与 description 分离；缺失时退回旧行为（按 description 组织）
     taskMaterialPayload: resolveTaskMaterialPayloadForTeaching(path.aiPromptTemplate, task.id),
     teachingStrategyGuidance: buildTeachingStrategyGuidance(taskProfile),
@@ -491,10 +499,8 @@ async function buildTeachingScenarioContextImpl(
   // - 已有该任务未回写的预测记录 → 复用（重试/恢复不重复调 LLM）
   // - 无 → await LLM 预测（≤8s，超时降级 null）→ 记录校准行
   // - 失败/超时 → null，教学照常
-  // 2026-11-21 硬证据注入：除摘要外再喂 4 类**代码产出**的确定性证据（上一节契约缺口 / 代码裁决
-  // 检查点正误 / FSRS 快忘旧知 / 负荷档位），让预测从「读摘要手猜」变「看证据判」——评审
-  // 2026-11-21 核实 predict 是画像层唯一完全脱离硬证据的环节。证据齐全度随 prediction.evidence
-  // 下发，供下游在 reliability 不足（新用户冷启动）时仍可采纳方向性判断。
+  // 2026-11-26：预测不再挡在回合关键路径上（options.deferPrediction）——它只是语气的软提示，实测模型
+  // p50 就压在 8s 天花板上（实录 7 次尝试 7 次全败，白等 56s），现在与板书设计并行，超时也抬到 15s。
   const previousLessonReport = readPreviousLessonReport(previousSession);
   const retentionHints = await loadRetrievabilityHints(userId);
   const hardEvidence = {
@@ -505,7 +511,7 @@ async function buildTeachingScenarioContextImpl(
     retentionHints: retentionHints.length > 0 ? retentionHints : undefined,
     paceMode: (learnerSnapshot.learningControlState as { paceMode?: 'recover' | 'push' | 'steady' } | null | undefined)?.paceMode,
   };
-  context.learnerPrediction = await buildLearnerPrediction(userId, path.id, task.id, milestone?.id, previousSession?.id, {
+  const predictionCall = () => buildLearnerPrediction(userId, path.id, task.id, milestone?.id, previousSession?.id, {
     fatigueSignal: learningState ? classifyLoad({ ktl: learningState.ktl, lf: learningState.lf }).fatigueRisk : undefined,
     // issue #194：摘要取自本次教学上下文已加载的画像快照，与 conceptLedger 等同一数据源；
     // 预测器不再自己查 learner_evidence（旧行为见 fetchLatestKnowledgeSummary 已删除）。
@@ -517,12 +523,22 @@ async function buildTeachingScenarioContextImpl(
     },
     hardEvidence,
   });
+  if (options?.deferPrediction) {
+    // 并行模式：先把上下文交回去，预测结果由调用方在合适的时点 await（引擎与板书设计并行）。
+    // buildLearnerPrediction 内部吞掉全部异常、只会 resolve，这里不会产生无人接住的 rejection。
+    (context as typeof context & { pendingLearnerPrediction?: Promise<void> }).pendingLearnerPrediction =
+      predictionCall().then((prediction) => {
+        context.learnerPrediction = prediction;
+      });
+  } else {
+    context.learnerPrediction = await predictionCall();
+  }
 
   return context;
 }
 
-/** 预测超时（LLM 调用 3-8s，8s 封顶保证会话创建不被拖死） */
-const PREDICTION_TIMEOUT_MS = 8000;
+/** 预测超时：实测模型 p50≈8–10s（7.5s 成功 1 次、8.05s 超时 7 次），8s 封顶等于 0% 成功率 */
+export const PREDICTION_TIMEOUT_MS = 15000;
 /** 实证可靠性的最低样本数：低于此值不给 reliability（防小样本误导） */
 export const PREDICTION_RELIABILITY_MIN_SAMPLE = 5;
 /**
@@ -532,13 +548,18 @@ export const PREDICTION_RELIABILITY_MIN_SAMPLE = 5;
 const PREDICTION_REUSE_TTL_MS = 24 * 60 * 60 * 1000;
 /** 预测失败后的短时冷却（issue #182）：预测器持续故障时避免每个回合都白等一次超时 */
 const PREDICTION_FAILURE_COOLDOWN_MS = 60 * 1000;
+/**
+ * 超时专用冷却（2026-11-26）：预测器持续比超时线慢时，60s 的通用冷却刚好在一两个回合后就过期，
+ * 于是每回合都原样再等一次。超时按 10 分钟冷却——预测只是语气的软提示，不值得每回合再赌一次。
+ */
+const PREDICTION_TIMEOUT_COOLDOWN_MS = 10 * 60 * 1000;
 /** 失败冷却登记（进程内，`userId:taskId` → 冷却截止时刻；多实例各自维护，最坏只是多试几次） */
 const predictionFailureCooldown = new Map<string, number>();
 
-/** 登记一次预测失败，短时内不再重试（清理过期项，避免 Map 无界增长） */
-function markPredictionFailure(cooldownKey: string): void {
+/** 登记一次预测失败，短时内不再重试（清理过期项，避免 Map 无界增长）；`cooldownMs` 缺省用通用冷却 */
+function markPredictionFailure(cooldownKey: string, cooldownMs: number = PREDICTION_FAILURE_COOLDOWN_MS): void {
   const now = Date.now();
-  predictionFailureCooldown.set(cooldownKey, now + PREDICTION_FAILURE_COOLDOWN_MS);
+  predictionFailureCooldown.set(cooldownKey, now + cooldownMs);
   if (predictionFailureCooldown.size > 1000) {
     for (const [key, until] of predictionFailureCooldown) {
       if (until <= now) predictionFailureCooldown.delete(key);
@@ -586,6 +607,7 @@ export async function buildLearnerPrediction(
   const cooldownKey = `${userId}:${taskId}`;
   // 超时后用于真正中止底层请求（executor 硬超时本身只是「不再等待」，不取消 handler）
   let llmController: AbortController | null = null;
+  let predictionStartedAt = 0;
   try {
     // 1) 幂等复用：该任务已有未回写、且未超过新鲜度上限的预测 → 直接用（零 LLM 成本）
     const existing = await prisma.prediction_records.findFirst({
@@ -636,6 +658,7 @@ export async function buildLearnerPrediction(
     const abortSignal = parentSignal
       ? AbortSignal.any([parentSignal, controller.signal])
       : controller.signal;
+    predictionStartedAt = Date.now();
     const prediction = (await executeSkill(learningPredictorDefinition, process.env.PAYLOAD_STABLE_PREFIX !== '0'
       ? {
           fatigueSignal: opts.fatigueSignal || 'low',
@@ -677,9 +700,21 @@ export async function buildLearnerPrediction(
     return await withReliability(userId, prediction, predictionEvidenceSources(opts.hardEvidence));
   } catch (error) {
     const code = (error as { code?: string } | null | undefined)?.code;
-    if (code === 'SKILL_TIMEOUT') {
+    // 2026-11-26：超时的归类不稳定——executor 的硬超时先 abort 底层请求，网关把被取消的请求归一成
+    // CALLER_ABORTED，于是「超时」被当成「调用方取消」：不计失败率、不进冷却，下一回合原样再等一次
+    //（实录 7 回合 7 次全败，白等 56s）。只要调用时长贴着超时线，就按超时处理并进入长冷却。
+    const timedOut = code === 'SKILL_TIMEOUT'
+      || (predictionStartedAt > 0 && Date.now() - predictionStartedAt >= PREDICTION_TIMEOUT_MS - 150);
+    if (timedOut) {
       // issue #182 ①：超时已计入失败率，这里补一刀真正中止底层 LLM 请求（否则请求继续烧 token）
       llmController?.abort();
+      markPredictionFailure(cooldownKey, PREDICTION_TIMEOUT_COOLDOWN_MS);
+      logger.warn('[TeachingContext] 学习表现预测超时（非阻塞，本任务 10 分钟内不再等待）', {
+        userId,
+        taskId,
+        code: typeof code === 'string' ? code : undefined,
+      });
+      return null;
     }
     // 客户端断开/切页导致的中止（category=caller_abort）：非预测器故障，不计失败率也不冷却
     if (code === 'CALLER_ABORTED' || (error instanceof Error && error.name === 'AbortError')) {

@@ -1,5 +1,5 @@
 <template>
-  <div class="goal v2-page">
+  <div class="goal v2-page" :style="vvh ? { '--vvh': `${vvh}px` } : undefined">
     <!-- 应用导航（共享组件，带真实 AI 标识） -->
     <V2Nav />
 
@@ -552,16 +552,8 @@
 
         <div v-if="reviewProposal?.stages.length" class="proposal__stages">
           <span class="proposal__stages-label">路径大纲 · {{ reviewProposal.stageCount }} 个方向</span>
-          <!-- 耗时消歧（2026-11-18 外评）：只说「每次 45 分钟」会让用户把 N 个阶段误读成
-               N 次坐学；把单次节奏与内容总量分开写，避免「3 站怎么突然变 30 小时」。 -->
-          <span
-            v-if="reviewProposal.sessionMinutes || reviewProposal.totalHours"
-            class="proposal__stages-meta"
-          >
-            <template v-if="reviewProposal.sessionMinutes">单次约 {{ reviewProposal.sessionMinutes }} 分钟</template>
-            <template v-if="reviewProposal.sessionMinutes && reviewProposal.totalHours"> · </template>
-            <template v-if="reviewProposal.totalHours">预计总时长约 {{ reviewProposal.totalHours }} 小时</template>
-          </span>
+          <!-- 2026-11-25 去时间化：方案只承诺方向数与阶段结构，不再报单次分钟/总时长。
+               平台默认的 25 分钟不是用户给的约束，写进确认弹窗会变成假承诺。 -->
           <ol>
             <li v-for="(s, i) in reviewProposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ stageHead(s) }}</strong>{{ stageTail(s) }}</div></li>
           </ol>
@@ -740,6 +732,7 @@ import { useUserStore } from '@/stores/user';
 import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid, clearGoalGenTracking, getGoalGenTracking, setGoalGenTracking } from '@/utils/sessionCleanup';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
+import { resolveVisualScale } from '@/utils/zoom';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { proposalEntryCopy } from './goalStageCopy';
 import { learningAPI, type GenerationLifecycleDTO } from '@/api/learning';
@@ -755,6 +748,12 @@ let recentGoalsLoadGeneration = 0;
 
 /* 移动端信息清单折叠：桌面（>900px）恒展开，窄屏默认折叠，点击顶栏展开/收起 */
 const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 1100px)') : null;
+/* iOS 键盘 / 双指缩放只改 visualViewport，不改 layout viewport；锁高页要按可见高度收缩，
+   否则输入框与底部动作被键盘盖住。--vvh 是视觉 px，CSS 里再除 --vp-zoom 折回逻辑 px。 */
+const vvh = ref(0);
+function syncVvh() {
+  vvh.value = Math.round(window.visualViewport?.height ?? window.innerHeight);
+}
 const isNarrow = ref(narrowMq?.matches ?? false);
 const panelOpen = ref(false);
 const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
@@ -858,6 +857,8 @@ onMounted(() => {
   // viewport meta 带 interactive-widget=resizes-content，走上面的 resize）
   window.visualViewport?.addEventListener('resize', onViewportResize);
   narrowMq?.addEventListener('change', onNarrowChange);
+  syncVvh();
+  window.visualViewport?.addEventListener('scroll', onViewportResize);
   // 每次进入页面随机展示一批场景
   shuffleScenes();
   const cid = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
@@ -893,6 +894,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportResize);
   window.removeEventListener('resize', syncOverlayTop);
   window.visualViewport?.removeEventListener('resize', onViewportResize);
+  window.visualViewport?.removeEventListener('scroll', onViewportResize);
   narrowMq?.removeEventListener('change', onNarrowChange);
   // 离页/刷新前把在途草稿落盘（防抖窗口内未落的那一版）
   window.clearTimeout(draftTimer);
@@ -1432,7 +1434,11 @@ let preOverlayFocus: HTMLElement | null = null;
 function syncOverlayTop() {
   const banner = document.querySelector('.anb');
   const navH = Math.round(document.querySelector('.v2nav-bar')?.getBoundingClientRect().height ?? 0);
-  const top = banner ? Math.round(banner.getBoundingClientRect().bottom) + (navH || 64) : 0;
+  /* 横幅在 .v2-page 之外（视觉 px），浮层在 .v2-page 之内（top 会被 zoom 再放大）：
+     先把「横幅底边 + 顶栏视觉高」折回浮层所在坐标系的逻辑 px，再写变量。 */
+  const page = document.querySelector('.v2-page') as HTMLElement | null;
+  const pageZoom = (page && resolveVisualScale(page)) || 1;
+  const top = banner ? Math.round((banner.getBoundingClientRect().bottom + (navH || 64)) / pageZoom) : 0;
   if (top > 0) document.documentElement.style.setProperty('--gc-overlay-top', `${top}px`);
   else document.documentElement.style.removeProperty('--gc-overlay-top');
 }
@@ -1525,6 +1531,7 @@ function jumpToLatest() {
 }
 /** 视口尺寸变化（键盘弹起/收起、横竖屏切换）后重新贴底，避免最新消息被挤到可视区外 */
 function onViewportResize() {
+  syncVvh();
   if (!pinToBottom) return;
   // resize 到达时新尺寸可能尚未重排，补一次延时兜底（重复设 scrollTop 无副作用）
   requestAnimationFrame(() => { void scrollToBottom(); });
@@ -2276,7 +2283,7 @@ function shuffleScenes() {
 @media (min-width: 1101px) {
   /* overflow:hidden：锁高之后内容若比视口高，只允许在 entry/chat 内部滚，
      不许把文档撑出滚动条 */
-  .goal { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
+  .goal { height: calc(var(--vvh, 100dvh) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
   /* 方案 A（2026-11-06 走查）：右侧整体包进一张白卡——头部/输入区的两块白底从此
      同属一张卡，中间聊天流不再漏画布灰；与左栏画像卡同圆角/描边/投影同族等高 */
   .chat {
@@ -2847,7 +2854,6 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .proposal__row p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink); }
 .proposal__stages { display: grid; gap: 10px; width: 100%; text-align: left; }
 .proposal__stages-label { font-size: 12px; font-weight: 800; color: var(--muted); }
-.proposal__stages-meta { margin-top: -4px; font-size: 12px; font-weight: 500; color: var(--faint); }
 /* 路径大纲：原型 .wf-pstages —— 纵向列表行（24px 序号 + 标题），非四列网格 */
 .proposal__stages ol {
   list-style: none; margin: 0; padding: 0;
@@ -2996,7 +3002,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* 锁定视口高度：会话态整页不滚动，chat 内部滚动、composer 吸底在底部导航之上。
      flex-grow:0 显式置零（.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度）。
      v2.css 全局 .v2-page { padding-bottom:72px } 为底部导航让位，此处保留。 */
-  .goal { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
+  .goal { height: calc(var(--vvh, 100dvh) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
   .work {
     grid-template-columns: 1fr;
     /* 信息面板在移动端改绝对定位（零占位锚点），chat 独占整行撑满 */

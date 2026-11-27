@@ -118,7 +118,7 @@
               <div class="ob__demo-prog"><i style="--w: 42%"></i></div>
               <div class="ob__demo-action ob__demo-action--stack">
                 <span class="ob__demo-action__tag">今日行动</span>
-                <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>阶段 2 / 3 · 约 25 分钟</small></span>
+                <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>阶段 2 / 3</small></span>
               </div>
             </div>
 
@@ -152,7 +152,7 @@
               </div>
               <div class="ob__demo-action">
                 <span class="ob__demo-action__tag">今日行动</span>
-                <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>来自「Excel 周报自动化」· 约 25 分钟</small></span>
+                <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>来自「Excel 周报自动化」</small></span>
               </div>
               <div class="ob__demo-metrics">
                 <span><small>健康度</small><b>良好</b></span>

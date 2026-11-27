@@ -688,7 +688,7 @@ onBeforeUnmount(() => {
   width: min(360px, calc(100vw - 32px));
   /* 面板高度上限（2026-11-11 走查）：1280×720 / 短视口下不让面板探出屏幕底缘；
      tabs 固定、正文内滚、底栏 sticky（见 .nc__foot），最后一条与出口始终可达。 */
-  max-height: calc(100dvh - var(--nc-panel-top, 64px) - 20px);
+  max-height: calc((100dvh - var(--nc-panel-top, 64px) - 20px) / var(--vp-zoom, 1));
   display: flex;
   flex-direction: column;
   border-radius: 16px; /* 圆角阶梯：弹层 */

@@ -86,7 +86,7 @@ describe('教学图确定性渲染器', () => {
     }
   });
 
-  it('matrix：命中/漏/堆砌四种符号都画出来', () => {
+  it('matrix：命中/漏/堆砌/关键四种符号都画出来；key 是「关键」不再是 ≡，且自动补图例', () => {
     const svg = svgOf('matrix', {
       rowLabels: ['要点一', '要点二'],
       colLabels: ['第一段', '第二段'],
@@ -100,7 +100,12 @@ describe('教学图确定性渲染器', () => {
     expect(svg).toContain('✓');
     expect(svg).toContain('—');
     expect(svg).toContain('叠');
-    expect(svg).toContain('≡');
+    // key 的原义是「关键」：画成 ≡（两边同一项）时学生读到的是一屏等号（实录）
+    expect(svg).toContain('★');
+    expect(svg).not.toContain('≡');
+    // 模型没给图例时按实际用到的符号补一行
+    expect(svg).toContain('★ 关键');
+    expect(svg).toContain('✓ 有');
   });
 
   it('compare 桥接框：长文案按框宽折行，不再捅穿矩形（走查 #16）', () => {
@@ -742,5 +747,181 @@ describe('state-strip（2026-10-26：不回头的进程分帧）', () => {
       .map((m) => m[1])
       .join('');
     expect(bodyText.replace(/\s/g, '')).toContain(item.replace(/\s/g, ''));
+  });
+});
+
+/**
+ * 整课板书（课堂阶段协议，2026-11-26）：matrix 从「逐轮配图的勾叉表」变成一节课唯一的参照物。
+ * 要钉住的行为：
+ *  1) 带文字的对照表：内容原样上板、格子内折行不截断；
+ *  2) 按段露出：没讲到的行是虚线空槽，点名阶段整块板就是「行列名 + 空槽」的骨架；
+ *  3) 窄宿主放不下横表 → 每行一张卡竖排，不横向滚动；
+ *  4) state-strip 的 frameRevealed：帧名在、帧内状态讲到才出现。
+ */
+describe('整课板书：带文字的 matrix（课堂阶段协议）', () => {
+  const BIO = {
+    title: '有氧呼吸三个阶段',
+    rowLabels: ['第一阶段 糖酵解', '第二阶段 柠檬酸循环', '第三阶段 氧化磷酸化'],
+    colLabels: ['场所', '反应物', '产物', '能量'],
+    cells: [
+      { r: 0, c: 0, t: '细胞质基质', tone: 'key' }, { r: 0, c: 1, t: 'C₆H₁₂O₆' }, { r: 0, c: 2, t: '2 丙酮酸 + 4[H]' }, { r: 0, c: 3, t: '少量' },
+      { r: 1, c: 0, t: '线粒体基质', tone: 'key' }, { r: 1, c: 1, t: '2 丙酮酸 + 6 H₂O' }, { r: 1, c: 2, t: '6 CO₂ + 20[H]' }, { r: 1, c: 3, t: '少量' },
+      { r: 2, c: 0, t: '线粒体内膜', tone: 'key' }, { r: 2, c: 1, t: '24[H] + 6 O₂' }, { r: 2, c: 2, t: '12 H₂O' }, { r: 2, c: 3, t: '大量' },
+    ],
+  };
+
+  it('内容原样上板：每个格子的文字都在，且是 start 对齐的正文（不是居中的符号）', () => {
+    const out = renderSpecFigure('matrix', BIO);
+    expect(out).not.toBeNull();
+    for (const cell of BIO.cells) {
+      // 单行放得下的格子逐字出现；长格折行后各字仍在
+      const chars = Array.from(cell.t.replace(/\s/g, ''));
+      const svgText = out!.svg.replace(/<[^>]+>/g, '').replace(/\s/g, '');
+      for (const ch of chars) expect(svgText).toContain(ch);
+    }
+    expect(out!.svg).toContain('细胞质基质');
+    expect(out!.svg).toContain('text-anchor="start"');
+    expect(out!.svg).not.toContain('★');
+  });
+
+  it('宽卡撑满：列更宽、行更矮（折行更少）', () => {
+    const natural = renderSpecFigure('matrix', BIO)!;
+    const wide = renderSpecFigure('matrix', BIO, { targetWidth: 1000 })!;
+    expect(wide.width).toBeGreaterThan(natural.width);
+    expect(wide.height).toBeLessThanOrEqual(natural.height);
+  });
+
+  it('按段露出：骨架态只有行列名 + 虚线空槽；讲一段露一行', () => {
+    const skeleton = renderSpecFigure('matrix', {
+      ...BIO,
+      rowRevealed: [false, false, false],
+      cells: [],
+    })!;
+    expect(skeleton.svg).toContain('第一阶段 糖酵解');
+    expect(skeleton.svg).toContain('场所');
+    expect(skeleton.svg).not.toContain('细胞质基质');
+    expect((skeleton.svg.match(/还没讲到/g) || []).length).toBe(3);
+    expect(skeleton.svg).toContain('stroke-dasharray="6 4"');
+
+    const second = renderSpecFigure('matrix', {
+      ...BIO,
+      rowRevealed: [true, true, false],
+      cells: BIO.cells.filter((cell) => cell.r < 2),
+    })!;
+    expect(second.svg).toContain('细胞质基质');
+    expect(second.svg).toContain('线粒体基质');
+    expect((second.svg.match(/还没讲到/g) || []).length).toBe(1);
+
+    // 存量板（没有 rowRevealed）：全部视为已露出，不多画任何空槽
+    const legacy = renderSpecFigure('matrix', BIO)!;
+    expect(legacy.svg).not.toContain('还没讲到');
+  });
+
+  // 信号化（2026-11-26 阶段协议）：当前段讲到的行要亮出来，讲完自动换到下一行；
+  // 没露出的行不亮——它还没讲到，亮了会让学生以为已经在讲。
+  it('当前段高亮：activeRows 画左侧强调轨；未露出的行不亮', () => {
+    const revealedAll = { ...BIO, rowRevealed: [true, true, true] };
+    const plain = renderSpecFigure('matrix', revealedAll)!;
+    const active = renderSpecFigure('matrix', { ...revealedAll, activeRows: [1] })!;
+    expect((plain.svg.match(/width="3"/g) || []).length).toBe(0);
+    expect((active.svg.match(/width="3"/g) || []).length).toBe(1);
+
+    const partial = { ...BIO, rowRevealed: [true, false, false], cells: BIO.cells.filter((cell) => cell.r === 0) };
+    const hidden = renderSpecFigure('matrix', { ...partial, activeRows: [1] })!;
+    expect(hidden.svg).not.toContain('线粒体基质');
+    expect((hidden.svg.match(/width="3"/g) || []).length).toBe(0);
+  });
+
+  it('key 格：强调色底 + 强调色字，文字照常可读', () => {
+    const svg = svgOf('matrix', BIO);
+    expect(svg).toMatch(/fill="#eceafe"/);
+    expect(svg).toContain('fill="#3730a3"');
+  });
+
+  it('窄宿主放不下横表 → 每行一张卡竖排：宽度收到宿主内、内容一项不少', () => {
+    const out = renderSpecFigure('matrix', BIO, { targetWidth: 320 })!;
+    expect(out.width).toBeLessThanOrEqual(320);
+    const text = out!.svg.replace(/<[^>]+>/g, '').replace(/\s/g, '');
+    expect(text).toContain('细胞质基质');
+    expect(text).toContain('线粒体内膜');
+    expect(text).toContain('反应物');
+    expect(text).toContain('24[H]+6O₂');
+    // 没讲到的行是一张虚线空卡
+    const partial = renderSpecFigure('matrix', { ...BIO, rowRevealed: [true, false, false], cells: BIO.cells.filter((cell) => cell.r === 0) }, { targetWidth: 320 })!;
+    expect(partial.svg).toContain('还没讲到');
+    expect(partial.svg).not.toContain('线粒体基质');
+  });
+
+  it('窄宿主上的骨架态（格子全空）：同样是竖排空卡，不会被当成符号矩阵而横向裁掉', () => {
+    const out = renderSpecFigure('matrix', { ...BIO, rowRevealed: [false, false, false], cells: [] }, { targetWidth: 320 })!;
+    expect(out.width).toBeLessThanOrEqual(320);
+    expect((out.svg.match(/还没讲到/g) || []).length).toBe(3);
+    expect(out.svg).toContain('第二阶段 柠檬酸循环');
+  });
+
+  it('窄屏但纯符号矩阵：版式不变（仍是横表，不转竖排、不随宿主变宽变窄）', () => {
+    const spec = {
+      rowLabels: ['甲', '乙'],
+      colLabels: ['x', 'y'],
+      cells: [{ r: 0, c: 0, tone: 'hit' }],
+    };
+    const out = renderSpecFigure('matrix', spec, { targetWidth: 320 })!;
+    const plain = renderSpecFigure('matrix', spec)!;
+    expect(out.width).toBe(plain.width);
+    expect(out.svg).toContain('✓');
+    // 2×2 的勾叉表不是竖排卡（竖排才有卡头底色块）
+    expect(out.svg).not.toContain('还没讲到');
+    expect(out.svg).not.toContain('stroke-dasharray="6 4"');
+  });
+
+  it('文字照常转义，不能成为注入面', () => {
+    const svg = svgOf('matrix', {
+      rowLabels: ['<b>行</b>'],
+      colLabels: ['列'],
+      cells: [{ r: 0, c: 0, t: '<script>alert(1)</script>' }],
+    });
+    expect(svg).not.toContain('<script>');
+    expect(svg).toContain('&lt;script&gt;');
+  });
+});
+
+describe('整课板书：state-strip 按段露出', () => {
+  const frames = [
+    { label: '糖酵解', items: ['场所：细胞质基质', '产物：2 丙酮酸'] },
+    { label: '柠檬酸循环', tone: 'accent', items: ['场所：线粒体基质'] },
+    { label: '氧化磷酸化', tone: 'ok', items: ['场所：线粒体内膜'] },
+  ];
+
+  it('frameRevealed=false 的帧：帧名在、虚线框、帧内写「还没讲到」', () => {
+    const out = renderSpecFigure('state-strip', {
+      title: '有氧呼吸',
+      frames: frames.map((frame, index) => (index === 0 ? frame : { ...frame, items: [] })),
+      frameRevealed: [true, false, false],
+    })!;
+    expect(out.svg).toContain('柠檬酸循环');
+    expect(out.svg).toContain('细胞质基质');
+    expect((out.svg.match(/还没讲到/g) || []).length).toBe(2);
+    expect(out.svg).toContain('stroke-dasharray="6 4"');
+  });
+
+  it('没有 frameRevealed 的存量条带：外观不变（空帧仍是 —，最后一帧粗边）', () => {
+    const legacy = renderSpecFigure('state-strip', { frames })!.svg;
+    expect(legacy).not.toContain('还没讲到');
+    expect(legacy).not.toContain('stroke-dasharray="6 4"');
+  });
+
+  it('窄宿主 → 竖排：宽度收到宿主内，帧名与帧内要点都在，连接箭头向下', () => {
+    const out = renderSpecFigure('state-strip', { frames }, { targetWidth: 320 })!;
+    expect(out.width).toBeLessThanOrEqual(320);
+    for (const needle of ['糖酵解', '柠檬酸循环', '氧化磷酸化', '细胞质基质', '线粒体基质', '线粒体内膜']) {
+      expect(out.svg).toContain(needle);
+    }
+    // 竖排的「下一步」：连接线的起止 x 相同、y 递增
+    const links = [...out.svg.matchAll(/<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)"/g)]
+      .map((m) => ({ x1: Number(m[1]), y1: Number(m[2]), x2: Number(m[3]), y2: Number(m[4]) }))
+      .filter((l) => l.y2 > l.y1 && l.x1 === l.x2);
+    expect(links.length).toBe(frames.length - 1);
+    // 竖排的帧内要点不会被帧宽压碎（整条「场所：细胞质基质」在同一行）
+    expect(out.svg).toContain('场所：细胞质基质');
   });
 });

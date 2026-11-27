@@ -20,6 +20,7 @@
 
 import { maskFigureAnswers, stripInLessonAnnotations } from './teaching-visual.service';
 import { applyBoardIntent, describeIntentForTeacher, guardTitleAgainstContent, type BoardIntent } from './board-intent';
+import { describeMatrixRows, isDegenerateMatrixFigure } from './board-lesson';
 
 /** 白板阶段：搭骨架（提问态）→ 等待学生（仍提问态）→ 揭晓（完整态） */
 export type BoardStage = 'setup' | 'awaiting' | 'revealed';
@@ -185,11 +186,25 @@ export function deriveBoardFigure(
     kind?: string;
     spec?: unknown;
   };
-  const fullSpec = guardTitleAgainstContent(
-    (deReviewed.spec && typeof deReviewed.spec === 'object'
-      ? { ...(deReviewed.spec as Record<string, unknown>) }
-      : {}) as Record<string, unknown>,
-  );
+  // position-line 的归一化契约把 axis/marks/spans/guides 放在**顶层**（其余图型在 spec）。
+  // 这里只读 spec 会把位置线板面压成空对象，老师仍会指着「板上那条纵轴」讲课，
+  // 学生看到的却是一张空板（2026-11-25 账号 123 睡眠课实证：fullSpec={}）。
+  const rawSpec: Record<string, unknown> = deReviewed.spec && typeof deReviewed.spec === 'object'
+    ? { ...(deReviewed.spec as Record<string, unknown>) }
+    : {};
+  if (String(deReviewed.kind ?? '') === 'position-line') {
+    const {
+      spec: _spec,
+      engine: _engine,
+      kind: _kind,
+      caption: _caption,
+      palette: _palette,
+      why: _why,
+      ...topLevel
+    } = figure as Record<string, unknown>;
+    Object.assign(rawSpec, topLevel);
+  }
+  const fullSpec = guardTitleAgainstContent(rawSpec);
   const hiddenTakeaway = extractHiddenConclusion({ kind: deReviewed.kind, spec: fullSpec });
 
   // 减负模式（none / takeaway）：材料、步骤、副标注一律照发——它们正是替学生省力的部分
@@ -361,16 +376,10 @@ export function isDegenerateFirstBoard(board: BoardState | null | undefined): bo
   if (!board || board.revision > 1) return false;
   const figure = board.figure;
   if (!figure || figure.kind !== 'matrix') return false;
-  const spec = figure.maskedSpec as {
-    rowLabels?: unknown;
-    colLabels?: unknown;
-    cells?: unknown;
-  };
-  const rows = Array.isArray(spec.rowLabels) ? spec.rowLabels.length : 0;
-  const cols = Array.isArray(spec.colLabels) ? spec.colLabels.length : 0;
-  const cells = Array.isArray(spec.cells) ? (spec.cells as Array<{ tone?: unknown }>) : [];
-  if (!rows || !cols || cells.length < rows * cols) return false;
-  return cells.every((cell) => String(cell?.tone ?? '') === 'hit');
+  // 2026-11-26 判据升级（判据本体见 board-lesson.isDegenerateMatrixFigure）：除了「全 hit」，
+  // 「稀疏且无文字」「全部同 tone」「key 占比 > 40%」同样是空壳——实录里 caseA 的 key/hit/miss 混合板、
+  // caseB 的 4 格稀疏板都从旧判据下漏了过去，学生读到的是一屏读不出内容的色块。
+  return isDegenerateMatrixFigure({ kind: 'matrix', spec: figure.maskedSpec });
 }
 
 /**
@@ -534,7 +543,7 @@ export function describeBoardForTeacher(board: BoardState | null | undefined): s
     lines.push(
       '规则（减负模式）：板面已经把背景、数据与结构完整摆出来了，它就是学生的外部工作记忆。' +
         '严禁用文字复述板上已有的内容（不要念列表、念步骤、念数值），也不要描述图的画法；' +
-        '直接引用板上的标签/行号/帧号，一次只说 2~3 句，把「为什么」「下一步」留给学生。',
+        '讲解讲的是「为什么、怎么判」，每句话只指一个格子或一个元素，用板上写着的行列名原文指称（不说"第几行/第几列"）。',
     );
   }
   if (f.intent) lines.push(describeIntentForTeacher(f.intent));
@@ -561,9 +570,20 @@ function describeByKind(kind: string, spec: Record<string, unknown>): string[] {
     return out;
   }
 
+  if (kind === 'matrix') {
+    // 2026-11-26：对照表逐行描述（文字直接可读），未露出的行明确说「还没讲到、板上为空」——
+    // 老师看到的板面描述与学生屏幕上的一致，才不会指着还不存在的格子讲。
+    return describeMatrixRows(spec);
+  }
+
   if (kind === 'state-strip') {
     const frames = Array.isArray(spec.frames) ? (spec.frames as Array<Record<string, unknown>>) : [];
+    const revealed = Array.isArray(spec.frameRevealed) ? spec.frameRevealed as boolean[] : null;
     frames.forEach((f, i) => {
+      if (revealed && revealed[i] === false) {
+        out.push(`- 第 ${i + 1} 帧「${String(f.label ?? '')}」：还没讲到，这一帧只有名字`);
+        return;
+      }
       out.push(`- 第 ${i + 1} 帧「${String(f.label ?? '')}」：${joinItems(f.items) || '（空）'}`);
     });
     // 丢帧可见性（2026-11-12）：归一化超上限截断时在 spec 上记 truncatedFrames。

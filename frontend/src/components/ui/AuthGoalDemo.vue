@@ -121,7 +121,7 @@ const isDark = useIsDark();
 .demo__panel-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
 .demo__panel-head span { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
 .demo__panel-bar { height: 5px; border-radius: 999px; background: var(--bar-track); overflow: hidden; }
-.demo__panel-bar i { display: block; width: 25%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.demo__panel-bar i { display: block; width: 50%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .demo__panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
 .demo__field { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
 .demo__field small { display: block; font-size: 12px; color: var(--faint); font-weight: 700; }
@@ -164,19 +164,14 @@ const isDark = useIsDark();
 @keyframes auth-field-in { to { opacity: 1; transform: translateX(0); } }
 @keyframes auth-pop { to { transform: scale(1); } }
 
-/* 整卡入场：上浮回正 + 进度条充能（reduced-motion 下瞬显） */
+/* 整卡入场：上浮回正 + 进度条充能（reduced-motion 下瞬显）。
+   呼吸脉冲删除（2026-11-26 AU-02）：进度条按「已收集 3/6」充到 50% 后，
+   原 25%→50% 的 alternate 循环会让它先跳回 25% 再涨回去——装饰动画反而像进度回退。 */
 .demo__panel-bar i {
-  animation:
-    auth-bar-fill 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both,
-    /* 限 3 次循环：装饰动画无限循环会持续分散注意力（走查 2026-09-27 P3；reduced-motion 已另行兜底） */
-    auth-bar-pulse 3.4s ease-in-out 2.4s 3 alternate;
+  animation: auth-bar-fill 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
 }
 @keyframes auth-bar-fill {
   from { width: 0; }
-  to { width: 25%; }
-}
-@keyframes auth-bar-pulse {
-  from { width: 25%; }
   to { width: 50%; }
 }
 .demo__field--asking .mark--asking {
@@ -191,7 +186,7 @@ const isDark = useIsDark();
   .anim-msg, .anim-field, .anim-field .mark--done { animation: none; opacity: 1; transform: none; }
   .demo__panel-bar i,
   .demo__field--asking .mark--asking { animation: none; }
-  .demo__panel-bar i { width: 25%; }
+  .demo__panel-bar i { width: 50%; }
 }
 
 /* ---------- 移动端 ---------- */

@@ -44,6 +44,39 @@ export interface TeachingFigurePayload {
   /** 模型自己给的一句话出图理由（只给复盘/图库看，不渲染给学生） */
   why?: string | null;
   caption?: string | null;
+  /** 共享板书（任务级持久板）：一块板管一节课，随教学段逐段露出 */
+  board?: boolean;
+  boardRevision?: number;
+}
+
+/** 课堂阶段（课堂阶段协议，2026-11-26）：点名 → 分段建构 → 整合 → 迁移 → 审错 → 收束 */
+export type LessonPhaseName = 'orient' | 'build' | 'integrate' | 'transfer' | 'audit' | 'close';
+
+/** 随回合响应下发的阶段摘要（课的结构由系统定，这里只读） */
+export interface LessonPhaseSummary {
+  phase: LessonPhaseName;
+  /** full = 六阶段；compact = 单段小课（跳过整合与审错） */
+  profile?: 'full' | 'compact';
+  label?: string;
+  /** 建构阶段：当前第几段（1 基） */
+  segment?: number;
+  segmentCount?: number;
+  /** 板书露出到第几段 */
+  revealLevel?: number;
+  /** 本轮学生屏幕上的板：none / whole（整块板）/ skeleton（只有行列名）/ partial / full */
+  boardReveal?: 'none' | 'whole' | 'skeleton' | 'partial' | 'full';
+  passedPhases?: string[];
+  challengesUpheld?: number;
+}
+
+/** 会话详情里持久化的阶段状态（teachingState.lessonPhase，前端的只读投影） */
+export interface LessonPhaseStatePayload {
+  phase: LessonPhaseName;
+  profile?: 'full' | 'compact';
+  segment?: number;
+  segments?: Array<{ index: number; title: string }>;
+  passedPhases?: string[];
+  challengesUpheld?: number;
 }
 
 export interface TeachingSession {
@@ -63,6 +96,8 @@ export interface TeachingSession {
     question: string;
     quickReplies: Array<{ text: string }>;
     mode: 'self-assess' | 'predict' | 'example-first';
+    /** 开场材料卡（2026-11-27）：独立引用，不混进老师气泡 */
+    material?: { title?: string; text: string };
   };
 }
 
@@ -198,6 +233,7 @@ export interface CheckpointSubmitResult {
   lessonReport?: LessonReport | null;
   exitTicket?: ExitTicket | null;
   branch?: MessageResult['branch'] | null;
+  lessonPhase?: LessonPhaseSummary | null;
 }
 
 export interface MessageResult {
@@ -239,6 +275,8 @@ export interface MessageResult {
   lessonReport?: LessonReport | null;
   /** 课末终检题（待作答/通过/失败）：前端「最后一道题」状态卡直接消费 */
   exitTicket?: ExitTicket | null;
+  /** 课堂阶段摘要（课堂阶段协议）：协议未生效的课堂为 null */
+  lessonPhase?: LessonPhaseSummary | null;
   branch?: {
     kind: string;
     need: string;

@@ -261,6 +261,7 @@ import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import MkSelect from '@/components/mk/MkSelect.vue';
 import { buildGenerationRetryCopy, buildPathActivityAnchor, isDesignPollingActive } from './learningPathProgress';
+import { stripPseudoTime } from '@/utils/timeText';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 
@@ -271,13 +272,12 @@ interface PathCard {
   id: string;
   title: string;
   desc: string;
-  /** 副行（原型 wf-pathitem__sub）：课时 · 时长；只存展示文案，desc 仍供搜索 */
+  /** 副行（原型 wf-pathitem__sub）：已备好的课数 · 阶段数；只存展示文案，desc 仍供搜索 */
   sub: string;
   kind: CardKind;
   stages: number;
   stageDone: number;
   percent: number;
-  hours?: number;
   /** 已组好的课数（2026-09-29 口径修正：呈现「已备好什么」，不呈现「预计你要投入多少」） */
   lessons?: number;
   retryType: 'core' | 'stage_design' | null;
@@ -334,27 +334,27 @@ function phaseTextOf(lc: { phase?: string | null; completedStages?: number | nul
   return `课程准备中（${done}/${lc.totalStages ?? '?'}）…`;
 }
 
-/** 原型副行（wf-pathitem__sub）：「已备好 24 节课 · 约 24 小时」；
+/** 原型副行（wf-pathitem__sub）：「已备好 24 节课 · 4 个阶段」；
+    2026-11-25 去时间化：不再用任务分钟折算「约 N 小时」——那是估算，不是用户给的约束。
     数据不全回退「共 N 阶段」，一个字段都没有就留空（不编造「目标日期」——后端无此字段） */
-function buildSub(stages: number, lessons?: number, hours?: number) {
+function buildSub(stages: number, lessons?: number) {
   const parts: string[] = [];
   if (lessons) parts.push(`已备好 ${lessons} 节课`);
-  if (hours) parts.push(`约 ${hours} 小时`);
-  if (!parts.length && stages) parts.push(`共 ${stages} 阶段`);
+  if (stages) parts.push(`${stages} 个阶段`);
   return parts.join(' · ');
 }
 
 function normalize(p: Record<string, any>): PathCard {
   const lc = p.generationLifecycle;
   const title = p.title || p.name || '未命名路径';
-  // AI 生成的简短摘要优先（path-planning summary），旧数据回退用户目标原文
-  const desc = p.summary || p.description || '';
+  // AI 生成的简短摘要优先（path-planning summary），旧数据回退用户目标原文；
+  // 摘要只剩伪时间时继续回退，避免整段描述被剥空。
+  const desc = stripPseudoTime(p.summary) || stripPseudoTime(p.description);
   // 2026-11-04 走查：阶段数以路径自身为准（阶段列表 / totalStages），不再优先 generationLifecycle.totalStages——
   // 后者取自生成 run 的 totalItems（渐进式 core run 恒为 1），会把 4 阶段的路径在列表卡显示成「第 1 / 1 阶段」，
   // 与同 id 详情页 hero 的「1 / 4 当前阶段」自相矛盾（详情页取路径阶段列表长度）。
   const ownStages: number = p.milestones?.length ?? p.weeks?.length ?? 0;
   const stages: number = ownStages || p.totalStages || lc?.totalStages || 0;
-  const hours = p.estimatedHours;
   // 设计阶段真正在跑（queued/processing）才需要轮询；失败/暂停/就绪都停。
   const designActive = isDesignPollingActive(lc);
 
@@ -366,7 +366,7 @@ function normalize(p: Record<string, any>): PathCard {
     if ((lc.status === 'failed' || lc.status === 'stale') && !canStillLearn) {
       return {
         id: p.id, title, desc, sub: buildSub(stages), kind: 'failed', stages, stageDone: lc.completedStages ?? 0,
-        percent: 0, hours, retryType: lc.retryType,
+        percent: 0, retryType: lc.retryType,
         retryLabel: buildGenerationRetryCopy(lc.retryType).action,
         phaseText: '', errorText: lc.errorMessage || '', designActive: false
       };
@@ -375,7 +375,7 @@ function normalize(p: Record<string, any>): PathCard {
       const phaseText = phaseTextOf(lc);
       return {
         id: p.id, title, desc, sub: buildSub(stages), kind: 'generating', stages, stageDone: lc.completedStages ?? 0,
-        percent: 0, hours, retryType: null, retryLabel: '', phaseText, errorText: '', designActive
+        percent: 0, retryType: null, retryLabel: '', phaseText, errorText: '', designActive
       };
     }
   }
@@ -385,13 +385,11 @@ function normalize(p: Record<string, any>): PathCard {
   let totalTasks = 0;
   let doneTasks = 0;
   let stageDone = 0;
-  let preparedMinutes = 0;
   for (const w of weeks) {
     const tasks = w.subtasks || w.tasks || [];
     let stageAllDone = tasks.length > 0;
     for (const t of tasks) {
       totalTasks += 1;
-      preparedMinutes += Number(t.estimatedMinutes) || 0;
       if (t.status === 'completed') doneTasks += 1;
       else stageAllDone = false;
     }
@@ -401,11 +399,6 @@ function normalize(p: Record<string, any>): PathCard {
   // 旧数据才回退到前端按任务状态现算。设计进度永远不冒充这里的百分比。
   const learningProgress = lc?.learningProgress ?? p.learningProgress ?? null;
   const lessonCount = learningProgress?.totalTasks ?? totalTasks;
-  // 已备好口径：课数与小时必须来自同一批已生成任务，不能拿首阶段课数配全路径总估时
-  // （2026-11-24 列表页与详情页口径对齐；详情页 preparedHours 同源）。
-  const preparedHours = lessonCount > 0 && preparedMinutes > 0
-    ? Math.max(0.1, Math.round(preparedMinutes / 6) / 10)
-    : 0;
   const percent = learningProgress
     ? Math.max(0, Math.min(100, Math.round(learningProgress.percent)))
     : (totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0);
@@ -420,10 +413,10 @@ function normalize(p: Record<string, any>): PathCard {
   });
   return {
     id: p.id, title, desc,
-    sub: [buildSub(totalStages, lessonCount, preparedHours), designActive ? '后续课程准备中' : '']
+    sub: [buildSub(totalStages, lessonCount), designActive ? '后续课程准备中' : '']
       .filter(Boolean).join(' · '),
     kind, stages: totalStages, stageDone: stageDoneCount,
-    percent, hours, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status,
+    percent, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status,
     anchorText: anchor?.text, anchorTitle: anchor?.title, designActive
   };
 }

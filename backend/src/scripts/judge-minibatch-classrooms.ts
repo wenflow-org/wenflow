@@ -96,6 +96,13 @@ function digestFigures(figures: any): string | null {
     const cells = Array.isArray(spec.cells)
       ? spec.cells.map((c: any) => `${c?.r ?? '?'},${c?.c ?? '?'}${c?.tone ? `(${c.tone})` : ''}`).join(' ')
       : '';
+    // 露出状态（2026-11-26 阶段协议外审）：评审要能判断「老师是否讲了板上还没露出的行」，
+    // 只给行列与标记格看不见骨架态；T/F 逐行标出，判官据此对正文做越界检查。
+    const reveal = Array.isArray(spec.rowRevealed)
+      ? spec.rowRevealed.map((v: any) => (v === false ? 'F' : 'T')).join(',')
+      : Array.isArray(spec.frameRevealed)
+        ? spec.frameRevealed.map((v: any) => (v === false ? 'F' : 'T')).join(',')
+        : '';
     // legend 条目真实形状是 {text, fill}（teaching-board-design 产物，2026-11-13 实测 DB）：
     // 只认 .label 会把对象 String 成「[object Object]」，制造「图例未渲染」伪影 finding
     const legend = Array.isArray(spec.legend)
@@ -107,6 +114,7 @@ function digestFigures(figures: any): string | null {
       typeof spec.title === 'string' && spec.title ? `标题:${spec.title}` : '',
       rows.length ? `行:${rows.join('｜')}` : '',
       cols.length ? `列:${cols.join('｜')}` : '',
+      reveal ? `露出:${reveal}` : '',
       legend ? `图例:${legend}` : '',
       cells ? `标记格:${cells}` : '',
       generic ? `内容:${generic}` : '',

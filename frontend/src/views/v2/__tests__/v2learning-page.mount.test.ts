@@ -106,15 +106,13 @@ describe('V2LearningPage 挂载回归', () => {
     expect(w.find('.learn__title strong').text()).toContain('理解函数作用域');
     expect(w.find('.learn__title small').text()).toContain('Python 入门路径');
 
-    // 开场白成 AI 气泡；摸底 question 收进面板（不再单独成待答气泡）
+    // 开场白成 AI 气泡；引导 question 与快选紧贴气泡（2026-11-26 从底部面板移回消息流）
     const bubbles = w.findAll('.msg--ai .msg__bubble');
     expect(bubbles).toHaveLength(1);
     expect(bubbles[0].text()).toContain('我们开始学函数作用域吧');
-    expect(w.find('.replies').exists()).toBe(true);
-    expect(w.find('.replies__question').text()).toContain('你之前写过函数吗');
-    expect(w.findAll('.reply')).toHaveLength(2);
-    // 首课（无 scene）行动台标题回落「怎么开始」
-    expect(w.find('.replies__kicker').text()).toBe('怎么开始');
+    expect(w.find('.opening-line').exists()).toBe(true);
+    expect(w.find('.opening-line__question').text()).toContain('你之前写过函数吗');
+    expect(w.findAll('.opening-line .reply')).toHaveLength(2);
 
     // 知识点面板头部（2026-09-27 收敛）：只保留掌握胶囊，进行中胶囊退役
     expect(w.find('.kp__head').text()).toContain('1/2 已掌握');
@@ -448,7 +446,7 @@ describe('开场引导恢复对位', () => {
     expect(bubble.text()).toContain('先找时间标志词');
     expect(bubble.text()).not.toContain(questionText);
     // 面板 = question + 动作选项
-    expect(w.find('.replies__question').text()).toBe(questionText);
+    expect(w.find('.opening-line__question').text()).toBe(questionText);
     expect(w.findAll('.reply')).toHaveLength(2);
     // 全屏只有一处问题
     expect(w.text().split(questionText).length - 1).toBe(1);
@@ -470,7 +468,7 @@ describe('开场引导恢复对位', () => {
 
     const w = await mountPage();
     // 没有 question 字段就不摆面板那一行；正文里的那份原样保留 → 仍然只有一处
-    expect(w.find('.replies__question').exists()).toBe(false);
+    expect(w.find('.opening-line__question').exists()).toBe(false);
     expect(w.text().split(legacyQuestion).length - 1).toBe(1);
 
     w.unmount();
@@ -488,8 +486,8 @@ describe('开场引导恢复对位', () => {
     });
 
     const w = await mountPage();
-    expect(w.find('.replies').exists()).toBe(false);
-    expect(w.find('.replies__question').exists()).toBe(false);
+    expect(w.find('.opening-line').exists()).toBe(false);
+    expect(w.find('.opening-line__question').exists()).toBe(false);
     expect(w.findAll('.reply')).toHaveLength(0);
 
     w.unmount();

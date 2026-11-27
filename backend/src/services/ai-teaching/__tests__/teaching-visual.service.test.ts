@@ -15,6 +15,8 @@ import {
   detectPositionDescription,
   detectStructuralCue,
   detectExerciseLeakInReply,
+  detectArgumentClassificationAsk,
+  isArgumentClassificationTask,
   stripInLessonAnnotations, endsWithQuestion, shouldWithholdFigureForQuestion, maskFigureForQuestion,
   generateTeachingVisual,
   hasDanglingFigureReference,
@@ -544,6 +546,68 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
     };
     expect(buildVisualOpportunity([withDiagram], '把答案逐条归位到自然/社会经济两大角度')).toBeNull();
     expect(buildVisualOpportunity([assistant('先说说你的想法。')], '读一遍这段材料并复述大意')).toBeNull();
+  });
+
+  it('2026-11-24：纯数值表任务 → 不拿 matrix/figure 冒充数据表', () => {
+    const table = [
+      '| 时间 | 客流 |',
+      '| --- | --- |',
+      '| 15:00 | 23 |',
+      '| 16:00 | 27 |',
+      '| 17:00 | 19 |',
+      '| 18:00 | 24 |',
+    ].join('\n');
+    expect(buildVisualOpportunity(
+      [assistant('先说说你的想法。')],
+      '读一条 15:00—18:00 的客流表，指出最高的一格',
+      table,
+    )).toBeNull();
+  });
+
+  it('2026-11-24：数值表但确实要画曲线 → 仍允许 cartesian-plot', () => {
+    const table = '| 时间 | 客流 |\n| 15:00 | 23 |\n| 16:00 | 27 |';
+    const opportunity = buildVisualOpportunity(
+      [assistant('先说说你的想法。')],
+      '读一条客流曲线，看下午的走势',
+      table,
+    );
+    expect(opportunity).not.toBeNull();
+    expect(opportunity!.kindHint).toBe('cartesian-plot');
+  });
+});
+
+describe('论证/分类课：整节课不建板书（isArgumentClassificationTask，2026-11-27）', () => {
+  it('标题/描述/验收里有「前提/结论 + 哪一句/指出」→ 判真（板面即答案）', () => {
+    expect(isArgumentClassificationTask({
+      title: '先把一段话拆成前提与结论',
+      description: '认清一段议论里哪一句是它想让你接受的结论、哪几句是拿来支撑它的前提。',
+      acceptanceCriteria: 'A 组能指出结论是哪一句、两条前提各是哪句。',
+    })).toBe(true);
+    expect(isArgumentClassificationTask({ material: '① … ② … ③ 所以说…站不住。' })).toBe(false);
+  });
+
+  it('普通内容课/无数值关系任务 → 不误伤板书', () => {
+    expect(isArgumentClassificationTask({
+      title: '糖酵解发生在细胞质还是线粒体',
+      description: '把三个阶段各自的场所与产物对上。',
+      material: '阶段｜场所｜产物',
+    })).toBe(false);
+  });
+});
+
+describe('防答案泄漏硬闸门（detectArgumentClassificationAsk，2026-11-27 论证课）', () => {
+  it('问「这一句是前提还是结论 / 哪一句在给另一句撑腰」→ 图即答案，整张不出', () => {
+    expect(detectArgumentClassificationAsk(
+      '所以说他以教人说话为业，站不住——这一句，是被理由撑着的那句，还是拿来撑别人的那句？',
+    )).toBe(true);
+    expect(detectArgumentClassificationAsk('这两句里，哪一句是结论，哪一句是前提？')).toBe(true);
+    expect(detectArgumentClassificationAsk('你觉得哪句在支撑哪句？')).toBe(true);
+  });
+
+  it('陈述结论 / 一般提问 → 不误判，正常配图', () => {
+    expect(detectArgumentClassificationAsk('这段话的结论是第三句，因为前两句在撑它。')).toBe(false);
+    expect(detectArgumentClassificationAsk('你看这一步为什么会失败？')).toBe(false);
+    expect(detectArgumentClassificationAsk('')).toBe(false);
   });
 });
 

@@ -197,6 +197,6 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
     await openMonth(w);
     // 今天 0 分钟，但连续不断（连续天数唯一出处：问候栏药丸）
     expect(w.find('.streak').text()).toContain('连续 1 天');
-    expect(w.text()).toContain('今日已学 0 /');
+    expect(w.text()).toContain('今日已学 0 分钟');
   });
 });

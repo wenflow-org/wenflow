@@ -56,6 +56,7 @@ function makeAnnouncement(id: string) {
     body: '正文',
     severity: 'info' as 'info' | 'warning' | 'critical',
     status: 'published' as 'draft' | 'published' | 'archived',
+    audience: 'all' as const,
     publishedAt: '2026-07-25T02:00:00Z',
     expiresAt: null,
     createdBy: null,

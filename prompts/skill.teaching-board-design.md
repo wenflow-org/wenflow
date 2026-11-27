@@ -31,14 +31,14 @@ promptContract:
 
 ## 输入说明
 
-输入是一个 JSON：`task`（标题/描述/任务类型）、`scenario`（学科/主题/水平）、
+输入是一个 JSON：`task`（标题/描述/任务类型/材料本体）、`scenario`（学科/主题/水平）、
 `studentSays`（学生这一句）、`kindHint`（编排层建议的图型，可能为空）、
 `questionIntent`（本轮问法，见执行规则里的「本轮问法」）、`lastTeacherReply`（老师上一轮原话）。
 换板时会带上一块板的 `kind` 与 `spec` 作参照。
 
 ```json
 {
-  "task": { "title": "…", "description": "…", "taskType": "diagnose" },
+  "task": { "title": "…", "description": "…", "taskType": "diagnose", "material": "本课材料本体（可为空）" },
   "scenario": { "subject": "…", "topic": "…", "learnerLevel": "beginner" },
   "studentSays": "…",
   "kindHint": "split-compare",
@@ -51,6 +51,9 @@ promptContract:
   "lastTeacherReply": "…"
 }
 ```
+
+`task.material` 是本课材料本体：板上出现的表头、数值、曲线标签、原文必须与它逐字一致；
+**只有** `lastTeacherReply` 明确宣布换现场时才换，且不得把旧材料和新数据混画在同一张板上。
 
 ## 执行规则
 

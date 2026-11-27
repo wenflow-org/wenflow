@@ -109,6 +109,8 @@ export interface CheckpointSubmitResult {
   lessonReport?: Record<string, any> | null;
   exitTicket?: Record<string, any> | null;
   branch?: Record<string, any> | null;
+  /** 课堂阶段摘要（提交回合下发；缺了前端阶段条会回落到「协议未生效」） */
+  lessonPhase?: Record<string, any> | null;
 }
 
 export function shouldEmitCheckpoint(  session: {

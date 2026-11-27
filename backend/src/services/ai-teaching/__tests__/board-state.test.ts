@@ -68,7 +68,33 @@ const noBlank = {
   spec: { title: '优先级', colLabels: ['紧急', '不紧急'], rowLabels: [{ label: '重要' }, { label: '不重要' }], cells: [{ title: '马上做' }] },
 };
 
+/**
+ * position-line 的归一化契约与其余图型不同：axis/marks/spans 在顶层，不在 spec。
+ * 2026-11-25 账号 123 睡眠课实证：只读 spec 会把板面压成 {placeholder:'none'}，
+ * 老师照常指着「板上那条纵轴」讲，学生看到的是空板。
+ */
+const positionLine = {
+  engine: 'svg',
+  kind: 'position-line',
+  palette: 'indigo',
+  axis: { label: '时间', min: 0, max: 6, ticks: [0, 1, 2, 3, 4, 5, 6] },
+  marks: [
+    { at: 0, label: '23:00 W' },
+    { at: 3, label: '00:30 N3' },
+  ],
+  spans: [{ from: 3, to: 3.5, label: 'N3 连续两格' }],
+  caption: '23:00—06:00 分期曲线',
+};
+
 describe('board-state：两态构造', () => {
+  it('position-line：顶层 axis/marks/spans 必须进板面（不能只剩 placeholder）', () => {
+    const f = deriveBoardFigure(positionLine, { conceal: 'takeaway' });
+    expect((f.fullSpec.marks as any[]).map((m) => m.label)).toEqual(['23:00 W', '00:30 N3']);
+    expect((f.maskedSpec.marks as any[]).map((m) => m.label)).toEqual(['23:00 W', '00:30 N3']);
+    expect((f.maskedSpec.axis as any).label).toBe('时间');
+    expect((f.maskedSpec.spans as any[])[0].label).toBe('N3 连续两格');
+  });
+
   it('split-compare：右栏答案挖空、delta 藏起、左栏事实保留', () => {
     const f = deriveBoardFigure(splitCompare);
     const right = (f.maskedSpec.right as any).rows.map((r: any) => r.label);

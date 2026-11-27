@@ -9,7 +9,7 @@ const mockCallPrompt = jest.fn();
 
 jest.mock('../../../composers/prompt-composer', () => ({ callPrompt: mockCallPrompt }));
 
-import { teachingTurnAgentHandler, type TeachingTurnInput } from '../index';
+import { teachingTurnAgentHandler, scrubAnswerBearingFigure, type TeachingTurnInput } from '../index';
 
 const input: TeachingTurnInput = {
   messages: [{ role: 'user', content: '甲在乙后面 20 米，两人都向东走' }],
@@ -194,6 +194,28 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
       (await runWithFigure({ kind: 'matrix', spec: { rowLabels: ['只有一行'], colLabels: ['a', 'b'], cells: [{ r: 0, c: 0, tone: 'hit' }] } }))
         .figure,
     ).toBeUndefined();
+  });
+
+  // 2026-11-26 工程外审：段号带洞（[1,1,3,3]）时，段数按最大值算 3、教学段只有 2 段，
+  // 第 3 段永远露不出来。归一化按出现顺序重映射成连续 1..N，保证两套坐标同数。
+  it('matrix：教学段号重映射为连续 1..N（带洞段号不再造成板段/教学段不等）', async () => {
+    const teaching = await runWithFigure({
+      kind: 'matrix',
+      spec: {
+        title: '带洞段号',
+        rowLabels: ['第一段', '第二段', '第三段', '第四段'],
+        colLabels: ['场所', '产物'],
+        cells: [
+          { r: 0, c: 0, t: 'A' },
+          { r: 1, c: 0, t: 'B' },
+          { r: 2, c: 0, t: 'C' },
+          { r: 3, c: 0, t: 'D' },
+        ],
+        rowSegments: [1, 1, 3, 3],
+      },
+    });
+    expect(teaching.figure.kind).toBe('matrix');
+    expect(teaching.figure.spec.rowSegments).toEqual([1, 1, 2, 2]);
   });
 
 
@@ -986,5 +1008,34 @@ describe('split-compare 逐句对账表拒绝（2026-11-12 st_1794451502004 实�
       },
     });
     expect(ok.figure.kind).toBe('split-compare');
+  });
+});
+
+describe('scrubAnswerBearingFigure（出题轮摘掉图上答案标注）', () => {
+  const figure = {
+    engine: 'svg',
+    kind: 'cartesian-plot',
+    spec: {
+      series: [{ name: '客流', form: 'points', points: [[15, 23], [16, 27]] }],
+      marks: [
+        { at: [16, 27], label: '16:00 最高峰 27' },
+        { at: [15, 23], label: '15:00 起点 23' },
+      ],
+    },
+  };
+
+  it('有检查点 → 摘掉「峰/最高/落点」类 marks，曲线数据保留', () => {
+    const out: any = scrubAnswerBearingFigure(figure, true);
+    expect(out.spec.marks).toEqual([{ at: [15, 23], label: '15:00 起点 23' }]);
+    expect(out.spec.series[0].points).toEqual([[15, 23], [16, 27]]);
+  });
+
+  it('无检查点 → 原样保留（讲解轮需要指认）', () => {
+    expect(scrubAnswerBearingFigure(figure, false)).toBe(figure);
+  });
+
+  it('非 cartesian-plot / 无 marks → 原样', () => {
+    expect(scrubAnswerBearingFigure({ kind: 'matrix', spec: { cells: [] } }, true)).toEqual({ kind: 'matrix', spec: { cells: [] } });
+    expect(scrubAnswerBearingFigure(null, true)).toBeNull();
   });
 });

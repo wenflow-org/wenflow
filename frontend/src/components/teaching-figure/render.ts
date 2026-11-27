@@ -1190,7 +1190,7 @@ function renderQuadrant({ title, colLabels = [], rowLabels = [], cells = [], not
 
 /* ---------------- 六、对照表（2D 命中矩阵） ---------------- */
 
-type MatrixCell = { r?: number; c?: number; tone?: string };
+type MatrixCell = { r?: number; c?: number; tone?: string; t?: unknown };
 type MatrixLegendItem = { text?: unknown; fill?: unknown; stroke?: unknown };
 
 type MatrixSpec = {
@@ -1201,9 +1201,60 @@ type MatrixSpec = {
   note?: string;
   legend?: MatrixLegendItem[];
   focus?: { row?: number; col?: number };
+  /**
+   * 本段正在讲的板书行（课堂阶段协议 · 信号化）：前端按当前 build 段号从 rowSegments 推出，
+   * 只做视觉强调（底色 + 左侧强调轨），不改任何内容。与 focus.row 并行存在：
+   * focus 是「老师这轮指的某个坐标」，activeRows 是「这一段讲到哪几行」。
+   */
+  activeRows?: number[];
+  /** 按段露出（课堂阶段协议）：false = 这一行还没讲到，画成空的虚线槽，不出格子内容 */
+  rowRevealed?: unknown;
 };
 
-function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], focus }: MatrixSpec): RenderedFigure {
+const MATRIX_COL_MIN = 96;
+const MATRIX_COL_MAX = 216;
+const MATRIX_CELL_PAD_X = 9;
+const MATRIX_CELL_PAD_Y = 7;
+const MATRIX_LINE_H = 18;
+const MATRIX_PENDING_TEXT = '还没讲到';
+
+const cellText = (cell: MatrixCell | undefined): string => (typeof cell?.t === 'string' ? cell.t.trim() : '');
+
+/** key 的原义是「关键」：此前画成 ≡（两边同一项），学生读到的是一屏等号 */
+function matrixGlyph(tone: string | undefined): string {
+  return tone === 'hit' ? '✓' : tone === 'miss' ? '—' : tone === 'dup' ? '叠' : tone === 'key' ? '★' : '';
+}
+
+/** 每一行是否已露出；没有分段信息（存量板）时全部视为已露出 */
+function rowRevealFlags(rowRevealed: unknown, rows: number): boolean[] {
+  const flags = Array.isArray(rowRevealed) ? (rowRevealed as unknown[]) : [];
+  return Array.from({ length: rows }, (_, r) => flags[r] !== false);
+}
+
+/** 没露出的行：整行一条虚线空槽 + 一句说明（格子内容此时不在 spec 里，不会漏画） */
+function matrixPendingRow(x: number, y: number, width: number, height: number): string[] {
+  return [
+    rect(x, y + 4, width, height - 8, { r: 6, fill: 'none', stroke: T.line, dash: '6 4' }),
+    text(x + width / 2, y + height / 2 + 4, MATRIX_PENDING_TEXT, 't-small', 'middle', `fill="${T.faint}"`),
+  ];
+}
+
+/**
+ * matrix（2026-11-26 课堂阶段协议起承担「整课板书」）：两条路径。
+ *  - 纯符号矩阵（✓/—/叠/★）：逐轮配图时代的对账判定，版式不变；
+ *  - 带文字的对照表：板书的主体形态——列宽按内容、格子内折行；宿主放不下时每行一张卡竖排。
+ * 两条路径都认 rowRevealed：没讲到的行是虚线空槽（点名阶段整块板就是「行列名 + 空槽」的骨架）。
+ * 骨架态（格子全空）也要走对照表路径：按 rowRevealed 是否存在来判，不能按「有没有文字」判——
+ * 否则手机上的骨架态会被当成符号矩阵退回横表，右侧整块被裁掉。
+ */
+function renderMatrix(spec: MatrixSpec, targetWidth?: number): RenderedFigure | null {
+  if (!Array.isArray(spec.rowLabels) || !spec.rowLabels.length || !Array.isArray(spec.colLabels) || !spec.colLabels.length) return null;
+  return spec.cells.some((cell) => cellText(cell)) || Array.isArray(spec.rowRevealed)
+    ? renderMatrixText(spec, targetWidth)
+    : renderMatrixGlyph(spec);
+}
+
+function renderMatrixGlyph({ title, rowLabels, colLabels, cells, note, legend = [], focus, rowRevealed, activeRows = [] }: MatrixSpec): RenderedFigure {
   const labelW = Math.max(...rowLabels.map((l: string) => est(l, 12))) + 22;
   /** 列宽先看清列标题要多少（8 字以上按 94px 就装不下），再夹在 94–190 之间 */
   const cwLabel = colLabels.reduce(
@@ -1213,6 +1264,16 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
   const cw = Math.max(94, Math.min(190, cwLabel));
   const ch = 36;
   const headH = 42;
+  const revealed = rowRevealFlags(rowRevealed, rowLabels.length);
+
+  // 符号没有图例学生只能猜（实录：≡ 被读成等号）；模型没给图例时按实际用到的符号补一行
+  const glyphLegend = legend.length === 0
+    ? [['hit', '✓ 有'], ['miss', '— 无'], ['dup', '叠 重复'], ['key', '★ 关键']]
+      .filter(([tone]) => cells.some((cell) => cell.tone === tone))
+      .map(([, label]) => label as string)
+      .join('　　')
+    : '';
+  const hasLegend = legend.length > 0 || !!glyphLegend;
 
   const matrixW = 14 + labelW + colLabels.length * cw + 14;
   const titleW = title ? 12 + est(title, T.fontTitle) + 12 : 0;
@@ -1220,7 +1281,7 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
   const legendW = legend.reduce((sum: number, l: MatrixLegendItem) => sum + 15 + est(l.text, T.fontMicro) + 16, 12);
   const w = Math.ceil(Math.max(matrixW, titleW, noteW, legendW));
 
-  const h = (title ? T.fontTitle + 18 : 0) + headH + rowLabels.length * ch + 26 + (note ? 22 : 0) + (legend.length ? 22 : 0);
+  const h = (title ? T.fontTitle + 18 : 0) + headH + rowLabels.length * ch + 26 + (note ? 22 : 0) + (hasLegend ? 22 : 0);
 
   const parts: string[] = [];
   let oy = 0;
@@ -1253,6 +1314,12 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
       )}"/>`,
     );
   }
+  // 当前段正在讲的行（信号化，d≈0.46）：比焦点弱一档的底色 + 左侧轨，讲完自动换到下一行
+  for (const r of activeRows) {
+    if (!Number.isInteger(r) || r < 0 || r >= rowLabels.length || r === focusRow || !revealed[r]) continue;
+    parts.push(`<rect x="${ox}" y="${oy + headH + r * ch}" width="${labelW + colLabels.length * cw}" height="${ch}" fill="${tint(T.accent, 0.09)}"/>`);
+    parts.push(`<rect x="${ox - labelW}" y="${oy + headH + r * ch + 4}" width="3" height="${ch - 8}" rx="1.5" fill="${T.accent}"/>`);
+  }
 
   const hasFocus = focusRow !== null || focusCol !== null;
   colLabels.forEach((lab: string, c: number) => {
@@ -1267,7 +1334,7 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
   });
   rowLabels.forEach((lab: string, r: number) => {
     const isFocus = focusRow === r;
-    const dim = hasFocus && !isFocus;
+    const dim = (hasFocus && !isFocus) || !revealed[r];
     parts.push(
       text(
         ox + labelW - 12,
@@ -1275,34 +1342,38 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
         lab,
         isFocus ? 't-key' : 't-label',
         'end',
-        isFocus ? `fill="${T.accentInk}"` : dim ? `fill="${T.muted}"` : '',
+        isFocus ? `fill="${T.accentInk}"` : dim ? `fill="${revealed[r] ? T.muted : T.faint}"` : '',
       ),
     );
   });
 
   const map = new Map(cells.map((c) => [`${c.r},${c.c}`, c]));
   for (let r = 0; r < rowLabels.length; r++) {
+    const rowY = oy + headH + r * ch;
+    if (!revealed[r]) {
+      parts.push(...matrixPendingRow(ox + labelW, rowY, colLabels.length * cw, ch));
+      continue;
+    }
     for (let c = 0; c < colLabels.length; c++) {
       const cell = map.get(`${r},${c}`);
       const x = ox + labelW + c * cw;
-      const y = oy + headH + r * ch;
       const tone = cell?.tone;
       const fill =
         tone === 'hit' ? T.okSoft : tone === 'miss' ? T.soft : tone === 'dup' ? T.warnSoft : tone === 'key' ? T.accentSoft : T.surface;
       const stroke = tone === 'hit' ? tint(T.ok, 0.35) : tone === 'dup' ? tint(T.warn, 0.35) : tone === 'key' ? tint(T.accent, 0.35) : T.line;
-      parts.push(rect(x + 2, y + 2, cw - 4, ch - 4, { r: 6, fill, stroke, sw: T.stroke }));
-      const glyph = tone === 'hit' ? '✓' : tone === 'miss' ? '—' : tone === 'dup' ? '叠' : tone === 'key' ? '≡' : '';
+      parts.push(rect(x + 2, rowY + 2, cw - 4, ch - 4, { r: 6, fill, stroke, sw: T.stroke }));
+      const glyph = matrixGlyph(tone);
       if (glyph) {
         const gcolor = tone === 'hit' ? T.ok : tone === 'dup' ? T.warn : tone === 'key' ? T.accent : T.faint;
         parts.push(
-          `<text x="${x + cw / 2}" y="${y + ch / 2 + 5}" text-anchor="middle" style="font-size:${T.fontBody}px;font-weight:600;fill:${gcolor}">${glyph}</text>`,
+          `<text x="${x + cw / 2}" y="${rowY + ch / 2 + 5}" text-anchor="middle" style="font-size:${T.fontBody}px;font-weight:600;fill:${gcolor}">${glyph}</text>`,
         );
       }
     }
   }
 
   const ly = h - 8;
-  if (note) parts.push(text(12, h - (legend.length ? 26 : 8), note, 't-small', 'start'));
+  if (note) parts.push(text(12, h - (hasLegend ? 26 : 8), note, 't-small', 'start'));
   if (legend.length) {
     let lx = 12;
     for (const l of legend) {
@@ -1312,9 +1383,227 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
       parts.push(text(lx + 15, ly, l.text, 't-tiny', 'start'));
       lx += 15 + est(l.text, T.fontMicro) + 16;
     }
+  } else if (glyphLegend) {
+    parts.push(text(12, ly, glyphLegend, 't-tiny', 'start', `fill="${T.muted}"`));
   }
 
   return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
+}
+
+/**
+ * 带文字的对照表（整课板书的主体形态）。
+ * 版式判据全部由内容算出：列宽 = max(列标题, 该列最长一格)，夹在 96–216；行高 = 该行最多折了几行。
+ * 宿主比自然宽还窄时转竖排（renderMatrixStacked）——同一份内容，不让学生横向滚动着读板书。
+ */
+function renderMatrixText(spec: MatrixSpec, targetWidth?: number): RenderedFigure | null {
+  const { title, rowLabels, colLabels, cells, note } = spec;
+  const revealed = rowRevealFlags(spec.rowRevealed, rowLabels.length);
+
+  const labelW = Math.max(...rowLabels.map((label: string) => est(label, T.fontBody))) + 22;
+  const headW = (label: string): number =>
+    Math.ceil(Math.max(...String(label).split('\n').map((line: string) => est(line, T.fontSmall)))) + 14;
+  const colW = colLabels.map((_: string, c: number) => {
+    const widest = cells.reduce(
+      (max, cell) => (Number(cell.c) === c && cellText(cell)
+        ? Math.max(max, est(cellText(cell), T.fontBody) + MATRIX_CELL_PAD_X * 2)
+        : max),
+      0,
+    );
+    return Math.max(MATRIX_COL_MIN, Math.min(MATRIX_COL_MAX, Math.max(headW(colLabels[c]), widest)));
+  });
+  const naturalW = 14 + labelW + colW.reduce((sum, width) => sum + width, 0) + 14;
+  if (targetWidth && Math.round(targetWidth) < naturalW) {
+    return renderMatrixStacked(spec, Math.max(264, Math.round(targetWidth)), revealed);
+  }
+
+  // 宽卡撑满：多出来的宽度按列均分（上限 1040，与其它图型一致）
+  const W = Math.ceil(hostW(targetWidth, naturalW, 1040));
+  const stretch = Math.max(0, Math.floor((W - naturalW) / colW.length));
+  const cols = colW.map((width) => width + stretch);
+  const colX = cols.map((_: number, c: number) => cols.slice(0, c).reduce((sum, width) => sum + width, 0));
+  const gridW = cols.reduce((sum, width) => sum + width, 0);
+
+  const headH = 42;
+  const cellAt = (r: number, c: number): MatrixCell | undefined => cells.find((cell) => Number(cell.r) === r && Number(cell.c) === c);
+  const cellLines = rowLabels.map((_: string, r: number) =>
+    cols.map((_: number, c: number) => {
+      const value = cellText(cellAt(r, c));
+      return value ? wrapLines(value, cols[c] - 4 - MATRIX_CELL_PAD_X * 2, T.fontBody).slice(0, 4) : [];
+    }));
+  const rowH = rowLabels.map((_: string, r: number) => (revealed[r]
+    ? Math.max(40, Math.max(0, ...cellLines[r].map((lines) => lines.length)) * MATRIX_LINE_H + MATRIX_CELL_PAD_Y * 2)
+    : 40));
+  const rowY = rowH.map((_: number, r: number) => rowH.slice(0, r).reduce((sum, height) => sum + height, 0));
+
+  const titleH = title ? T.fontTitle + 18 : 0;
+  const titleW = title ? 24 + est(title, T.fontTitle) : 0;
+  const w = Math.ceil(Math.max(W, titleW));
+  const noteLines = note ? balancedWrap(note, w - 24, T.fontSmall) : [];
+  const h = Math.ceil(titleH + headH + rowH.reduce((sum, height) => sum + height, 0) + 10 + (noteLines.length ? noteLines.length * 16 + 6 : 0));
+
+  const parts: string[] = [...titleBlock(title)];
+  const ox = 14;
+  const bodyTop = titleH + headH;
+  const focusRow = Number.isInteger(spec.focus?.row) ? spec.focus?.row ?? null : null;
+  const focusCol = Number.isInteger(spec.focus?.col) ? spec.focus?.col ?? null : null;
+  const activeRowSet = new Set((Array.isArray(spec.activeRows) ? spec.activeRows : []).filter((r) => Number.isInteger(r)));
+  if (focusRow !== null && revealed[focusRow]) {
+    parts.push(`<rect x="${ox}" y="${bodyTop + rowY[focusRow]}" width="${labelW + gridW}" height="${rowH[focusRow]}" fill="${tint(T.accent, 0.06)}"/>`);
+    parts.push(`<rect x="${ox - 3}" y="${bodyTop + rowY[focusRow] + 4}" width="3" height="${rowH[focusRow] - 8}" rx="1.5" fill="${T.accent}"/>`);
+  }
+  // 当前段正在讲的行：底色 + 左侧轨（信号化）。未露出的行不亮——它还没讲到。
+  for (const r of activeRowSet) {
+    if (!revealed[r] || r === focusRow || r < 0 || r >= rowLabels.length) continue;
+    parts.push(`<rect x="${ox}" y="${bodyTop + rowY[r]}" width="${labelW + gridW}" height="${rowH[r]}" fill="${tint(T.accent, 0.09)}"/>`);
+    parts.push(`<rect x="${ox - 3}" y="${bodyTop + rowY[r] + 4}" width="3" height="${rowH[r] - 8}" rx="1.5" fill="${T.accent}"/>`);
+  }
+  if (focusCol !== null) {
+    parts.push(`<rect x="${ox + labelW + colX[focusCol]}" y="${bodyTop - 6}" width="${cols[focusCol]}" height="${rowH.reduce((sum, height) => sum + height, 0) + 6}" fill="${tint(T.accent, 0.06)}"/>`);
+  }
+  // 表头：列名居中；表头下一条细线把「列名」和「内容」分开
+  colLabels.forEach((label: string, c: number) => {
+    const cx = ox + labelW + colX[c] + cols[c] / 2;
+    const isFocus = focusCol === c;
+    String(label).split('\n').forEach((line: string, i: number) =>
+      parts.push(text(cx, titleH + 24 + i * 14, fitText(line, cols[c] - 6, T.fontSmall), isFocus ? 't-key' : 't-small', 'middle', isFocus ? `fill="${T.accentInk}"` : '')),
+    );
+  });
+  parts.push(`<line x1="${ox + labelW}" y1="${bodyTop - 6}" x2="${ox + labelW + gridW}" y2="${bodyTop - 6}" stroke="${T.line}" stroke-width="1"/>`);
+
+  rowLabels.forEach((label: string, r: number) => {
+    const isFocus = focusRow === r || (activeRowSet.has(r) && revealed[r]);
+    parts.push(
+      text(
+        ox + labelW - 12,
+        bodyTop + rowY[r] + rowH[r] / 2 + 4,
+        label,
+        isFocus ? 't-key' : 't-label',
+        'end',
+        isFocus ? `fill="${T.accentInk}"` : revealed[r] ? '' : `fill="${T.faint}"`,
+      ),
+    );
+  });
+
+  for (let r = 0; r < rowLabels.length; r++) {
+    const top = bodyTop + rowY[r];
+    if (!revealed[r]) {
+      parts.push(...matrixPendingRow(ox + labelW, top, gridW, rowH[r]));
+      continue;
+    }
+    for (let c = 0; c < colLabels.length; c++) {
+      const cell = cellAt(r, c);
+      const x = ox + labelW + colX[c];
+      const tone = cell?.tone;
+      const isKey = tone === 'key';
+      const fill = isKey ? T.accentSoft : tone === 'hit' ? T.okSoft : tone === 'dup' ? T.warnSoft : T.surface;
+      const stroke = isKey ? tint(T.accent, 0.35) : tone === 'hit' ? tint(T.ok, 0.35) : tone === 'dup' ? tint(T.warn, 0.35) : T.line;
+      parts.push(rect(x + 2, top + 2, cols[c] - 4, rowH[r] - 4, { r: 6, fill, stroke, sw: T.stroke }));
+      const ink = isKey ? T.accentInk : T.ink;
+      const weight = isKey ? ' font-weight="600"' : '';
+      const lines = cellLines[r][c];
+      if (lines.length) {
+        lines.forEach((line: string, i: number) =>
+          parts.push(text(x + 2 + MATRIX_CELL_PAD_X, top + 2 + MATRIX_CELL_PAD_Y + 13 + i * MATRIX_LINE_H, line, 't-label', 'start', `fill="${ink}"${weight}`)),
+        );
+      } else {
+        const glyph = matrixGlyph(tone);
+        if (glyph) {
+          parts.push(
+            `<text x="${x + cols[c] / 2}" y="${top + rowH[r] / 2 + 5}" text-anchor="middle" style="font-size:${T.fontBody}px;font-weight:600;fill:${isKey ? T.accent : T.faint}">${glyph}</text>`,
+          );
+        }
+      }
+    }
+  }
+
+  if (noteLines.length) {
+    const noteTop = bodyTop + rowH.reduce((sum, height) => sum + height, 0) + 18;
+    noteLines.forEach((line: string, i: number) => parts.push(text(14, noteTop + i * 16, line, 't-small', 'start')));
+  }
+
+  return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
+}
+
+/**
+ * 窄宿主（手机）上的对照表：每行一张卡——行名做卡头，格子里写「列名 内容」。
+ * 和横表是同一份内容，只是把「列」折进每一行；没讲到的行是一张虚线空卡。
+ */
+function renderMatrixStacked(spec: MatrixSpec, width: number, revealed: boolean[]): RenderedFigure {
+  const { title, rowLabels, colLabels, cells, note } = spec;
+  const padX = 12;
+  const labelColW = Math.max(
+    72,
+    Math.min(132, Math.ceil(Math.max(...colLabels.map((label: string) => est(label, T.fontSmall)))) + 12),
+  );
+  const valueW = width - padX * 2 - labelColW;
+  const cardW = width - padX * 2;
+  const headLines = rowLabels.map((label: string) => balancedWrap(label, cardW - 24, T.fontKey).slice(0, 2));
+  const headH = headLines.map((lines: string[]) => 26 + (lines.length - 1) * (T.fontKey + 3));
+  const cellAt = (r: number, c: number): MatrixCell | undefined => cells.find((cell) => Number(cell.r) === r && Number(cell.c) === c);
+  const entries = rowLabels.map((_: string, r: number) =>
+    (revealed[r] ? colLabels : []).map((colLabel: string, c: number) => {
+      const cell = cellAt(r, c);
+      const value = cellText(cell);
+      return {
+        colLabel,
+        tone: cell?.tone,
+        glyph: value ? '' : matrixGlyph(cell?.tone),
+        lines: value ? balancedWrap(value, valueW - 8, T.fontBody).slice(0, 4) : [],
+      };
+    }));
+  const bodyH = entries.map((list) => (list.length
+    ? list.reduce((sum, entry) => sum + Math.max(MATRIX_LINE_H, entry.lines.length * MATRIX_LINE_H) + 6, 8)
+    : 30));
+  const gap = 10;
+  const activeRowSet = new Set((Array.isArray(spec.activeRows) ? spec.activeRows : []).filter((r) => Number.isInteger(r)));
+  const titleH = title ? T.fontTitle + 18 : 0;
+  const cardsH = rowLabels.reduce((sum, _label, r) => sum + headH[r] + bodyH[r], 0) + Math.max(0, rowLabels.length - 1) * gap;
+  const noteLines = note ? balancedWrap(note, width - 24, T.fontSmall) : [];
+  const h = Math.ceil(titleH + cardsH + (noteLines.length ? noteLines.length * 16 + 16 : 12));
+
+  const parts: string[] = [...titleBlock(title)];
+  let top = titleH;
+  rowLabels.forEach((_: string, r: number) => {
+    const pending = !revealed[r];
+    const cardH = headH[r] + bodyH[r];
+    const active = activeRowSet.has(r) && !pending;
+    parts.push(rect(padX, top, cardW, cardH, { r: T.radius, fill: pending ? 'none' : T.surface, stroke: active ? T.accent : T.line, sw: active ? 1.5 : 1, dash: pending ? '6 4' : '' }));
+    // 卡头（行名）：强调色底；没讲到的行用中性底、次级字
+    parts.push(rect(padX, top, cardW, headH[r], { r: T.radius, fill: pending ? T.soft : T.accentSoft, stroke: 'none', sw: 0 }));
+    parts.push(`<rect x="${padX}" y="${top + headH[r] - 8}" width="${cardW}" height="8" fill="${pending ? T.soft : T.accentSoft}"/>`);
+    headLines[r].forEach((line: string, i: number) =>
+      parts.push(text(padX + 12, top + 18 + i * (T.fontKey + 3), line, 't-key', 'start', `fill="${pending ? T.muted : T.accentInk}"`)),
+    );
+    if (pending) {
+      parts.push(text(padX + 12, top + headH[r] + 19, MATRIX_PENDING_TEXT, 't-small', 'start', `fill="${T.faint}"`));
+    } else {
+      let cursor = top + headH[r] + 8;
+      for (const entry of entries[r]) {
+        const lineCount = Math.max(1, entry.lines.length);
+        const isKey = entry.tone === 'key';
+        parts.push(text(padX + 12, cursor + 13, entry.colLabel, 't-small', 'start', `fill="${T.muted}"`));
+        if (entry.lines.length) {
+          entry.lines.forEach((line: string, i: number) =>
+            parts.push(text(padX + 12 + labelColW, cursor + 13 + i * MATRIX_LINE_H, line, 't-label', 'start', `fill="${isKey ? T.accentInk : T.ink}"${isKey ? ' font-weight="600"' : ''}`)),
+          );
+        } else if (entry.glyph) {
+          parts.push(
+            `<text x="${padX + 12 + labelColW}" y="${cursor + 14}" style="font-size:${T.fontBody}px;font-weight:600;fill:${isKey ? T.accent : T.faint}">${entry.glyph}</text>`,
+          );
+        } else {
+          parts.push(text(padX + 12 + labelColW, cursor + 13, '—', 't-small', 'start', `fill="${T.faint}"`));
+        }
+        cursor += Math.max(MATRIX_LINE_H, lineCount * MATRIX_LINE_H) + 6;
+      }
+    }
+    top += cardH + gap;
+  });
+
+  if (noteLines.length) {
+    noteLines.forEach((line: string, i: number) => parts.push(text(14, top + 8 + i * 16, line, 't-small', 'start')));
+  }
+
+  return { svg: wrap(parts.join('\n'), width, h), width, height: h };
 }
 
 /* ---------------- 七、收纳箱（分类/归位：条目的「所属」是容器关系） ---------------- */
@@ -2654,15 +2943,31 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: SplitCom
  */
 type StripFrame = { label?: unknown; tone: string; items?: unknown[] };
 
-type StateStripSpec = { title?: string; frames?: StripFrame[]; note?: string };
+type StateStripSpec = {
+  title?: string;
+  frames?: StripFrame[];
+  note?: string;
+  /** 按段露出（课堂阶段协议）：false = 这一帧还没讲到——帧名在、帧内状态还没出现 */
+  frameRevealed?: unknown;
+};
 
-function renderStateStrip({ title, frames = [], note }: StateStripSpec, targetWidth?: number): RenderedFigure | null {
+function renderStateStrip(spec: StateStripSpec, targetWidth?: number): RenderedFigure | null {
+  const { title, note, frameRevealed } = spec;
+  const frames = spec.frames || [];
   if (!Array.isArray(frames) || frames.length < 2) return null;
   // 宽卡撑满（外评 #2）：620 塞进 1080 卡右侧全空、帧宽却只够单字折行
   const W = hostW(targetWidth, 620, 1040);
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 6;
   const n = frames.length;
+  // 按段露出（课堂阶段协议）：没讲到的帧保留帧名（学生先认识「有哪几步」），帧内状态讲到才出现
+  const hasRevealMap = Array.isArray(frameRevealed);
+  const revealFlags = hasRevealMap ? (frameRevealed as unknown[]) : [];
+  const revealed = frames.map((_f, i: number) => revealFlags[i] !== false);
+  // 窄宿主（手机）放不下横排条带：改为竖排——帧自上而下、箭头向下，同一份内容，不横向滚动
+  if (targetWidth && Math.round(targetWidth) < 620) {
+    return renderStateStripVertical({ title, note, frames, revealed }, Math.round(targetWidth));
+  }
   // 帧多时间距收窄（>6 帧）：8 帧等分时 30px 间隙要吃掉 210px 宽度，帧宽只剩 ~98px，文字折行过碎
   const gap = n > 6 ? 16 : 30;
   const fw = Math.round((W - padX * 2 - (n - 1) * gap) / n);
@@ -2708,26 +3013,32 @@ function renderStateStrip({ title, frames = [], note }: StateStripSpec, targetWi
     parts.push(`<line x1="${x0}" y1="${trackY}" x2="${x1}" y2="${trackY}" stroke="${T.line}" stroke-width="1.2"/>`);
     for (let i = 0; i < n; i += 1) {
       const cx = padX + i * (fw + gap) + fw / 2;
-      parts.push(`<circle cx="${cx}" cy="${trackY}" r="4.5" fill="${i === 0 ? T.accent : T.surface}" stroke="${i === 0 ? T.accent : T.lineStrong}" stroke-width="1.4"/>`);
+      // 带露出图时进度点即进度：讲到的实心、没讲到的空心
+      const solid = hasRevealMap ? revealed[i] : i === 0;
+      parts.push(`<circle cx="${cx}" cy="${trackY}" r="4.5" fill="${solid ? T.accent : T.surface}" stroke="${solid ? T.accent : T.lineStrong}" stroke-width="1.4"/>`);
     }
   }
 
   frames.forEach((f, i: number) => {
-    const tone = TONE[f.tone] || TONE.neutral;
+    const pending = !revealed[i];
+    const tone = pending ? TONE.neutral : TONE[f.tone] || TONE.neutral;
+    const ink = pending ? T.muted : tone.ink;
+    const soft = pending ? T.soft : tone.soft;
     const x = padX + i * (fw + gap);
-    parts.push(rect(x, top, fw, frameH, { r: T.radius, fill: T.surface, stroke: i === n - 1 ? T.lineStrong : T.line }));
-    parts.push(rect(x, top, fw, headH, { r: T.radius, fill: tone.soft, stroke: 'none', sw: 0 }));
-    parts.push('<rect x="' + x + '" y="' + (top + headH - 8) + '" width="' + fw + '" height="8" fill="' + tone.soft + '"/>');
+    parts.push(rect(x, top, fw, frameH, { r: T.radius, fill: pending ? 'none' : T.surface, stroke: pending ? T.line : i === n - 1 ? T.lineStrong : T.line, dash: pending ? '6 4' : '' }));
+    parts.push(rect(x, top, fw, headH, { r: T.radius, fill: soft, stroke: 'none', sw: 0 }));
+    parts.push('<rect x="' + x + '" y="' + (top + headH - 8) + '" width="' + fw + '" height="8" fill="' + soft + '"/>');
     // 帧序号 + 帧名（帧名按帧宽折行，避免横穿相邻帧）
-    parts.push(text(x + 10, top + 16, String(i + 1), 't-tiny', 'start', 'fill="' + tone.ink + '" font-weight="700"'));
+    parts.push(text(x + 10, top + 16, String(i + 1), 't-tiny', 'start', 'fill="' + ink + '" font-weight="700"'));
     labelLines[i].forEach((line, li) => {
       parts.push(
-        text(x + fw / 2 + 5, top + 16 + li * (T.fontKey + 3), line, 't-key', 'middle', 'fill="' + tone.ink + '"'),
+        text(x + fw / 2 + 5, top + 16 + li * (T.fontKey + 3), line, 't-key', 'middle', 'fill="' + ink + '"'),
       );
     });
     const ls = frameLines[i];
     ls.forEach((line, li) => parts.push(text(x + 10, top + headH + 20 + li * 17, line, 't-small', 'start', 'fill="' + T.ink + '"')));
-    if (!ls.length) parts.push(text(x + fw / 2, top + headH + bodyH / 2, '—', 't-small', 'middle', 'fill="' + T.faint + '"'));
+    if (pending) parts.push(text(x + fw / 2, top + headH + bodyH / 2, '还没讲到', 't-small', 'middle', 'fill="' + T.faint + '"'));
+    else if (!ls.length) parts.push(text(x + fw / 2, top + headH + bodyH / 2, '—', 't-small', 'middle', 'fill="' + T.faint + '"'));
     // 帧间箭头
     if (i < n - 1) {
       const ax1 = x + fw + 4;
@@ -2741,6 +3052,63 @@ function renderStateStrip({ title, frames = [], note }: StateStripSpec, targetWi
   if (noteLines.length) {
     const ny = top + frameH + 10;
     noteLines.forEach((line, li) => parts.push(text(padX + 4, ny + li * 16, line, 't-small', 'start', 'fill="' + T.muted + '"')));
+  }
+  return { svg: wrap(parts.join('\n'), W, h), width: W, height: h };
+}
+
+/** 窄宿主上的竖排条带：每一帧一张横卡（帧名做卡头），卡与卡之间一段向下的「下一步」连接。 */
+function renderStateStripVertical(
+  { title, note, frames, revealed }: { title?: string; note?: string; frames: StripFrame[]; revealed: boolean[] },
+  targetWidth: number,
+): RenderedFigure {
+  const W = Math.max(264, targetWidth);
+  const padX = 14;
+  const cardW = W - padX * 2;
+  const linkH = 22;
+  const n = frames.length;
+  const items = frames.map((f) =>
+    (Array.isArray(f.items) ? f.items.filter((x): x is string => typeof x === 'string' && Boolean(x.trim())).slice(0, 3) : []));
+  const frameLines = items.map((list, i: number) =>
+    (revealed[i] ? list.flatMap((item) => balancedWrap(item, cardW - 24, T.fontSmall).slice(0, 4)) : []));
+  const labelLines = frames.map((f) => balancedWrap(String(f.label ?? ''), cardW - 46, T.fontKey).slice(0, 2));
+  const headH = labelLines.map((lines: string[]) => 30 + (lines.length - 1) * (T.fontKey + 3));
+  const bodyH = frameLines.map((lines: string[], i: number) => (revealed[i] ? Math.max(24, lines.length * 17) + 10 : 30));
+  const titleH = title ? T.fontTitle + 18 : 6;
+  const noteLines = note ? balancedWrap(note, cardW, T.fontSmall) : [];
+  const h = Math.ceil(
+    titleH + headH.reduce((sum, value, i) => sum + value + bodyH[i], 0) + (n - 1) * linkH + (noteLines.length ? noteLines.length * 16 + 14 : 14),
+  );
+  const parts: string[] = [...titleBlock(title)];
+  let top = titleH;
+  frames.forEach((f, i: number) => {
+    const pending = !revealed[i];
+    const tone = pending
+      ? { soft: T.soft, ink: T.muted }
+      : f.tone === 'ok' ? { soft: T.okSoft, ink: T.ok }
+        : f.tone === 'warn' ? { soft: T.warnSoft, ink: T.warn }
+          : f.tone === 'accent' ? { soft: T.accentSoft, ink: T.accentInk }
+            : { soft: T.soft, ink: T.muted };
+    parts.push(rect(padX, top, cardW, headH[i] + bodyH[i], { r: T.radius, fill: pending ? 'none' : T.surface, stroke: T.line, dash: pending ? '6 4' : '' }));
+    parts.push(rect(padX, top, cardW, headH[i], { r: T.radius, fill: tone.soft, stroke: 'none', sw: 0 }));
+    parts.push(`<rect x="${padX}" y="${top + headH[i] - 8}" width="${cardW}" height="8" fill="${tone.soft}"/>`);
+    parts.push(text(padX + 12, top + 20, String(i + 1), 't-tiny', 'start', `fill="${tone.ink}" font-weight="700"`));
+    labelLines[i].forEach((line, li) => parts.push(text(padX + 30, top + 20 + li * (T.fontKey + 3), line, 't-key', 'start', `fill="${tone.ink}"`)));
+    if (pending) {
+      parts.push(text(padX + 12, top + headH[i] + 19, '还没讲到', 't-small', 'start', `fill="${T.faint}"`));
+    } else {
+      frameLines[i].forEach((line, li) => parts.push(text(padX + 12, top + headH[i] + 20 + li * 17, line, 't-small', 'start', `fill="${T.ink}"`)));
+      if (!frameLines[i].length) parts.push(text(padX + 12, top + headH[i] + 20, '—', 't-small', 'start', `fill="${T.faint}"`));
+    }
+    top += headH[i] + bodyH[i];
+    if (i < n - 1) {
+      const cx = padX + 20;
+      parts.push(`<line x1="${cx}" y1="${top + 2}" x2="${cx}" y2="${top + linkH - 8}" stroke="${T.lineStrong}" stroke-width="1.6"/>`);
+      parts.push(`<path d="M${cx} ${top + linkH - 1} l-4 -8 l8 0 Z" fill="${T.lineStrong}"/>`);
+      top += linkH;
+    }
+  });
+  if (noteLines.length) {
+    noteLines.forEach((line, li) => parts.push(text(padX + 2, top + 12 + li * 16, line, 't-small', 'start', `fill="${T.muted}"`)));
   }
   return { svg: wrap(parts.join('\n'), W, h), width: W, height: h };
 }
@@ -3017,7 +3385,7 @@ export function renderSpecFigure(
       case 'grid':
         return renderGrid(spec as GridSpec);
       case 'matrix':
-        return renderMatrix(spec as MatrixSpec);
+        return renderMatrix(spec as MatrixSpec, options.targetWidth);
       case 'compare':
         return renderCompare(spec as CompareSpec, options.targetWidth);
       case 'quadrant':

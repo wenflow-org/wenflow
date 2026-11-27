@@ -14,6 +14,57 @@ export function resolveTemporalLongGapThresholdDays(raw?: string | null): number
 }
 
 /**
+ * 「学过一次」的最低学生发言轮数（2026-11-26 口径）：0–1 轮的空开/浅试探
+ * （含点「重新开始」后留下的会话）不算学过，不进入 attemptCount / sameTaskHistory。
+ * 否则连点几次重开就把「第 N 次学」刷脏，开场模型会误以为学生在这节课死磕过。
+ */
+export const MIN_EFFECTIVE_USER_TURNS = 2;
+
+function countLegacyUserTurns(raw: unknown): number {
+  const list = parseJsonSafe(raw as any);
+  return Array.isArray(list)
+    ? list.filter((m: any) => m && typeof m === 'object' && m.role === 'user').length
+    : 0;
+}
+
+/** 批量数每个会话的学生发言轮数（侧表优先；旧会话无侧表行时回退 messages 列）。 */
+export async function countUserTurnsBySession(
+  sessions: Array<{ id: string; messages?: unknown }>,
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  // 旧会话先按 messages 列兜底，侧表有行时再覆盖。
+  for (const session of sessions) {
+    const legacy = countLegacyUserTurns(session.messages);
+    if (legacy > 0) counts.set(session.id, legacy);
+  }
+  const ids = sessions.map((s) => s.id);
+  if (!ids.length) return counts;
+  try {
+    const rows = await (prisma as any).teaching_session_messages.findMany({
+      where: { sessionId: { in: ids } },
+      select: { sessionId: true, payload: true },
+    });
+    if (!Array.isArray(rows) || rows.length === 0) return counts;
+    const side = new Map<string, number>();
+    for (const row of rows) {
+      const message = parseJsonSafe(row?.payload) as { role?: unknown } | null;
+      if (message && message.role === 'user') {
+        side.set(row.sessionId, (side.get(row.sessionId) ?? 0) + 1);
+      }
+    }
+    // 侧表是这个会话的权威来源：有行就以它为准，避免把旧列与侧表重复相加。
+    for (const id of ids) {
+      if (side.has(id)) counts.set(id, side.get(id)!);
+    }
+  } catch (error) {
+    logger.warn('[teaching-recap] 统计学生发言轮数失败，回退 messages 列', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return counts;
+}
+
+/**
  * 纯函数：由"上一节相关课程 endTime"计算时间间隔信号。
  * - 无可用 endTime（null/undefined/非法）→ null（调用方省略字段，行为不变）
  * - now 早于 endTime（时钟漂移）→ 归零，不产生负数
@@ -176,17 +227,26 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
     const sameTaskUnresolved = sameTaskFields?.unresolvedPoints ?? [];
     const sameTaskActionPlan = sameTaskFields ? sameTaskFields.actionPlan.slice(0, 3) : [];
 
-    // 同任务重学计数（2026-11-12 口径修正）：此前只数 completed+wrapup，paused/timeout 的
-    // 上一次学习完全不可见——实测重学课（上次 paused）开场拿不到 same-task 上下文，
-    // UI 横幅说「第 2 次学、补上次没掌握的」，老师却当第一次讲。计数口径改为全部
-    // 非活跃会话，与前端「第 N 次学」横幅一致。
+    // 同任务重学计数（2026-11-26 口径）：只数**有效学习**。
+    // - completed 且有 wrapup：结算证据齐 → 计次；
+    // - paused/timeout：学生至少说过 MIN_EFFECTIVE_USER_TURNS 轮 → 计次；
+    // - 0–1 轮的空开 / 浅试探 / 点了「重新开始」留下的会话 → 不计次（reset 本身也是 discarded，
+    //   这里再按发言轮数兜一层，防止空会话被 timeout 标成 paused 后混进计数）。
     const sameTaskAttempts = await prisma.teaching_sessions.findMany({
-      where: { userId, taskId: currentTaskId, status: { in: ['completed', 'paused', 'timeout'] } },
+      where: {
+        userId,
+        taskId: currentTaskId,
+        status: { in: ['completed', 'paused', 'timeout', 'discarded'] },
+      },
       orderBy: { createdAt: 'desc' },
-      select: { status: true, endTime: true, createdAt: true },
+      select: { id: true, status: true, endTime: true, createdAt: true, wrapup: true, messages: true },
     });
-    const attemptCount = sameTaskAttempts.length;
-    const lastAttempt = sameTaskAttempts[0] || null;
+    const userTurns = await countUserTurnsBySession(sameTaskAttempts as any[]);
+    const effectiveAttempts = (sameTaskAttempts as any[]).filter((attempt) => {
+      if (attempt.status === 'completed' && attempt.wrapup) return true;
+      return (userTurns.get(attempt.id) ?? countLegacyUserTurns(attempt.messages)) >= MIN_EFFECTIVE_USER_TURNS;
+    });
+    const attemptCount = effectiveAttempts.length;
 
     // 从教学会话里提取 recap 数据
     const toRecap = (session: any, relation: TeachingScenarioContext['lastLessonRecap']['relation']) => {
@@ -295,33 +355,9 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
         };
       }
     }
-    // 上次没走完（paused/timeout，无 wrapup）也必须承认这次是重学（2026-11-12）：
-    // 摘要不可得就给**最小 same-task 上下文**——开场提示词本就允许 unresolved 为空时
-    // 中性带过（「承认之前学过」），但绝不能因为缺 wrapup 就当第一次讲。
-    if (attemptCount > 0) {
-      return {
-        recap: {
-          sourceTopic: null,
-          topicSummary: null,
-          retrievalCue: null,
-          unresolvedPoints: [],
-          relation: 'same-task',
-          sourceStageNumber: currentStageNumber,
-          sourceMilestoneTitle: milestoneTitle,
-          sourceTaskTitle: null,
-          sameTaskHistory: {
-            attemptCount,
-            lastStatus: lastAttempt?.status || '',
-            lastEndTime: lastAttempt?.endTime?.toISOString?.() || lastAttempt?.createdAt?.toISOString?.() || null,
-            lastSummary: null,
-            lastUnresolvedPoints: [],
-            lastActionPlan: [],
-          },
-        },
-        sameTaskSessions: attemptCount,
-        lastSourceEndTime: lastAttempt?.endTime ?? null,
-      };
-    }
+    // 上次没走完（paused/timeout/discarded，无 wrapup）：**不**生成 same-task 回顾。
+    // 2026-11-27 用户口径：半途点「重新开始」就是要一张白纸，界面与开场都不该提醒
+    // 「你之前开过、没走完」；只有真正完整学完（有 wrapup）才在开场半句带过。
 
     // 回退：同路径最近完成课（排除当前任务，原行为）
     const lastEnded = await prisma.teaching_sessions.findFirst({

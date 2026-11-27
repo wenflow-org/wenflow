@@ -173,6 +173,21 @@ describe('条件规则接线（真实编译产物）', () => {
     expect(payload).not.toHaveProperty('conditionalRules');
   });
 
+  // 2026-11-26 职责归位：绘图语法（图型表 / spec 样例）只在出图回合随载荷注入。
+  // 常驻 system 里不再有 cartesian-plot 这类说明书；没有 visualOpportunity 的回合一分钱不付。
+  it('visualOpportunity 回合才带图型指南；常驻 system 不含图型表', async () => {
+    const without = await capture(INPUT);
+    expect(String(without.payload.conditionalRules || '')).not.toContain('图型指南');
+
+    const withOpportunity = await capture({
+      ...INPUT,
+      visualOpportunity: { suggested: true, reason: 'structure-content', instruction: '本轮需要一张对照图。' },
+    } as never);
+    expect(withOpportunity.payload.conditionalRules).toContain('图型指南');
+    expect(withOpportunity.payload.conditionalRules).toContain('cartesian-plot');
+    expect(withOpportunity.spec.defaultSystemPrompt).not.toContain('cartesian-plot');
+  });
+
   it('输入提供 scenario.materials → 只注入对应那条（在稳定前缀之后、逐回合键之前）', async () => {
     const { payload } = await capture({
       ...INPUT,

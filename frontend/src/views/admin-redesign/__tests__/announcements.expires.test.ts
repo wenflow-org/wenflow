@@ -70,6 +70,7 @@ function makeAnnouncement(id: string, overrides: Partial<LiveAnnouncement> = {})
     body: '正文',
     severity: 'info',
     status: 'published',
+    audience: 'all',
     publishedAt: '2026-07-25T02:00:00Z',
     expiresAt: null,
     createdBy: null,
@@ -104,7 +105,8 @@ describe('Announcements 过期语义（expiresAt）', () => {
     expect(w.text()).toContain('公告中心');
     expect(w.text()).toContain('生效中 1');
     // 过期行徽章为灰（mk-badge--muted），非绿（生效中）
-    const badges = w.findAll('tbody tr td:nth-child(3) .mk-badge').map((b) => b.text());
+    // 列序 2026-11-26 起：公告 / 受众 / 级别 / 状态 / 发布 / 过期 / 创建人 / 操作
+    const badges = w.findAll('tbody tr td:nth-child(4) .mk-badge').map((b) => b.text());
     expect(badges).toContain('已过期');
   });
 
@@ -138,10 +140,11 @@ describe('Announcements 过期语义（expiresAt）', () => {
     await nextTick();
     const tds = w.findAll('tbody tr td');
     const abs = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
-    // 列序：公告 / 级别 / 状态 / 发布 / 过期 / 创建人 / 操作
-    expect(tds[3].text()).toMatch(abs);
+    // 列序：公告 / 受众 / 级别 / 状态 / 发布 / 过期 / 创建人 / 操作（受众列 2026-11-26 新增）
+    expect(tds[1].text()).toBe('全部');
     expect(tds[4].text()).toMatch(abs);
+    expect(tds[5].text()).toMatch(abs);
     // 过期列 title 补倒计时（主口径仍是绝对时刻）
-    expect(tds[4].attributes('title')).toContain('剩');
+    expect(tds[5].attributes('title')).toContain('剩');
   });
 });

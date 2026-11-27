@@ -132,7 +132,7 @@ export function stripDanglingFigureReferences(reply: string | null | undefined):
   for (const pattern of DANGLING_FIGURE_DELETIONS) {
     out = out.replace(pattern, '');
   }
-  return out
+  const cleaned = out
     // 删掉指代后留下的空标点：连续标点只留一个、标点前的空白去掉、行首/句首的孤立标点去掉。
     .replace(/\s+([，。；！？、：])/g, '$1')
     .replace(/([，。；！？、：])\1+/g, '$1')
@@ -141,4 +141,12 @@ export function stripDanglingFigureReferences(reply: string | null | undefined):
     .replace(/(^|\n)\s*[，,、；;—-]+\s*/g, '$1')
     .replace(/([。！？\n])\s*[，,、；;]\s*/g, '$1')
     .trim();
+  // 删完读不通就原样返回（2026-11-26 A4 实录）：指代片段是句首主语的一部分时
+  // （「板上的图已经全露出来了」→ 删「板上」只剩「的图…」），残留比悬空引用更难读。
+  // 只认「以虚词/标点起头」这一种硬伤——不看长度：删掉整句指代后只剩一句短指令
+  // （「你自己对一眼。」）是正常结果，按长度兜底会把它整段退回去。
+  if (!cleaned || /^[的地得了着是，。、；：！？]/.test(cleaned)) {
+    return text;
+  }
+  return cleaned;
 }

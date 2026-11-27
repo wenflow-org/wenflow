@@ -85,7 +85,8 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 
 <style scoped>
 .uc {
-  min-height: 100vh;
+  /* .v2-page 在宽屏有 zoom；100vh 会被一起放大，个人中心页凭空多出滚动。flex:1 已是兜底 */
+  min-height: calc(100vh / var(--vp-zoom, 1));
   display: flex;
   flex-direction: column;
   background: var(--canvas);

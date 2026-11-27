@@ -30,3 +30,34 @@ exports[`goal-conversation payload snapshot parity payload contains exactly the 
   "userInput": "想学 Python 数据分析，转行用",
 }
 `;
+
+exports[`goal-conversation payload snapshot parity state defaults to an empty understanding snapshot on the first turn 1`] = `
+{
+  "conversationContext": [
+    {
+      "role": "user",
+      "text": "你好",
+    },
+    {
+      "role": "assistant",
+      "text": "你好，想学什么？",
+    },
+  ],
+  "state": {
+    "confidence": 0,
+    "stage": "understanding",
+    "understanding": {},
+  },
+  "task": {
+    "mode": "goal-conversation-turn-update",
+    "requirements": [
+      "treat state as primary memory",
+      "treat conversationContext as supporting evidence only",
+      "if state conflicts with userInput, trust userInput",
+      "do not treat conversationContext as chat history to continue",
+      "return exactly one raw JSON object with no extra text",
+    ],
+  },
+  "userInput": "想学 Python 数据分析，转行用",
+}
+`;

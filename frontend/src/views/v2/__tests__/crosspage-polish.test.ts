@@ -59,7 +59,9 @@ describe('下拉弹层：祖先 zoom 不再把菜单推离触发框', () => {
           { value: 'a', label: '行政通知起草不再被退回' },
           { value: 'b', label: '全部路径' }
         ]
-      }
+      },
+      // 弹层已 Teleport 到 body；原位渲染才能从 wrapper 读 style
+      global: { stubs: { teleport: true } }
     });
     const trigger = w.find('.mk-select__trigger').element as HTMLElement;
     /* 模拟 .v2-page zoom:1.08：视觉宽 108 = 布局宽 100 × 1.08，视觉坐标同步偏移 */

@@ -20,6 +20,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/utils/api'
+import { resolveVisualScale } from '@/utils/zoom'
 import { useUserStore } from '@/stores/user'
 
 /* 吸顶叠层协调（2026-11-21 公告遮住导航修复）：
@@ -33,7 +34,14 @@ let heightObserver: ResizeObserver | null = null
 function syncHeightVar() {
   const el = bannerEl.value
   if (el) {
-    document.documentElement.style.setProperty(ANB_HEIGHT_VAR, `${Math.round(el.getBoundingClientRect().height)}px`)
+    /* 横幅挂在 #app 下（在 .v2-page 之外，量到的是未缩放视觉高），消费方 V2Nav 在
+       .v2-page 里，sticky top 会被 zoom 再放大——先折回 .v2-page 的逻辑 px 再写变量。 */
+    const page = document.querySelector('.v2-page') as HTMLElement | null
+    const pageZoom = (page && resolveVisualScale(page)) || 1
+    document.documentElement.style.setProperty(
+      ANB_HEIGHT_VAR,
+      `${Math.round(el.getBoundingClientRect().height / pageZoom)}px`
+    )
   } else {
     document.documentElement.style.removeProperty(ANB_HEIGHT_VAR)
   }

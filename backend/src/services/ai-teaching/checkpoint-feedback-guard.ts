@@ -125,8 +125,11 @@ const NEGATIVE_VERDICT_OPENING =
 //   - (?<!对) 排除「对不(对)?」设问（「这道题的答案对不对…」里的「不对」是子串）；
 //   - (?!了) 排除「…不对了」让步/条件（「如果这道选 C 就不对了…」不是对作答的否决）。
 // 纯结构匹配，不引入语义判断；「这道题不对/答案不对」等真否决仍命中。
+// 2026-11-26 补中文自然否定的变体：实录里模型写「这块还没对上——你选的是…」，词表里没有「还没对上」，
+// 代码判对（passed=true）的作答被原样放行否定，学生被告知自己错了。穷举词表永远追不上措辞，
+// 所以对称方向另有一道「首句必须明确给裁决」的兜底（见 ensureVerdictOpening）。
 const NEGATIVE_VERDICT_IN_SENTENCE =
-  /(?:(?:这道|这题|这一题|这次|这个)(?:题|答案|选项)?|答案|选项)?\s*(?:(?<!对)不对(?!了)|(?<!没)(?<!不)(?<!未)错了|(?<!没)(?<!不)(?<!未)答错|(?<!没)(?<!不)(?<!未)选错|(?<!没)(?<!不)(?<!未)填错|没答对|没答到|没选对)/;
+  /(?:(?:这道|这题|这一题|这次|这个)(?:题|答案|选项)?|答案|选项)?\s*(?:(?<!对)不对(?!了)|(?<!没)(?<!不)(?<!未)错了|(?<!没)(?<!不)(?<!未)答错|(?<!没)(?<!不)(?<!未)选错|(?<!没)(?<!不)(?<!未)填错|没答对|没答到|没选对|还没对上|没对上|没走到|没接住|没答上|(?:还)?差一步|答偏了|选偏了|走偏了)/;
 
 /** 首句（含句末标点）；无标点时整段即首句。 */
 function leadingSentence(text: string): string {
@@ -151,6 +154,52 @@ export function repairContradictedPassedVerdict(reply: unknown): string {
   return question
     ? `对，这道答对了。${question}`
     : '对，这道答对了。说说你判断的依据，我们往下走。';
+}
+
+/** 首句里明确的「答对」表述（代码判对回合，反馈首句必须与裁决同向） */
+const PASSED_VERDICT_IN_HEAD =
+  /答对了|答得对|选对了|选得对|填对了|判断得?对|做对了|说对了|说得到位|回答得?(?:很|非常|十分|挺|相当)?(?:对|正确|准确|到位|好)|(?:完全|非常|十分)正确|没错|对(?:的|啊|呀)[，,。！!]|这(?:题|道题|步|一步|个答案|个判断)(?:是)?对(?:的|了)?|就是(?:它|这个|这样)|正是如此|答到点上|说到点子上|判对了/;
+/** 首句里明确的「没答对」表述 */
+const FAILED_VERDICT_IN_HEAD = new RegExp(`${NEGATIVE_VERDICT_IN_SENTENCE.source}|还没|未答|没有答|偏了|漏了|少了|不完整|差一点|差一些|没中|走偏|答偏|不是[^，。！？?]{0,8}答案`);
+
+/**
+ * 代码裁决回合：反馈首句必须明确给出与裁决同向的结论（纯函数，供单测）。
+ *
+ * 两道既有硬门（判错剥肯定语 / 判对换掉否定开头）都是「命中才修」，模型只要**不写裁决句**就都放行——
+ * 实录里学生看到作答处标红，老师却说「你选的是 A，我们来看看 B 为什么…」，通篇没说对错。
+ * 学生对「我到底对不对」的稳定感，只能来自反馈与判分处处一致。这里不替换模型的话术，只在
+ * 首句没有裁决时补一句确定性裁决；首句是问句时也补（问句不是裁决）。
+ */
+export function ensureVerdictOpening(reply: unknown, passed: boolean): string {
+  const value = typeof reply === 'string' ? reply : '';
+  const text = value.trim();
+  if (!text) return value;
+  const head = leadingSentence(text);
+  const hasVerdict = /[？?]\s*$/.test(head) ? false : (passed ? PASSED_VERDICT_IN_HEAD : FAILED_VERDICT_IN_HEAD).test(head);
+  if (hasVerdict) return value;
+  return `${passed ? '这题答对了。' : '这题还没对。'}${text}`;
+}
+
+/** 给老师看的正确答案文本：选择题「B. 选项原文」，简答题给要点。没有可用答案键时 null。 */
+export function describeCorrectAnswer(
+  checkpoint: {
+    type?: string;
+    options?: Array<{ id: string; text: string }>;
+    correctOptionIds?: string[];
+    expectedKeywords?: string[];
+  } | null | undefined,
+): string | null {
+  if (!checkpoint) return null;
+  const ids = Array.isArray(checkpoint.correctOptionIds) ? checkpoint.correctOptionIds.filter(Boolean) : [];
+  if (ids.length > 0) {
+    const lines = ids.map((id) => {
+      const option = (checkpoint.options || []).find((item) => item.id === id);
+      return option ? `${id}. ${option.text}` : String(id);
+    });
+    return lines.join('；');
+  }
+  const keywords = Array.isArray(checkpoint.expectedKeywords) ? checkpoint.expectedKeywords.filter(Boolean) : [];
+  return keywords.length > 0 ? keywords.join('；') : null;
 }
 
 /**

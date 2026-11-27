@@ -35,7 +35,7 @@ export interface TeachingScenarioContext {
     description: string | null;
     acceptanceCriteria: string | null;
   };
-  /** 本任务计划时长（分钟）：用于课堂契约的时间预算；缺失时契约不设时间硬门。 */
+  /** @deprecated 2026-11-25 去时间化：任务分钟不再进课堂契约；保留字段仅为兼容旧快照。 */
   taskEstimatedMinutes?: number | null;
   /** 本节课最低必须完成集（lifecycle 建课契约，engine 每轮读取）。 */
   lessonContract?: LessonContract | null;

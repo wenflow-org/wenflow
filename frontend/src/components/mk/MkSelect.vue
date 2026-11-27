@@ -39,36 +39,38 @@
       </span>
       <ChevronDown :size="12" :stroke-width="2" aria-hidden="true" />
     </button>
-    <ul
-      v-show="open"
-      :id="menuId"
-      ref="menuEl"
-      class="mk-listbox-pop mk-select__menu"
-      :style="popStyle"
-      role="listbox"
-    >
-      <li
-        v-for="(o, i) in options"
-        :id="optionId(i)"
-        :key="keyOf(o.value)"
-        :data-value="keyOf(o.value)"
-        class="mk-listbox-opt"
-        :class="{ 'is-active': i === activeIndex, 'is-selected': isSelected(o) }"
-        role="option"
-        :aria-selected="isSelected(o)"
-        @mouseenter="activeIndex = i"
-        @click="choose(o)"
+    <Teleport to="body">
+      <ul
+        v-show="open"
+        :id="menuId"
+        ref="menuEl"
+        class="mk-listbox-pop mk-select__menu"
+        :style="popStyle"
+        role="listbox"
       >
-        <span class="mk-listbox-opt__label" :title="o.label">{{ o.label }}</span>
-        <Check v-if="isSelected(o)" :size="13" :stroke-width="2.2" aria-hidden="true" />
-      </li>
-      <!-- 无选项（如学习者没有学习路径）：弹层里给一行占位，而不是展开一个空框 -->
-      <li
-        v-if="!options.length"
-        class="mk-listbox-opt mk-select__empty"
-        role="presentation"
-      >{{ placeholder }}</li>
-    </ul>
+        <li
+          v-for="(o, i) in options"
+          :id="optionId(i)"
+          :key="keyOf(o.value)"
+          :data-value="keyOf(o.value)"
+          class="mk-listbox-opt"
+          :class="{ 'is-active': i === activeIndex, 'is-selected': isSelected(o) }"
+          role="option"
+          :aria-selected="isSelected(o)"
+          @mouseenter="activeIndex = i"
+          @click="choose(o)"
+        >
+          <span class="mk-listbox-opt__label" :title="o.label">{{ o.label }}</span>
+          <Check v-if="isSelected(o)" :size="13" :stroke-width="2.2" aria-hidden="true" />
+        </li>
+        <!-- 无选项（如学习者没有学习路径）：弹层里给一行占位，而不是展开一个空框 -->
+        <li
+          v-if="!options.length"
+          class="mk-listbox-opt mk-select__empty"
+          role="presentation"
+        >{{ placeholder }}</li>
+      </ul>
+    </Teleport>
   </div>
 </template>
 

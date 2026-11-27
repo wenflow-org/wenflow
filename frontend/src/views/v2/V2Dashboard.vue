@@ -91,15 +91,12 @@
                 <Sparkles :size="13" :stroke-width="1.75" />
                 <span>{{ actionReason }}</span>
               </p>
-              <!-- 分钟数只在底部进度条行出现一次（2026-09-25 去掉 meta 的「约 N 分钟」；
-                   P1-6 2026-10-04 再撤句尾「还剩约 N 分钟」——0/30 已隐含余量，镜像复读且
-                   nowrap 下把它推出 390 视口，「去处理」随之不可点）
-                   2026-11-11 走查：超过目标时原样写「64 / 25 分钟」等于 256%，却没有任何
-                   超出说明。现在超目标时改成自然语言并让进度条独占一行，375 档不会被省略号
-                   吃掉「已超出 N 分钟」。 -->
+              <!-- 2026-11-25 去时间化：这里原先用任务估算分钟做「今日目标 25 分钟」，
+                   把生成期的猜测变成用户当天的硬目标。现在只报真实已学分钟，
+                   进度条改按今日任务状态（未开始/进行中/已完成），不再有假目标。 -->
               <div class="action__foot">
-                <div class="action__today" :class="{ 'action__today--over': todayOverTarget }">
-                  <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
+                <div class="action__today">
+                  <div v-if="todayTask" class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
                   <span :title="todayProgressTitle">{{ todayProgressText }}</span>
                 </div>
                 <!-- 调控提醒位（2026-09-27）：有待确认的调整建议时在行动卡就地露头，
@@ -1021,20 +1018,24 @@ const currentStageNote = computed(() => {
   return note ? `本阶段 ${note}` : '';
 });
 
-const todayTarget = computed(() => todayTask.value?.minutes || 25);
-const todayOverTarget = computed(() => todayMinutes.value > todayTarget.value);
+const todayTaskStatus = computed(() => todayTask.value?.status || null);
+const todayTaskDone = computed(() => todayTaskStatus.value === 'completed');
+/* 进度条按任务状态：未开始 0、进行中 50、已完成 100。不再用分钟做分母。 */
 const todayBarPct = computed(() => {
-  return Math.min(100, Math.round((todayMinutes.value / todayTarget.value) * 100));
+  if (todayTaskDone.value) return 100;
+  if (todayTaskStatus.value === 'in_progress') return 50;
+  return 0;
 });
-/* 进度文案（2026-11-11 走查）：「64 / 25 分钟」在 1280 截图上就是 256%，却读不出「超额」。
-   超目标时改成自然语言，并把目标与超出量都写出来；未超时保留原来的 x / y 简洁口径。 */
+/* 进度文案只报真实已学分钟；今日任务状态单独说，不再造「今日目标 25 分钟」。 */
 const todayProgressText = computed(() => {
   const done = todayMinutes.value;
-  const target = todayTarget.value;
-  if (done > target) return `今日已学 ${done} 分钟 · 今日目标 ${target} 分钟已达成，多学 ${done - target} 分钟`;
-  return `今日已学 ${done} / ${target} 分钟`;
+  const learned = `今日已学 ${done} 分钟`;
+  if (!todayTask.value) return learned;
+  if (todayTaskDone.value) return `今天这节课已完成 · ${learned}`;
+  if (todayTaskStatus.value === 'in_progress') return `${learned} · 继续上次进度`;
+  return `${learned} · 这节课还没开始`;
 });
-const todayProgressTitle = computed(() => `今日已学 ${todayMinutes.value} 分钟，今日目标 ${todayTarget.value} 分钟`);
+const todayProgressTitle = computed(() => todayProgressText.value);
 
 /* 今日行动描述：标题已说清任务，desc 只保留「怎么做」的首句 / 首个分句，
    其余进课堂页看完整说明（2026-09-27 信噪比重设计：原 98 字含后段心理按摩）。
@@ -1908,11 +1909,6 @@ onMounted(() => {
 /* P1-6（2026-10-04）：span 须可收缩（flex-shrink+min-width:0+ellipsis），否则 nowrap 文案
    在 390 视口把整行撑出屏（实测溢出 107px、「去处理」按钮落在屏外不可点） */
 .action__today span { font-size: 12px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* 超过今日目标（2026-11-11 走查）：文案变长，进度条独占一行、文字允许折行，
-   不让「已超出 N 分钟」在 375 档被省略号吃掉；轨道仍按 100% 封顶（满格=达标） */
-.action__today--over { flex-wrap: wrap; row-gap: 4px; }
-.action__today--over .action__today-bar { flex: 1 1 100%; }
-.action__today--over span { white-space: normal; overflow: visible; text-overflow: clip; }
 /* 调控提醒位（2026-09-27）：有要拍板的调整时在行动卡就地露头，蓝色弱底不抢主 CTA */
 .action__control {
   display: flex; align-items: center; gap: 7px;

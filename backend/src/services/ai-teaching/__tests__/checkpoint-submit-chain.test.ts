@@ -579,7 +579,8 @@ describe('检查点同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺
   it('空/缺失历史 → 不受影响，照常出题', async () => {
     const { committed, result } = await emitCandidate(
       { classroomContext: { stage: { current: 'teaching' } }, sessionArtifacts: {} },
-      { type: 'short_answer', question: CANDIDATE_QUESTION },
+      // 简答题必须带答案键（2026-11-26 硬契约）：缺键的题会在引擎里被拦下重调，与本用例无关
+      { type: 'short_answer', question: CANDIDATE_QUESTION, expectedKeywords: ['返工|重做'] },
     );
 
     expect(committed.pendingCheckpoint).toEqual(expect.objectContaining({ question: CANDIDATE_QUESTION }));
@@ -757,6 +758,7 @@ describe('反馈硬门接线（拍板 #5 切口1+2）：code 判错回合的回�
   it('判错 + 回复无肯定语 → 原样放行，零遥测', async () => {
     const session = sessionRecord();
     mockClaimOperation.mockResolvedValue(claim(session));
+    mockTurnSkill.mockResolvedValue(turnSkillResult('这题还没对。我们再对照一遍：这道题的关键动作是重填。'));
 
     const result = await processStudentMessage('sess-1', '理解检查：…我的答案：我把表复制一份再填一遍。', {
       operationClaim: claim(session) as never,
@@ -765,8 +767,28 @@ describe('反馈硬门接线（拍板 #5 切口1+2）：code 判错回合的回�
       checkpointSubmission: {},
     });
 
-    expect(result.aiResponse).toContain('再对照一遍');
+    expect(result.aiResponse).toBe('这题还没对。我们再对照一遍：这道题的关键动作是重填。');
     expect(mockRecordDegradation).not.toHaveBeenCalled();
+  })
+
+  it('判错 + 回复无肯定语但首句没给裁决 → 补一句确定性裁决句，按裁决句兜底单列遥测（不算肯定语违规）', async () => {
+    const session = sessionRecord();
+    mockClaimOperation.mockResolvedValue(claim(session));
+
+    const result = await processStudentMessage('sess-1', '理解检查：…我的答案：我把表复制一份再填一遍。', {
+      operationClaim: claim(session) as never,
+      checkpointId: 'cp-1',
+      checkpointJudgement: failingJudgement(),
+      checkpointSubmission: {},
+    });
+
+    expect(result.aiResponse).toBe('这题还没对。我们再对照一遍：这道题的关键动作是重填。');
+    expect(mockRecordDegradation).not.toHaveBeenCalledWith(expect.objectContaining({
+      faultCategory: 'MODEL_AFFIRMATION_MISMATCH',
+    }));
+    expect(mockRecordDegradation).toHaveBeenCalledWith(expect.objectContaining({
+      mitigationApplied: 'prepend-deterministic-verdict-opening',
+    }));
   })
 
   it('判对 → 硬门不触发（肯定语原样保留）', async () => {

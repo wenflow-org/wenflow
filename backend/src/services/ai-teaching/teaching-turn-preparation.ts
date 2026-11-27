@@ -8,7 +8,7 @@ import { parseAssessmentQuestion } from '../../utils/assessment-question';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { normalizeForKeywordMatch } from './checkpoint-shared';
 import { deriveTeachingRuntimeSignals, withTimeoutSignal } from './teaching-classroom-flow';
-import { buildDeterministicOpening, ensureOpeningActionLine, ensureOpeningMaterialGrounding, ensureOpeningSampleHonesty, OPENING_GENERATION_TIMEOUT_MS } from './teaching-session-views';
+import { buildDeterministicOpening, ensureOpeningActionLine, ensureOpeningMaterialGrounding, ensureOpeningSampleHonesty, ensureOpeningTaskMaterial, OPENING_GENERATION_TIMEOUT_MS } from './teaching-session-views';
 import { figureKindCap } from './teaching-visual.service';
 import { teachingSessionRepository } from './TeachingSessionRepository';
 import { AI_TEACHING_AGENT_ID, appendTimestamp } from './teaching-turn-shared';
@@ -29,12 +29,90 @@ export function ensureCheckpointQuestionVisible(reply: string, question: string)
   if (!trimmedQuestion) return reply;
   const normalizedReply = normalizeForKeywordMatch(reply);
   const normalizedQuestion = normalizeForKeywordMatch(trimmedQuestion);
-  if (normalizedQuestion && normalizedReply.includes(normalizedQuestion)) return reply;
+  if (normalizedQuestion && normalizedReply.includes(normalizedQuestion)) {
+    // 题面已在正文里：不再追加，但把它前面那段「同一道题又问一遍」剪掉（2026-11-26 真课实录：
+    // 老师先用自己的话把情境+问法写了一遍，又把 control.checkpoint.question 原样贴一遍，
+    // 一条回复里同一道题出现两次；前端视觉走查 LD-03 是同一症状）。
+    return collapseCheckpointQuestionEcho(reply, trimmedQuestion);
+  }
   // 老师已经用自己的措辞问过同一道题时不要再贴一遍——实测会出现
   // "…该到哪儿？\n\n…应该是哪一段？" 这种同题复读。用字二元组近似判重。
   if (isNearDuplicateQuestion(reply, trimmedQuestion)) return reply;
   const trimmedReply = String(reply || '').trim();
   return trimmedReply ? `${trimmedReply}\n\n${trimmedQuestion}` : trimmedQuestion;
+}
+
+/**
+ * 题面已在回复中时，从题面所在段往上剪掉紧邻的「同题复读」段。
+ *
+ * 判定只看两件事，且只往上走最多 3 段：
+ *  - 该段与题面的字二元组重合度 ≥ 0.35（典型：同一情境被改写成一段陈述）；
+ *  - 该段本身是个「提问句」（以问号收尾，或以「请你/请/你/说说/判断/回答…」起头并带疑问词）。
+ * 剪完必须有可读正文（≥12 字），否则原样返回——题面本身必须可见，宁可重复也不吞正文。
+ */
+export function collapseCheckpointQuestionEcho(reply: string, question: string): string {
+  const text = String(reply || '');
+  const paragraphs = text.split(/\n{2,}/);
+  if (paragraphs.length < 2) return text;
+  const normalizedQuestion = normalizeForKeywordMatch(question);
+  if (!normalizedQuestion) return text;
+  let questionIndex = -1;
+  for (let i = paragraphs.length - 1; i >= 0; i -= 1) {
+    if (normalizeForKeywordMatch(paragraphs[i]).includes(normalizedQuestion)) {
+      questionIndex = i;
+      break;
+    }
+  }
+  if (questionIndex <= 0) return text;
+  const questionGrams = charBigrams(question);
+  let cut = questionIndex;
+  for (let i = questionIndex - 1; i >= Math.max(0, questionIndex - 3); i -= 1) {
+    const paragraph = paragraphs[i];
+    const paragraphGrams = charBigrams(paragraph);
+    let overlap = 0;
+    if (questionGrams.size > 0) {
+      let shared = 0;
+      for (const gram of paragraphGrams) if (questionGrams.has(gram)) shared += 1;
+      overlap = shared / questionGrams.size;
+    }
+    if (overlap >= 0.35 || looksLikeQuestionAsk(paragraph)) cut = i;
+    else break;
+  }
+  if (cut >= questionIndex) return text;
+  const head = paragraphs.slice(0, cut).join('\n\n').trim();
+  if (head.length < 12) return text;
+  return `${head}\n\n${paragraphs[questionIndex].trim()}`;
+}
+
+const QUESTION_ASK_LEAD = /^(?:请你|请|你|说说|说说看|判断|回答|想一想|思考一下|用你自己的话)/;
+function looksLikeQuestionAsk(paragraph: string): boolean {
+  const text = String(paragraph || '').trim();
+  if (!text) return false;
+  if (/[？?]$/.test(text)) return true;
+  if (!QUESTION_ASK_LEAD.test(text)) return false;
+  return /[？?]|吗|呢|对不对|是不是|为什么|怎么|如何|哪一|什么/.test(text);
+}
+
+/**
+ * 剪掉回复开头的「第三人称转述学生」（2026-11-26 真课实录，Case A2 第 4 回合）：
+ * 模型把内部分析写进了可见正文——「学生只说了「继续」，那就顺着往下讲。」
+ * 这句话暴露了「有个学情分析在说话」的视角，学生会觉得对面不是老师而是系统。
+ *
+ * 只剪**开头一句**，且必须同时满足：以学生/学员/他起头 + 带时间限定词（只/刚才/这轮…）
+ * + 引述动词（说/问/答/回/提）。缺任一条都不动——「学生常把第一阶段和第二阶段弄混」
+ * 这类讲误解的正文句是正常教学语言，不能被误剪。
+ */
+const LEARNER_NARRATION_OPENING = /^(?:学生|学员|他)(?:只|只是|刚才|刚刚|这次|这一轮|这轮|本回合)(?:说|问|答|回|回复|回应|提)[\s\S]{0,60}?[。！？\n]/;
+
+export function stripLearnerNarrationOpening(reply: string): string {
+  const text = String(reply || '');
+  const trimmed = text.trimStart();
+  const match = LEARNER_NARRATION_OPENING.exec(trimmed);
+  if (!match) return text;
+  const rest = trimmed.slice(match[0].length).trimStart();
+  // 剪完没有正文就保留原文（宁可视角不完美，也不能把一轮回复剪空）
+  if (rest.length < 8) return text;
+  return rest;
 }
 
 function charBigrams(text: string): Set<string> {
@@ -176,6 +254,14 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     taskTitle: context.taskTitle,
     taskDescription: context.taskDescription,
     taskType: context.taskType,
+    // 阶段协议下材料由整课板书承载（2026-11-26）：开场只做定位，不复制整表。
+    // 与 teaching-turn 的 lessonPhaseEnabled 同口径（复习/延伸课不传本字段）。
+    ...(process.env.LESSON_PHASE_PROTOCOL !== '0' && context.taskMode !== 'productiveFailure'
+      ? { singleBoardPlanned: true }
+      : {}),
+    // 2026-11-24：开场此前只拿到 description（1-2 句简介），真正的表/数据行/原文在
+    // taskMaterialPayload；模型只能空喊「在示例片段里读数」。材料本体随开场一起给。
+    taskMaterial: context.taskMaterialPayload ?? null,
     pathSummary: context.pathProgress.pathSummary,
     currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
     learner: {
@@ -211,6 +297,16 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
           callerAgentId: AI_TEACHING_AGENT_ID,
         },
     };
+    /** 开场落地的统一顺序：description 编号材料 → taskMaterial 本体 → 示例口径。 */
+    const deferMaterialToBoard = process.env.LESSON_PHASE_PROTOCOL !== '0' && context.taskMode !== 'productiveFailure';
+    const groundOpening = (opening: TeachingOpening): TeachingOpening => ensureOpeningSampleHonesty(
+      ensureOpeningTaskMaterial(
+        ensureOpeningMaterialGrounding(opening, context),
+        context,
+        { deferToBoard: deferMaterialToBoard },
+      ),
+      context,
+    );
     let parsed: any = null;
     try {
       const result = await withTimeoutSignal(
@@ -227,7 +323,7 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
       taskId: context.taskId,
       topic: context.topic,
     });
-    return ensureOpeningSampleHonesty(ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context), context);
+    return groundOpening(buildDeterministicOpening(context));
   }
 
   if (parsed) {
@@ -236,12 +332,8 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     // question 里还会写"也可以直接往下走"这种没有控件的动作承诺。这里统一收口。
     // 材料落地护栏（2026-11-12）：模型说「这段对话」却不摆本体时整块补挂（见 ensureOpeningMaterialGrounding）。
     // 示例口径护栏（2026-11-12）：描述标「示例」而开场说成「你大概见过」时改回示例口径。
-    let opening = ensureOpeningSampleHonesty(
-      ensureOpeningMaterialGrounding(
-        ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context),
-        context,
-      ),
-      context,
+    let opening = groundOpening(
+      ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context),
     );
     // 开场「上一课经历」接地守卫（修复批 8，OPENING_ASSUME_EXPERIENCE 聚类 4/5）：
     // lastLessonRecap 缺席 = 无可核验的上一课记录，开场文本却断言上一课经历
@@ -265,12 +357,8 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
         );
         const reparsed = retry.success && retry.output ? retry.output : null;
         if (reparsed) {
-          opening = ensureOpeningSampleHonesty(
-            ensureOpeningMaterialGrounding(
-              ensureOpeningActionLine(reparsed as Partial<TeachingOpening>, context),
-              context,
-            ),
-            context,
+          opening = groundOpening(
+            ensureOpeningActionLine(reparsed as Partial<TeachingOpening>, context),
           );
           logger.warn('[AITeaching] 开场断言了不可核验的上一课经历，已按接地约束重生成', {
             userId: context.userId,
@@ -332,6 +420,8 @@ export async function generateExitTicketForLesson(input: {
   evidence: LessonEvidence[];
   messages: Array<{ role: string; content?: unknown }>;
   attempts: number;
+  /** 本课材料本体：终检题必须长在这份材料上；缺省时按通用知识出题。 */
+  taskMaterial?: string | null;
 }): Promise<ExitTicket | null> {
   const definition = auxSkillDefinitionMap['teaching-exit-ticket'];
   if (!definition) return null;
@@ -349,6 +439,7 @@ export async function generateExitTicketForLesson(input: {
       subject: input.subject,
       topic: input.topic,
       taskTitle: input.taskTitle,
+      ...(input.taskMaterial ? { taskMaterial: input.taskMaterial } : {}),
       coreKcs,
       recentDialogue: input.messages.slice(-8).map((item) => ({
         role: item.role,

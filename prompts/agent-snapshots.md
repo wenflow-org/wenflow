@@ -258,8 +258,7 @@ sandbox:path-agent.supplementRequest
 | `knowledge.confirmCheck` | object | teaching-agent |
 | `control.warmupOutcomes` | array<object> | teaching-agent |
 | `control.supplement` | object | teaching-agent |
-| `diagram` | object? | teaching-agent |
-| `figure` | object? | teaching-agent |
+| `visualIntent` | object? | — |
 | `analysis.cognitiveLevel` | string | teaching-agent, skill:teaching-peer-reinforcement |
 | `analysis.understanding` | number | teaching-agent, skill:teaching-peer-reinforcement |
 | `knowledge.currentPoint` | string | teaching-agent |
@@ -333,6 +332,7 @@ sandbox:teaching-agent.session.structure
 sandbox:teaching-agent.session.topic
 sandbox:teaching-agent.session.wrapup
 sandbox:teaching-agent.summary.knowledgeItems
+sandbox:teaching-agent.task.material
 sandbox:teaching-agent.task.profile
 sandbox:teaching-agent.taskContext
 sandbox:teaching-agent.teachingState.classroomContext

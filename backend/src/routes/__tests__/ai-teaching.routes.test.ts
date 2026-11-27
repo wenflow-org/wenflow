@@ -331,6 +331,8 @@ describe('ai-teaching routes', () => {
         lessonReport: null,
         exitTicket: null,
         branch: null,
+        // 课堂阶段摘要（2026-11-26）：字段恒在；协议未生效/旧课堂为 null，前端据此保持原读数
+        lessonPhase: null,
         // 提示词调试信封默认不下发（见 promptDebugEnabled）
         promptDebug: null,
         peerDebug: null,

@@ -237,9 +237,9 @@ export function buildLessonContract(context: TeachingScenarioContext): LessonCon
     coreKcs,
     minIndependentEvidence: coreKcs.length > 0 ? Math.max(1, Math.ceil(coreKcs.length / 2)) : 0,
     minTurns: MIN_TURNS,
-    timeBudgetMin: Number.isFinite(Number(context.taskEstimatedMinutes))
-      ? Math.max(1, Number(context.taskEstimatedMinutes))
-      : null,
+    // 2026-11-25 去时间化：课堂不以任务分钟为硬预算。字段保留是为了兼容已落库的旧契约，
+    // 新契约恒为 null；结束条件回到「核心 KC 是否讲透」，不是「25 分钟到了」。
+    timeBudgetMin: null,
     branchBudgets: { ...DEFAULT_BUDGETS },
   };
 }
@@ -448,6 +448,45 @@ export function buildBranchDirective(state: BranchState | null, contract: Lesson
   return `${branchLabel(state.active)}支线进行中，剩余 ${remaining} 轮；讲完必须回到主线（${contract.coreKcs.map((kc) => kc.name).slice(0, 3).join('、')}）。`;
 }
 
+/**
+ * 知识点名检查用的停用词：KC 名里的教学动词与泛称名词。
+ * 「识别柠檬酸循环场所」→ 实义片段「柠檬酸循环」；「由产物反推场所」→「产物」「场所」。
+ */
+const KC_STOPWORDS = /(?:识别|理解|掌握|区分|辨别|判别|比较|对比|说明|解释|运用|应用|分析|追踪|说出|指出|描述|判断|写出|列举|归纳|概括|反推|推导|推知|确定|找到|找|能|会|的|了|与|和|及|并|或|在|中|对|从|到|由|根据|通过|用|场所|位置|阶段|条件|特点|特征|作用|功能|原因|结果|过程|步骤|方法|概念|定义|含义|区别|联系|关系|影响|规律|公式|计算|去向|所属|对应)/g;
+
+function normalizeForMention(text: string): string {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[₂₃₄]/g, (ch) => ({ '₂': '2', '₃': '3', '₄': '4' }[ch] || ch))
+    .replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+/** KC 名里的实义片段（长度 ≥2），长的在前。 */
+export function kcMentionTokens(kcName: string): string[] {
+  const tokens = String(kcName || '')
+    .replace(/[（）()「」【】[\]]/g, ' ')
+    .split(KC_STOPWORDS)
+    .flatMap((chunk) => chunk.split(/\s+/))
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => normalizeForMention(chunk).length >= 2);
+  return tokens.sort((a, b) => b.length - a.length);
+}
+
+/**
+ * 某个核心知识点在本课文本里是否被提到过（必要条件，不是充分条件）。
+ *
+ * 用途：把「从未讲到的知识点被记成已覆盖」挡在证据账本之外。实录里「识别柠檬酸循环场所」
+ * 「识别氧化磷酸化场所」在全课文本中一次都没出现，却凭看板进度 85 被记成 covered（attempts:0, correct:true）。
+ * 这是启发式的点名门（提到 ≠ 讲透），只在收束前的阶段生效，收束阶段放行旧口径，不让启发式把课卡死。
+ * 实义片段判不出来时返回 true（不拦）。
+ */
+export function isKcMentioned(kcName: string, taughtText: string): boolean {
+  const tokens = kcMentionTokens(kcName);
+  if (tokens.length === 0) return true;
+  const hay = normalizeForMention(taughtText);
+  return tokens.some((token) => hay.includes(normalizeForMention(token)));
+}
+
 function matchKc(contract: LessonContract, rawName: unknown, rawKcId?: unknown): LessonCoreKc | null {
   const kcId = String(rawKcId ?? '').trim();
   if (kcId) {
@@ -480,6 +519,11 @@ export function collectLessonEvidence(input: {
   knowledgeState?: unknown;
   teachingTurns?: number;
   now?: string;
+  /**
+   * 本课已出现的教师可见文本 + 板面文字。给出时看板证据要过「点名门」：这个 KC 在全课文本里
+   * 一次都没被提到，就不算已覆盖（2026-11-26）。不给（null/缺省）时保持旧行为。
+   */
+  taughtText?: string | null;
 }): LessonEvidence[] {
   const now = input.now || new Date().toISOString();
   const turn = Math.max(0, Number(input.teachingTurns) || 0);
@@ -543,6 +587,7 @@ export function collectLessonEvidence(input: {
     if (!mastered) continue;
     const kc = matchKc(input.contract, record.name, record.kcId);
     if (!kc) continue;
+    if (typeof input.taughtText === 'string' && !isKcMentioned(kc.name, input.taughtText)) continue;
     evidence.push({
       evidenceId: `knowledge:${kc.kcId || kc.name}`,
       kcId: kc.kcId,

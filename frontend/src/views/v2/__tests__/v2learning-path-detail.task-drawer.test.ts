@@ -105,13 +105,12 @@ describe('抽屉内部：两行结构，删除与插入分开', () => {
     ).toBe(false);
   });
 
-  it('时长用步进器（两颗），不再用「缩短/延长 10 分钟」长按钮', () => {
+  it('去时间化：微调抽屉不再提供单课分钟步进器', () => {
+    /* 2026-11-25：单课分钟是模型猜的，不再让用户按 ±10 分钟继续强化这个暗示 */
     const steps = descendants(drawer() as TplNode).filter((n) => hasClass(n, 'task-edit__step'));
-    expect(steps.length).toBe(2);
-    /* 可见文案收成 −10 分 / +10 分（aria-label 仍是完整的「缩短/延长 10 分钟」） */
-    expect(source).toContain('−10 分');
-    expect(source).toContain('+10 分');
-    expect(stripComments(source)).not.toContain('task-edit__btn');
+    expect(steps.length).toBe(0);
+    expect(stripComments(source)).not.toContain('预计时长');
+    expect(stripComments(source)).not.toContain('−10 分');
   });
 
   it('插入框吃满整行：输入框 flex，插入键内嵌在组合框里', () => {

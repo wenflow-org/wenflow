@@ -54,7 +54,8 @@ async function mountGlossary() {
   })
   await router.push('/admin/glossary')
   await router.isReady()
-  const w = mount(AdminGlossary, { global: { plugins: [router] } })
+  // 下拉弹层已 Teleport 到 body；原位渲染才能从 wrapper 里读选项
+  const w = mount(AdminGlossary, { global: { plugins: [router], stubs: { teleport: true } } })
   await flushPromises()
   await flushPromises()
   return w

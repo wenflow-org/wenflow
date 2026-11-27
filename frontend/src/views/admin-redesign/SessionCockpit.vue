@@ -3980,7 +3980,8 @@ async function copyRawJson() {
   align-content: start;
   position: sticky;
   top: 84px;
-  max-height: calc(100vh - 100px);
+  /* sticky 侧栏在 .ac 的 zoom 子树里：100vh 会被放大，4K 下高于视口 */
+  max-height: calc((100vh - 100px) / var(--admin-zoom, 1));
   overflow-y: auto;
 }
 .cp-sidebar__section {

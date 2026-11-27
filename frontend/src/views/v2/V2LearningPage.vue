@@ -1,7 +1,7 @@
 <template>
-  <div class="learn v2-page" :class="{ 'learn--quiz': !!checkpoint }">
+  <div class="learn v2-page" :class="{ 'learn--quiz': !!checkpoint }" :style="vvh ? { '--vvh': `${vvh}px` } : undefined">
     <!-- 沉浸式头部 -->
-    <header class="learn__head">
+    <header class="learn__head" :class="{ 'learn__head--with-board': !!currentBoard }">
       <!-- 返回改为纯图标钮（2026-11-06 走查）：文字版与右侧两行标题只隔 18px，读成一坨；
            现在 32×32 图标钮 + 右侧一条细竖线，标题有了自己的左边界 -->
       <button type="button" class="learn__back" aria-label="返回路径详情" title="返回路径详情" @click="goBack">
@@ -204,9 +204,9 @@
       </div>
     </div>
 
-    <div v-else class="learn__body">
+    <div v-else class="learn__body" :class="{ 'learn__body--with-board': !!currentBoard }">
       <!-- 中：导师对话。知识点浮窗相对页头定位，绝对定位不占用对话区高度。 -->
-      <section class="tutor" :class="{ 'tutor--kp-open': kpOpen }">
+      <section class="tutor" :class="{ 'tutor--kp-open': kpOpen, 'tutor--phase': !!(lessonPhase || currentBoard) }">
         <!-- 恢复进度横幅：续上历史时可见（短中断刷新场景取代大卡），「接着讲」触发无输入续讲回合 -->
         <div v-if="resumedNotice" class="tutor__resume">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.5H11L9.5 22 19 9.5h-6.5L13 2z"/></svg>
@@ -221,38 +221,9 @@
           </button>
         </div>
 
-        <!-- 课堂契约卡（2026-11-19）：本课最低必须完成集 + 自由支线额度。
-             只展示达成度；契约外探索不判失败，停车区把跑题问题留到课后。 -->
-        <div v-if="contractCoreKcs.length" class="contract">
-          <div class="contract__row">
-            <span class="contract__tag">本节完成要求</span>
-            <span class="contract__meta">
-              已验证 {{ contractCoveredCount }}/{{ contractCoreKcs.length }} 个重点
-              · 独立答对 {{ independentProgressLabel }}
-            </span>
-            <span class="contract__branch" :class="{ 'contract__branch--active': branchActive }">
-              自由支线：{{ branchLabel }}<template v-if="branchActive"> · 剩 {{ branchRemaining }} 轮</template>
-            </span>
-          </div>
-          <div class="contract__kcs">
-            <span
-              v-for="kc in contractCoreKcs"
-              :key="kc.kcId || kc.name"
-              class="contract__kc"
-              :class="{ 'contract__kc--done': (lessonReport?.coveredKcs || []).includes(kc.name) }"
-            >{{ kc.name }}</span>
-          </div>
-          <div v-if="exitTicket" class="contract__exit" :class="`contract__exit--${exitTicket.status}`">
-            课末独立作答：
-            <span v-if="exitTicket.status === 'pending'">请在输入框写下你的答案</span>
-            <span v-else-if="exitTicket.status === 'passed'">已通过</span>
-            <span v-else>还没答对，请根据讲解再试一次</span>
-          </div>
-          <div v-if="contractParkingLot.length" class="contract__park">
-            留待课后探索的 {{ contractParkingLot.length }} 个问题：{{ contractParkingLot.map(p => p.topic).slice(0, 2).join('、') }}
-            <span v-if="contractParkingLot.length > 2">…</span>
-          </div>
-        </div>
+        <!-- 课堂契约卡（2026-11-19）只留管理端/结算逻辑。
+             2026-11-25 学生端撤除：支线额度、已验证券、独立答对数都是内部状态机遥测，
+             对来学哲学的人是考核压力，不是课堂内容。 -->
 
         <!-- 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场（取代模板双气泡的空转重复）。
              学员一旦开始互动/进入小测，大卡折叠成 40px 摘要条，把垂直空间还给对话流。 -->
@@ -295,25 +266,38 @@
             </div>
         </div>
 
-        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout }" @scroll="updateNearBottom">
-          <!-- 本节要掌握（2026-11-11 首屏空洞修复）：只在「刚开课、只有开场白」时出现，
-               内容全部来自已有的知识点数据；学员一开口即退场，不长期占位。 -->
-          <section v-if="introLayout && introPoints.length" class="tutor__intro" aria-label="本节要掌握的知识点">
-            <span class="tutor__intro-kicker">本节要掌握</span>
-            <div class="tutor__intro-row">
-              <span
-                v-for="(kp, i) in introPoints"
-                :key="kp.id || i"
-                class="tutor__intro-chip"
-                :class="{ 'tutor__intro-chip--done': isMastered(kp) }"
+        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout, 'tutor__scroll--phase': !!(lessonPhase || currentBoard) }" @scroll="updateNearBottom">
+          <!-- 课堂阶段条（课堂阶段协议，2026-11-26）：课走到哪一步 + 板书入口。
+               板书只随版本变化重发（同一版不重复下发），往下聊几轮就滚出视野——这里给一个常驻入口。 -->
+          <div v-if="lessonPhase || currentBoard" class="lessonbar">
+            <ol v-if="lessonPhase" class="lessonbar__steps" aria-label="课堂进度">
+              <li
+                v-for="step in phaseSteps"
+                :key="step.phase"
+                class="lessonbar__step"
+                :class="{ 'is-done': step.done, 'is-current': step.current }"
+                :aria-current="step.current ? 'step' : undefined"
               >
-                <i aria-hidden="true">{{ isMastered(kp) ? '✓' : '○' }}</i>{{ kp.name || kp.title }}
-              </span>
-              <span v-if="knowledgePoints.length > introPoints.length" class="tutor__intro-more">
-                等 {{ knowledgePoints.length }} 个
-              </span>
+                <span class="lessonbar__dot" aria-hidden="true"></span>
+                <span class="lessonbar__name">{{ step.label }}</span>
+                <span v-if="step.current && step.detail" class="lessonbar__detail">{{ step.detail }}</span>
+              </li>
+            </ol>
+            <button v-if="currentBoard" type="button" class="lessonbar__board" aria-haspopup="dialog" @click="boardOpen = true">
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 5.5h16v11H4zM8 20h8M12 16.5V20"/></svg>
+              板书
+            </button>
+          </div>
+          <Teleport to="body">
+            <div v-if="boardOpen && currentBoard" class="boardmodal" role="dialog" aria-modal="true" aria-label="板书" @click.self="boardOpen = false">
+              <div class="boardmodal__panel">
+                <div class="boardmodal__body"><TeachingFigure :figure="currentBoard" :focus-segment="boardFocusSegment" /></div>
+                <button type="button" class="boardmodal__close" @click="boardOpen = false">关闭</button>
+              </div>
             </div>
-          </section>
+          </Teleport>
+          <!-- 2026-11-25 学生端减法：顶部常驻的 3 个知识点胶囊撤除。
+               知识点入口保留在页头右侧「知识点 N/M」浮窗里，首屏只留开场白。 -->
           <!-- 消息空态（批20）：开场卡收起或会话被清空时不再是纯白滚动区 -->
           <div v-if="!msgs.length" class="tutor__empty">
             <strong>准备开始</strong>
@@ -378,6 +362,12 @@
                 @mouseleave="onBubbleLeave"
               >
                 <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="htmlFor(m)" @click="onCodeCopy"></div>
+                <!-- 本课材料卡（2026-11-27）：材料是独立引用，不混进老师气泡——
+                     「老师说一段人话 + 系统贴一段文档」会被读成两张皮。 -->
+                <div v-if="mi === 0 && openingMaterial" class="msg__material">
+                  <div class="msg__material-head">{{ openingMaterial.title || '本课材料' }}</div>
+                  <pre class="msg__material-body">{{ openingMaterial.text }}</pre>
+                </div>
                 <!-- 教学配图（owner 口径：图片是一种特殊的文字）——由老师给的一段文字生成，内联在回复里；
                      文本仍自洽：不看图也能继续。 -->
                 <div v-if="m.images && m.images.length" class="msg__visuals">
@@ -396,11 +386,14 @@
                   :code="d.code"
                   :caption="d.caption"
                 />
-                <!-- 位置线图（Scope B）——空间位置关系的确定性渲染（追及/相遇这类"摆成一条线"的内容） -->
+                <!-- 位置线图（Scope B）——空间位置关系的确定性渲染（追及/相遇这类"摆成一条线"的内容）。
+                     板书只内联最新的一块：旧消息里的板是同一块板的旧版本，逐条摆出来就是整屏重复。 -->
                 <TeachingFigure
-                  v-for="(f, fi) in m.figures"
+                  v-for="(f, fi) in inlineFigures(m, mi)"
                   :key="'f' + fi"
                   :figure="f"
+                  :focus-segment="f.board ? boardFocusSegment : null"
+                  :class="{ 'board-inline': f.board }"
                 />
                 <!-- 教师补充材料卡片（批次 E）：主线之外的公开网络资料，点开看原文窗口 -->
                 <button
@@ -456,6 +449,24 @@
           <div v-if="checkpointStreaming && !typing" class="msg__turnstate" role="status">
             <span class="msg__chip msg__chip--turnstate"><i aria-hidden="true"></i>导师正在讲解…</span>
           </div>
+
+          <!-- 开场行动线（2026-11-26）：问题与快选紧贴开场气泡，不再沉到输入框上方。
+               predict 模式下快选就是问题的候选立场，点一下直接进入讨论；发第一条消息后自动收起。 -->
+          <div v-if="(quickReplies.length || openingQuestion) && !typing && !checkpoint" class="opening-line">
+            <p v-if="openingQuestion" class="opening-line__question">{{ openingQuestion }}</p>
+            <div v-if="quickReplies.length" class="opening-line__row">
+              <button
+                v-for="q in quickReplies"
+                :key="q"
+                type="button"
+                class="reply"
+                :title="q"
+                @click="sendDirect(q)"
+              >
+                <span class="reply__text">{{ replyLabel(q) }}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 回到底部浮标：用户上翻看旧内容期间显示，点击回到最新消息 -->
@@ -466,29 +477,6 @@
           aria-label="回到底部"
           @click="jumpToBottom"
         >↓ 回到底部</button>
-
-        <!-- 开场行动台：AI 给的「下一步动作」选项，点一下直接执行（即点即达） -->
-        <!-- 摸底 question 不再单独成待答气泡，收进面板作一行可选引导；想回答就打字，不想答就选动作直接开始 -->
-        <div v-if="(quickReplies.length || openingQuestion) && !typing && !checkpoint" class="replies">
-          <!-- 面板头（kicker/hint）降级为读屏可见：原型 .wf-replies 是裸按钮列表，没有白面板与面板头 -->
-          <div class="replies__head visually-hidden">
-            <span class="replies__kicker">{{ quickReplyKicker }}</span>
-            <span class="replies__hint">{{ quickReplies.length ? '选一个，直接开始' : '也可以直接输入回答' }}</span>
-          </div>
-          <p v-if="openingQuestion" class="replies__question">{{ openingQuestion }}</p>
-          <div v-if="quickReplies.length" class="replies__row">
-            <button
-              v-for="q in quickReplies"
-              :key="q"
-              type="button"
-              class="reply"
-              :title="q"
-              @click="sendDirect(q)"
-            >
-              <span class="reply__text">{{ replyLabel(q) }}</span>
-            </button>
-          </div>
-        </div>
 
         <!-- 小测答完后的下一步（2026-10-31 用户走查）：小测收起、讲解入流后页面没有任何
              续接提示，用户不知道该继续听讲、再练一道还是完课。给两个最常用的续接动作；
@@ -835,6 +823,17 @@
         </div>
         </Transition>
       </section>
+      <!-- 桌面常驻板书区（2026-11-26 空间邻近）：有板书的任务课在宽屏下左板右聊，
+           讲解句与它指的行同屏；窄屏仍用阶段条里的「板书」弹层（不挤压对话）。 -->
+      <aside v-if="currentBoard" class="boardrail" aria-label="本课板书">
+        <div class="boardrail__head">
+          <span class="boardrail__title">本课板书</span>
+          <span v-if="boardFocusLabel" class="boardrail__focus">{{ boardFocusLabel }}</span>
+        </div>
+        <div class="boardrail__body">
+          <TeachingFigure :figure="currentBoard" :focus-segment="boardFocusSegment" />
+        </div>
+      </aside>
     </div>
 
     <!-- 伴学浮窗：问流伴学（平台蓝，独立于导师对话）；不占主对话区，可回复、可收起成悬浮球 -->
@@ -1010,7 +1009,7 @@ import { END_WITHOUT_FINISH_LABEL, resolveClosureGateCopy } from './closureGate'
 
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
-import { aiTeachingAPI, createTeachingIdempotencyKey, type TeachingMessageImage, type ExitTicket, type LessonContract, type LessonReport } from '@/api/aiTeaching';
+import { aiTeachingAPI, createTeachingIdempotencyKey, type TeachingMessageImage, type ExitTicket, type LessonContract, type LessonReport, type LessonPhaseSummary, type LessonPhaseName, type LessonPhaseStatePayload, type TeachingFigurePayload } from '@/api/aiTeaching';
 import { readMaterialSection } from '@/api/materials';
 import { CHAT_IMAGE_RULES, compressChatImage } from '@/utils/imageCompress';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -1020,6 +1019,7 @@ import MessageActions from '@/components/chat/MessageActions.vue';
 import TeachingDiagram from '@/components/TeachingDiagram.vue';
 import TeachingFigure from '@/components/TeachingFigure.vue';
 import { toast } from '@/utils/toast';
+import { resolveVisualScale } from '@/utils/zoom';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import { cachedMessageHtmlWithMermaid, plainMessageHtmlWithMermaid } from '@/utils/messageMarkdown';
 /* 代码块语法高亮（原型 .wf-code）：本页 AI 气泡走 htmlFor → renderAiMessageHtml（markdown-it），
@@ -1142,6 +1142,12 @@ function onKpDocClick(e: MouseEvent) {
    菜单开着时由 ImmersiveMenu 在 document 层 stopPropagation，本处理器收不到。 */
 function onPageKeydown(e: KeyboardEvent) {
   if (e.key !== 'Escape') return;
+  // 板书放大层在场：Esc 只关它
+  if (boardOpen.value) {
+    e.preventDefault();
+    boardOpen.value = false;
+    return;
+  }
   // 补充资料弹层在场：Esc 只关弹层
   if (supplementPreview.value.open) {
     e.preventDefault();
@@ -1464,20 +1470,37 @@ const confusionDeltas = computed<string[][]>(() => {
   });
 });
 const quickReplies = ref<string[]>([]);
+/** 开场材料卡（2026-11-27）：材料从老师气泡里拆出来，作为独立引用卡渲染。 */
+const openingMaterial = ref<{ title?: string; text: string } | null>(null);
 /**
- * 快捷回复的显示文案（2026-11-11 实机走查）：服务端会把长标签截成
- * 「先讲「同一星期几同…」」「拿「同一星期几同…」试一小步」——两条动作只剩同一个前缀，
- * 视觉上无法区分「讲解」与「练习」。这里只压缩“引号里的题目”，保留动作差异；
- * 发送仍用原文，title 里保留原文以便悬停确认。
+ * 快捷回复的显示文案（2026-11-11 实机走查，2026-11-25 再修）：
+ * - 服务端旧数据可能把长标签截成「先讲「同一问题下两…」」——带省略号的残词绝不能
+ *   原样作为用户消息发出去（实机事故：学生发了「先讲「同一问题下两…」」，而屏幕上
+ *   从未出现过这个概念）。展示压成动作名，发送改写成「这一回合」。
+ * - 完整但过长的概念名只在展示侧压缩，title 保留原文，发送仍用全文。
  */
 function replyLabel(text: string): string {
   const t = String(text || '').trim();
-  // 只处理“引号里被省略号截断”的标签：完整标签（如「先讲「时间标志词」怎么找」）
-  // 本身有区分度，原样保留。
-  const truncated = /…|\.\.\./.test(t);
-  if (truncated && /^先讲[「“]/.test(t)) return '先讲这一条';
-  if (truncated && /^拿[「“]/.test(t) && /试一小步/.test(t)) return '拿它练一小步';
+  if (/…|\.{3}/.test(t)) {
+    if (/^先讲/.test(t)) return '先讲这一条';
+    if (/^拿/.test(t)) return '拿它练一小步';
+    if (/^回顾/.test(t)) return '回顾上次的内容';
+  }
+  const quoted = t.match(/^(先讲|拿|让我先判断)「([^」]+)」(.*)$/);
+  if (quoted && quoted[2].length > 8) {
+    return `${quoted[1]}「${quoted[2].slice(0, 8)}…」${quoted[3]}`;
+  }
   return t;
+}
+
+/** 快捷按钮真正发出去的文本：旧数据里的截断残词改写成不带隐藏名字的动作 */
+function replySendText(text: string): string {
+  const t = String(text || '').trim();
+  if (!/…|\.{3}/.test(t)) return t;
+  if (/^先讲/.test(t)) return '先讲这一回合';
+  if (/^拿/.test(t)) return '拿这一回合试一小步';
+  if (/^回顾/.test(t)) return '回顾上次的内容';
+  return t.replace(/「[^」]*…[^」]*」/g, '这一回合');
 }
 /** 开场摸底引导（opening.question 收敛进行动台面板的一行小字，不再单独成待答气泡）；仅在有动作选项时收进面板 */
 const openingQuestion = ref('');
@@ -1504,6 +1527,93 @@ const branchInfo = ref<{
 } | null>(null);
 /** 最近一轮讲师点到的知识点名：续接快选据此写具体动作，避免「继续往下讲」这类无内容空话 */
 const lastTaughtPoint = ref('');
+/**
+ * 课堂阶段摘要（课堂阶段协议，2026-11-26）：课的结构由系统定（点名 → 分段建构 → 整合 → 迁移 → 审错 → 收束）。
+ * 回合/提交响应带摘要；刷新后从会话详情的 teachingState.lessonPhase 还原。协议未生效的课堂为 null（不显示阶段条）。
+ */
+const lessonPhase = ref<LessonPhaseSummary | null>(null);
+/** 板书高亮：建构阶段当前段号（1 基）；其它阶段为 null（不亮） */
+const boardFocusSegment = computed<number | null>(() => {
+  const summary = lessonPhase.value;
+  const segment = Number(summary?.segment);
+  return summary?.phase === 'build' && Number.isInteger(segment) && segment > 0 ? segment : null;
+});
+/** 板书区右上角的定位语：建构阶段写段号，其它阶段写阶段名 */
+const boardFocusLabel = computed(() => {
+  const summary = lessonPhase.value;
+  if (!summary) return '';
+  if (boardFocusSegment.value) return `第 ${boardFocusSegment.value}/${summary.segmentCount || boardFocusSegment.value} 段`;
+  return summary.label || '';
+});
+/** 板书放大层（常驻入口在顶部阶段条） */
+const boardOpen = ref(false);
+const PHASE_LABELS: Array<{ phase: LessonPhaseName; label: string }> = [
+  { phase: 'orient', label: '点名' },
+  { phase: 'build', label: '建构' },
+  { phase: 'integrate', label: '整合' },
+  { phase: 'transfer', label: '迁移' },
+  { phase: 'audit', label: '审错' },
+  { phase: 'close', label: '收束' },
+];
+const phaseSteps = computed(() => {
+  const current = lessonPhase.value;
+  if (!current?.phase) return [];
+  // 单段小课跳过整合与审错（后端 compact 轨）
+  const steps = current.profile === 'compact'
+    ? PHASE_LABELS.filter((step) => step.phase !== 'integrate' && step.phase !== 'audit')
+    : PHASE_LABELS;
+  const passed = new Set(current.passedPhases || []);
+  return steps.map((step, index) => {
+    const currentIndex = steps.findIndex((item) => item.phase === current.phase);
+    const done = step.phase !== current.phase && (passed.has(step.phase) || index < currentIndex);
+    const isCurrent = step.phase === current.phase;
+    return {
+      ...step,
+      done,
+      current: isCurrent,
+      detail: isCurrent && current.phase === 'build' && (current.segmentCount || 0) > 1
+        ? `${current.segment || 1}/${current.segmentCount}`
+        : '',
+    };
+  });
+});
+/** 会话详情里持久化的阶段状态 → 顶部阶段条用的摘要 */
+function phaseFromTeachingState(raw: unknown): LessonPhaseSummary | null {
+  const state = raw as LessonPhaseStatePayload | null | undefined;
+  const phase = state?.phase;
+  if (!phase || !PHASE_LABELS.some((step) => step.phase === phase)) return null;
+  const count = Array.isArray(state?.segments) ? state.segments.length : 0;
+  return {
+    phase,
+    profile: state?.profile === 'compact' || count <= 1 ? 'compact' : 'full',
+    segment: state?.segment,
+    segmentCount: count,
+    passedPhases: state?.passedPhases || [],
+    challengesUpheld: state?.challengesUpheld,
+  };
+}
+/**
+ * 整课板书：取对话流里**最后一块**板（板只随版本变化重发，最后一块就是当前版）。
+ * 它内联在某条较早的消息下，往下聊几轮就滚出视野——顶部阶段条据此给常驻的「板书」入口。
+ */
+const currentBoardIndex = computed(() => {
+  for (let i = msgs.value.length - 1; i >= 0; i -= 1) {
+    const figures = msgs.value[i].figures;
+    if (Array.isArray(figures) && figures.some((f) => f.board === true)) return i;
+  }
+  return -1;
+});
+const currentBoard = computed(() => {
+  const index = currentBoardIndex.value;
+  if (index < 0) return null;
+  return msgs.value[index].figures?.find((f) => f.board === true) ?? null;
+});
+/** 内联到消息下的图：板书只留最新一块，其它图（一次性配图）照常 */
+function inlineFigures(m: ChatMsg, mi: number): TeachingFigurePayload[] {
+  const figures = Array.isArray(m.figures) ? m.figures : [];
+  if (currentBoardIndex.value < 0 || mi === currentBoardIndex.value) return figures;
+  return figures.filter((f) => f.board !== true);
+}
 /**
  * 「快选确认」出现条件：AI 本轮抛出了需要学习者表态的确认点（当前知识点的掌握边界）
  * - 有 checkpoint 客观验证时不出（避免与验证题重复）
@@ -1574,6 +1684,7 @@ const {
   if (state.lessonReport) lessonReport.value = state.lessonReport;
   if (state.exitTicket) exitTicket.value = state.exitTicket;
   if (state.branch) branchInfo.value = state.branch;
+  if (state.lessonPhase !== undefined) lessonPhase.value = state.lessonPhase;
 })
 /* F-W（2026-10-10 新人走查实锤）：检查点裁决+讲解此前只渲染在卡片内——答对后卡片 3 秒自动收起，
    整段回复（含「下一问」）随之消失，聊天流不追加该回合（刷新才在历史里见到），新人会以为
@@ -1595,13 +1706,12 @@ watch(checkpoint, (now) => {
 /* 首屏空洞修复（2026-11-11 实机走查 1280 浅色）：新开课堂只有一条导师开场白，
    消息区顶部一条气泡、底部快捷回复与输入框，中间约 450px 全空，第一眼像没加载完。
    两条措施都不造假数据：
-   ① 消息很少时把「本节要掌握」用真实知识点补在开场白上方；
-   ② 这组内容在滚动区里垂直居中，空白变成构图而不是漏渲染。
+   ① 首屏不再堆知识点胶囊，只留开场白；
+   ② 开场白在滚动区里垂直居中，空白变成构图而不是漏渲染。
    学员一开口（msgs > 1）即恢复顶部起排。 */
 const introLayout = computed(
   () => msgs.value.length <= 1 && !openingScene.value && !checkpoint.value && !typing.value && !completed.value
 );
-const introPoints = computed(() => knowledgePoints.value.slice(0, 4));
 
 /**
  * 小测收起后的续接快选（2026-11-02 用户反馈「快选没什么意义」）：
@@ -1672,7 +1782,7 @@ const finishMissingItems = computed(() => {
   return items;
 });
 const finishBlockedTitle = computed(() =>
-  exitTicketUnpassed.value ? '还差课末独立作答' : '本节完成要求还未达标'
+  exitTicketUnpassed.value ? '还差课末独立作答' : '本节还差几个必做项'
 )
 const finishBlockedText = computed(() => {
   const items = finishMissingItems.value;
@@ -1707,13 +1817,6 @@ const independentProgressLabel = computed(() => {
     : `${done}/${required} 个知识点`;
 });
 const contractParkingLot = computed(() => branchInfo.value?.parkingLot || lessonReport.value?.parkingLot || []);
-const BRANCH_LABELS: Record<string, string> = {
-  spine: '主线', clarify: '澄清', example: '举例', deeper: '深挖',
-  patch: '先修补', park: '停车', escalate: '目标调整', test_out: '免修验证',
-};
-const branchLabel = computed(() => BRANCH_LABELS[branchInfo.value?.kind || 'spine'] || '主线');
-const branchActive = computed(() => !!branchInfo.value?.active);
-const branchRemaining = computed(() => Math.max(0, Number(branchInfo.value?.remaining) || 0));
 
 /* 作答回显（2026-10-31 复验）：提交路径此前从不追加用户气泡，后端却把这条作答落了库
    —— 刷新前看不见、刷新后看得见。成功落库后补一条（文本与后端落库一致，见 useCheckpointFlow）。 */
@@ -1809,7 +1912,7 @@ const resumedNotice = ref(false);
 /* ---------- 开场景卡片（resumed / continuation / relearn / review） ---------- */
 const {
   sceneTag, scenePrimaryText, sceneDefaultTitle, sceneSummary, sceneLead,
-  sceneUnresolved, sceneMasteryWarn, quickReplyKicker
+  sceneUnresolved, sceneMasteryWarn
 } = useOpeningSceneViews(openingScene)
 
 /** 卡片主按钮：resume（断线续课）= 走无输入续讲回合（不发伪消息）；其余场景 = 把用户"从这继续/开始"作为消息发给导师 */
@@ -2111,7 +2214,10 @@ async function revealLastTeachingBlock() {
     }
     const elRect = el.getBoundingClientRect();
     const visualRect = visual.getBoundingClientRect();
-    const visualTop = visualRect.top - elRect.top + el.scrollTop;
+    /* rect 差值是视觉 px，scrollTop 是逻辑 px：≥1600 视口 .v2-page 有 zoom，
+       直接相加会把目标滚过头 (zoom-1)×距离，图顶反而被裁。 */
+    const pageZoom = resolveVisualScale(el) || 1;
+    const visualTop = (visualRect.top - elRect.top) / pageZoom + el.scrollTop;
     el.scrollTop = Math.max(0, Math.min(visualTop - 8, el.scrollHeight - el.clientHeight));
     nearBottom.value = false;
   };
@@ -2239,8 +2345,14 @@ async function boot() {
     // 首课（first）不需要卡片：AI 真实开场白已足够，避免双重介绍
     openingScene.value = sceneRaw && sceneRaw.kind !== 'first' ? sceneRaw : null;
     openingSceneDone.value = !openingScene.value;
-    sceneCollapsed.value = false;
+    // 重学卡不再在主舞台挂大蓝色「重新开始本节」：开课响应已经带开场白，
+    // 学生看到按钮会以为不点不算开始，一点又起一轮（2026-11-26）。默认折叠成一行，
+    // 需要时点「展开详情」再操作；其它场景保持原样（resume 的「从这继续」是必要入口）。
+    sceneCollapsed.value = openingScene.value?.kind === 'relearn';
     const openingText = s.opening?.message || s.welcomeMessage;
+    openingMaterial.value = s.opening?.material && typeof s.opening.material.text === 'string'
+      ? { title: s.opening.material.title, text: s.opening.material.text }
+      : null;
     if (s.mode === 'resumed') {
       // 恢复：不再 push 模板双气泡（"已恢复…我们继续"），由场景卡片承接；
       // 快选也由卡片主按钮承担，避免「卡片按钮 + 底部开场建议」两处重复
@@ -2294,6 +2406,12 @@ async function boot() {
             const nonPeerMessages = detail.messages.filter(
               (m) => (m.role === 'user' || m.role === 'assistant') && !m.peer,
             );
+            const firstAssistantAnalysis = nonPeerMessages.find((m) => m.role === 'assistant')
+              ?.analysis as Record<string, any> | undefined;
+            const restoredMaterial = firstAssistantAnalysis?.openingMaterial;
+            openingMaterial.value = restoredMaterial && typeof restoredMaterial.text === 'string'
+              ? { title: restoredMaterial.title, text: restoredMaterial.text }
+              : null;
             const openingAnalysis = nonPeerMessages.length === 1 && nonPeerMessages[0].role === 'assistant'
               ? (nonPeerMessages[0].analysis as Record<string, any> | undefined)
               : undefined;
@@ -2384,6 +2502,8 @@ async function boot() {
           if (artifacts.lessonContract) lessonContract.value = artifacts.lessonContract;
           if (artifacts.lessonReport) lessonReport.value = artifacts.lessonReport;
           if (artifacts.exitTicket) exitTicket.value = artifacts.exitTicket;
+          // 课堂阶段（课堂阶段协议）：阶段状态持久化在 teachingState.lessonPhase，刷新后据此还原顶部阶段条
+          lessonPhase.value = phaseFromTeachingState(detail.state?.lessonPhase);
           session.value.revision = typeof detail.revision === 'number' ? detail.revision : session.value.revision;
         }
       } catch { /* 历史回填失败不阻断上课 */ }
@@ -2508,7 +2628,7 @@ async function sendDirect(text: string) {
   postQuizReplies.value = []; // 点续接动作即接管
   assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
   collapseOpeningScene();
-  await doSend(text);
+  await doSend(replySendText(text));
 }
 
 /**
@@ -2527,7 +2647,7 @@ async function sendTurnOnce(
   try {
     streamAbort = new AbortController();
     const streamCtrl = streamAbort;
-    return await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
+    const result = await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
       signal: streamCtrl.signal,
       idempotencyKey,
       // 视觉通道：随消息发给老师的图片（压缩后的 data URL）；为空不携带，body 与旧契约一致
@@ -2566,6 +2686,7 @@ async function sendTurnOnce(
       },
     }, meta) as unknown as Record<string, any>;
     supplementSearching.value = '';
+    return result;
   } catch (streamError) {
     supplementSearching.value = '';
     // 用户停止 / 看门狗中止：不再走回退（否则会把「已取消」变成一次新请求）
@@ -2803,6 +2924,7 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
   if (r.lessonReport) lessonReport.value = r.lessonReport;
   if (r.exitTicket !== undefined) exitTicket.value = r.exitTicket;
   if (r.branch) branchInfo.value = r.branch;
+  if (r.lessonPhase !== undefined) lessonPhase.value = r.lessonPhase;
   if (r.isCompletion) {
     // 延伸课不自动结算（#124）：服务端延伸会话已抑制完成信号，这里再兜一层旧载荷——
     // 延伸段由学习者主动「结束学习」（end_only）收尾。
@@ -3202,6 +3324,9 @@ async function recoverSession(sid: string) {
         knowledgePoints.value = s.knowledgePoints;
       }
       const openingText = s.opening?.message || s.welcomeMessage;
+    openingMaterial.value = s.opening?.material && typeof s.opening.material.text === 'string'
+      ? { title: s.opening.material.title, text: s.opening.material.text }
+      : null;
       if (openingText) msgs.value.push({ role: 'ai', text: openingText, time: nowTime() });
       // 摸底 question 收进面板作一行可选引导（与 boot 一致）；无动作时仍 push 气泡
       if (s.opening?.question) {
@@ -3242,8 +3367,20 @@ function onVisibilityChange() {
   });
 }
 
+/* iOS 键盘 / 双指缩放只改 visualViewport：锁高页按可见高度收缩，输入框不被键盘盖住 */
+const vvh = ref(0);
+function syncVvh() {
+  vvh.value = Math.round(window.visualViewport?.height ?? window.innerHeight);
+}
+function onVisualViewportResize() {
+  syncVvh();
+}
+
 onMounted(() => {
   boot();
+  syncVvh();
+  window.visualViewport?.addEventListener('resize', onVisualViewportResize);
+  window.visualViewport?.addEventListener('scroll', onVisualViewportResize);
   scheduleMermaidRender();
   window.addEventListener('keydown', onPageKeydown);
   window.addEventListener('pagehide', onPageHide);
@@ -3252,6 +3389,8 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onPageKeydown);
+  window.visualViewport?.removeEventListener('resize', onVisualViewportResize);
+  window.visualViewport?.removeEventListener('scroll', onVisualViewportResize);
   if (mermaidTimer) window.clearTimeout(mermaidTimer);
   window.clearTimeout(initStuckTimer);
   stopSettleProgress();
@@ -3271,7 +3410,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* 锁视口高度：整页不滚动、tutor 内部滚动、composer 常驻底部（原先只有窄屏锁，桌面档 tutor 随内容长高把输入区顶出首屏）。
    flex:0 0 auto 必须显式——.learn 同时带 .v2-page，需压过其全局 flex:1 拉伸，否则 height 会被拉到内容高度。 */
-.learn { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--canvas); }
+.learn { height: calc(var(--vvh, 100dvh) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--canvas); }
 
 /* ---------- 头部 ---------- */
 .learn__head {
@@ -3366,6 +3505,69 @@ onBeforeUnmount(() => {
 @media (min-width: 1024px) {
   .learn__body { padding: 22px 30px 36px; }
 }
+
+/* ---------- 桌面常驻板书区（2026-11-26 空间邻近 d≈0.79） ----------
+   有整课板书的任务课：宽屏「左板右聊」，老师讲哪一行、板上那一行同时亮；
+   板书只在聊天流里会往下滚出视野，讲解句与所指对象就分屏了。
+   窄屏保持单列，板书入口仍走阶段条里的「板书」弹层（不挤压对话高度）。 */
+.boardrail { display: none; }
+@media (min-width: 1200px) {
+  /* 选择器写满三节：v2.css 的 `.v2-page.learn .learn__body`（≥1280）权重更高，
+     否则 1440 的列宽会被旧 1120 帽覆盖（2026-10-29 同类事故）。 */
+  .v2-page.learn .learn__body.learn__body--with-board {
+    max-width: 1440px;
+    display: grid;
+    grid-template-columns: 420px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 18px;
+    align-items: stretch;
+  }
+  /* 宽屏板书已常驻在左栏：阶段条右侧的「板书」弹层入口是重复动作，
+     而且未按状态（空心方框）容易被读成「没勾选」——板课时隐藏。 */
+  .learn__body--with-board .lessonbar__board { display: none; }
+  /* 阶段条通栏：它自己就是滚动区的顶栏，不能被内容列的 880 上限截成一条缝。 */
+  .learn__body--with-board .tutor__scroll > .lessonbar { max-width: none; }
+  .learn__body--with-board .tutor { height: 100%; min-height: 0; }
+  /* 页头与加宽后的正文列对齐：500 规则按 900 列居中，正文放到 1440 后会左移一截。 */
+  .v2-page.learn .learn__head.learn__head--with-board {
+    padding-left: max(30px, calc((100% - 1440px) / 2 + 30px));
+    padding-right: max(30px, calc((100% - 1440px) / 2 + 30px));
+  }
+  /* 外宽放到 1440 后，内层 720 阅读帽会让右列空出一整块；板课把内容列同步放到 880
+     （仍短于 940 列的可用宽度，行长不至于变成运维日志）。 */
+  .learn__body--with-board .tutor__scroll > *,
+  .learn__body--with-board .composer__box,
+  .learn__body--with-board .tutor > .oscene,
+  .learn__body--with-board .tutor > .tutor__resume,
+  .learn__body--with-board .tutor > .replies,
+  .learn__body--with-board .tutor > .gate,
+  .learn__body--with-board .tutor > .ready,
+  .learn__body--with-board .tutor > .checkpoint {
+    max-width: 880px;
+  }
+  .learn__body--with-board .boardrail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* 视觉顺序：板书在左、对话在右（DOM 仍保持对话在前，窄屏单列不受影响）。 */
+    order: -1;
+    position: sticky;
+    top: 14px;
+    max-height: calc(100dvh - 140px);
+    padding: 12px 14px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--mk-radius-modal);
+    background: var(--surface);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  /* 同一块板不在聊天流里重复一次：宽屏以常驻区为准 */
+  .learn__body--with-board .board-inline { display: none; }
+}
+.boardrail__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
+.boardrail__title { font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+.boardrail__focus { color: var(--blue-deep); font-weight: 700; }
+.boardrail__body { min-height: 0; }
 
 /* ---------- 知识点浮窗（锚在头部入口下方，不占对话布局高度） ---------- */
 .kp {
@@ -3479,10 +3681,17 @@ onBeforeUnmount(() => {
   min-height: 560px;
 }
 .tutor__scroll {
+  --tutor-pad-x: 20px;
   flex: 1; overflow-y: auto;
-  padding: 20px;
+  padding: 20px var(--tutor-pad-x);
   display: flex; flex-direction: column; gap: 18px;
 }
+/* 有阶段条/板书时，顶部留白交给 .tutor，而不是滚动区自己的 padding：
+   sticky 条按 scrollport 顶部吸附，滚动区 padding 会在条上方留一条透明带，
+   滚过去的正文就从缝里露出半行字（2026-11-26 目检）。 */
+.tutor--phase { padding-top: 10px; }
+/* 两节写满：≤640 档的 `.tutor__scroll { padding: 14px }` 在文件后面，单类名压不住它。 */
+.tutor .tutor__scroll--phase { padding-top: 0; }
 /* 消息从上方开始、向下生长：桌面**刻意不做贴底**（同目标对话页）。
    2026-10-05 曾把窄屏那条贴底规则提到基础档，结果短会话整段对话吊在对话区底部、
    看起来像从下往上长；2026-10-06 用户否掉，回退为窄屏专属（见 ≤1100 档）。 */
@@ -3499,35 +3708,9 @@ onBeforeUnmount(() => {
 .tutor__empty strong { font-size: 15px; color: var(--muted); }
 .tutor__empty p { margin: 0; font-size: 13px; }
 
-/* 首屏短会话构图（2026-11-11 实机走查）：只有开场白时，把「本节要掌握 + 开场白」
-   作为一组在消息区垂直居中，空白变成上下留白而不是中段断层。
-   学员开始互动后 introLayout 关闭，恢复从顶部起排。 */
+/* 首屏短会话构图：只有开场白时把它在消息区垂直居中，空白变成上下留白。
+   2026-11-25 起顶部不再有知识点胶囊，居中组里只剩开场白。 */
 .tutor__scroll--intro { justify-content: center; }
-.tutor__intro {
-  display: grid; gap: 8px;
-  max-width: 760px; width: 100%;
-  margin: 0 auto;
-  padding: 12px 14px;
-  border: 1px dashed var(--line);
-  border-radius: var(--mk-radius-lg);
-  background: var(--canvas);
-}
-.tutor__intro-kicker { font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: .04em; }
-.tutor__intro-row { display: flex; flex-wrap: wrap; gap: 6px 8px; }
-.tutor__intro-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  max-width: 100%;
-  padding: 3px 9px;
-  border-radius: var(--mk-radius-pill);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  font-size: 12px; font-weight: 600; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.tutor__intro-chip i { font-style: normal; color: var(--faint); }
-.tutor__intro-chip--done { color: var(--green-ink); border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
-.tutor__intro-chip--done i { color: var(--green-ink); }
-.tutor__intro-more { align-self: center; font-size: 12px; color: var(--faint); }
 
 /* 恢复进度横幅：续上历史时的可见确认（替代一次性 toast） */
 .tutor__resume {
@@ -3569,47 +3752,6 @@ onBeforeUnmount(() => {
 }
 .tutor__resume-close:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--muted); }
 /* 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场 */
-/* 课堂契约卡（2026-11-19）：最低必须完成集 + 自由支线额度；不抢对话区高度 */
-.contract {
-  margin: 10px 14px 0;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-modal);
-  background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
-  display: grid; gap: 7px;
-  flex: 0 0 auto;
-}
-.contract__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.contract__tag {
-  font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: .04em;
-  padding: 2px 7px; border-radius: 999px;
-  background: color-mix(in srgb, var(--blue) 16%, transparent);
-  color: var(--blue);
-}
-.contract__meta { font-size: 12px; color: var(--muted); }
-.contract__branch {
-  margin-left: auto; font-size: var(--mk-fs-micro); color: var(--muted);
-  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line);
-}
-.contract__branch--active {
-  color: var(--blue); border-color: color-mix(in srgb, var(--blue) 35%, transparent);
-  background: color-mix(in srgb, var(--blue) 8%, transparent);
-}
-.contract__kcs { display: flex; flex-wrap: wrap; gap: 6px; }
-.contract__kc {
-  font-size: 12px; padding: 3px 9px; border-radius: 999px;
-  border: 1px solid var(--line); color: var(--muted); background: var(--surface);
-}
-.contract__kc--done {
-  color: var(--green, #2f7d4f);
-  border-color: color-mix(in srgb, var(--green, #2f7d4f) 35%, transparent);
-  background: color-mix(in srgb, var(--green, #2f7d4f) 9%, transparent);
-}
-.contract__park { font-size: var(--mk-fs-micro); color: var(--muted); }
-.contract__exit { margin-top: 4px; font-size: var(--mk-fs-micro); color: var(--muted); }
-.contract__exit--pending { color: var(--accent, #b45309); }
-.contract__exit--passed { color: var(--green-ink); }
-.contract__exit--failed { color: var(--danger, #b91c1c); }
 .finish__contract { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 /* 结束学习（不计入完成）与「本节完成」共用同一张浮层：必须把「没有计入」写在标题下，
    否则 0/4 知识点 + 绿勾「本节完成」会读成本节已达标（2026-11-20 课堂走查）。 */
@@ -3659,6 +3801,25 @@ onBeforeUnmount(() => {
   font: inherit; font-size: 12px; font-weight: 700; color: var(--blue);
   cursor: pointer;
 }
+/* 续课卡压成单行：阶段条已经说明「课到哪」，这里只留入口与重开；
+   展开的 lead/summary 会把顶部吃掉三分之一，首屏看不到对话（2026-11-26 目检）。 */
+.oscene--resume {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px 10px;
+  min-height: 46px;
+  margin: 8px 14px 0;
+  padding: 8px 12px;
+}
+.oscene--resume .oscene__head { flex: 1 1 auto; min-width: 0; }
+.oscene--resume .oscene__title {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oscene--resume .oscene__lead,
+.oscene--resume .oscene__summary,
+.oscene--resume .oscene__chips,
+.oscene--resume .oscene__warn { display: none; }
+.oscene--resume .oscene__actions { flex: 0 0 auto; margin-left: auto; margin-top: 0; flex-wrap: nowrap; }
 .oscene__head {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
   min-width: 0;
@@ -3717,8 +3878,9 @@ onBeforeUnmount(() => {
 /* 暗色：底色/描边已全部令牌化，自动翻转，原逐条暗色字面量覆写退役 */
 .tutor__jump-bottom {
   /* 锚在输入区上方：原来 bottom:16px 是相对 .tutor 的底部，会压到输入框下方的
-     「Enter 发送 · Shift+Enter 换行」提示。 */
-  position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%);
+     「Enter 发送 · Shift+Enter 换行」提示。2026-11-27：从居中改到右下——居中时
+     正好盖在板书图/配图的中轴上，学生看图的最后一眼被按钮挡住。 */
+  position: absolute; right: 18px; bottom: 128px;
   /* z-index 5 → 9（2026-11-06 走查）：浮标此前与滚动内容同层，底下的白色气泡文字
      从胶囊上透出来读成重影；抬到消息层之上 + 实色底 + 明确描边/投影，彻底不透字 */
   z-index: 9;
@@ -3726,13 +3888,11 @@ onBeforeUnmount(() => {
   background: var(--surface); color: var(--muted);
   font: inherit; font-size: 12px; font-weight: 700;
   cursor: pointer;
-  /* 悬浮在滚动内容之上的常驻控件，保留 raised 档让它读得出来；
-     规则里唯一保留的 transform 是居中用的 translateX(-50%)，与抬升无关。 */
   box-shadow: var(--wf-shadow-overlay);
-  transition: transform 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
 }
-/* hover 只变色，不抬升（translateX(-50%) 是居中必须保留的那一半） */
-.tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%); }
+/* hover 只变色（不再有居中位移，也就不需要保留 transform） */
+.tutor__jump-bottom:hover { color: var(--blue); }
 /* 结束提示条占住输入区上方：回到底部浮标同步抬高，避免压在提示文案上 */
 .tutor:has(> .ready) .tutor__jump-bottom { bottom: 214px; }
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 76%; } /* 85→76：与 goal 页同口径收窄对话行（2026-09-27 用户反馈） */
@@ -3808,12 +3968,15 @@ onBeforeUnmount(() => {
   background: var(--surface);
 }
 .msg__bubble {
-  padding: 11px 15px;
-  font-size: 14px; line-height: 1.65;
+  padding: 12px 16px;
+  /* 2026-11-25 阅读版式：14→14.5、行高 1.65→1.75，段落间距 8→10；
+     720px 列宽下中文约 45 字/行，读起来不再像运维日志。 */
+  font-size: 14.5px; line-height: 1.75;
   border-radius: 4px 16px 16px 16px;
   background: color-mix(in srgb, var(--surface) 72%, var(--blue) 4%); color: var(--ink);
 }
-.msg__bubble p { margin: 0 0 8px; }
+.msg--ai .msg__bubble { border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.msg__bubble p { margin: 0 0 10px; }
 .msg__bubble p:last-child { margin-bottom: 0; }
 .msg--ai { flex-direction: row; align-items: flex-start; gap: 10px; max-width: 94%; }
 .msg--ai .msg__content { display: grid; gap: 5px; min-width: 0; }
@@ -3836,7 +3999,7 @@ onBeforeUnmount(() => {
 .msg__supplement-topic { font-size: 12px; color: var(--muted); }
 /* 补充材料弹层 */
 .supmodal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(15, 23, 42, .45); }
-.supmodal__card { width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; /* 圆角阶梯：弹层 */ box-shadow: var(--wf-shadow-modal); }
+.supmodal__card { width: min(640px, 100%); max-height: calc(80vh / var(--vp-zoom, 1)); display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; /* 圆角阶梯：弹层 */ box-shadow: var(--wf-shadow-modal); }
 .supmodal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .supmodal__head strong { font-size: 14px; }
 .supmodal__close { border: 0; background: transparent; font-size: 14px; cursor: pointer; color: var(--muted); }
@@ -3884,7 +4047,7 @@ onBeforeUnmount(() => {
   background: rgba(15, 23, 42, .78);
 }
 .visualmodal img {
-  max-width: 94vw; max-height: 82vh; width: auto; height: auto;
+  max-width: calc(94vw / var(--vp-zoom, 1)); max-height: calc(82vh / var(--vp-zoom, 1)); width: auto; height: auto;
   background: var(--surface); border-radius: var(--mk-radius-md); box-shadow: var(--wf-shadow-modal);
 }
 .visualmodal__caption { margin: 0; max-width: 940px; color: var(--text-on-primary); font-size: 12.5px; line-height: 1.5; text-align: center; }
@@ -4700,7 +4863,7 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   /* 锁定视口高度：整页不滚动，tutor 内部滚动、composer 吸底，消除底部空白。
      flex-grow:0 必须显式置零——.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度。 */
-  .learn { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; padding-bottom: 0; }
+  .learn { height: calc(var(--vvh, 100dvh) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; padding-bottom: 0; }
   .learn__body {
     flex: 1;
     min-height: 0;
@@ -4947,7 +5110,32 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--red) 7%, transparent);
   font: inherit; font-size: 12px;
 }
-.msg__bubble--html :deep(p) { margin: 0 0 8px; }
+/* 本课材料卡：独立引用，不与老师口述混在同一个气泡里 */
+.msg__material {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
+.msg__material-head {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.msg__material-body {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.msg__bubble--html :deep(p) { margin: 0 0 10px; }
 .msg__bubble--html :deep(p:last-child) { margin-bottom: 0; }
 .msg__bubble--html :deep(ul), .msg__bubble--html :deep(ol) { margin: 4px 0; padding-left: 18px; }
 .msg__bubble--html :deep(code) {
@@ -5091,6 +5279,17 @@ onBeforeUnmount(() => {
   background: none;
   box-shadow: none;
 }
+/* 开场行动线（2026-11-26）：question 与快选紧贴开场气泡，跟着消息流走；
+   不再挂在输入框上方（那里看起来像格式说明，且和开场白隔了半屏）。 */
+.opening-line { display: grid; gap: 8px; margin-top: -6px; }
+.opening-line__question {
+  margin: 0;
+  padding: 2px 0 2px 10px;
+  font-size: 13px; line-height: 1.7;
+  color: var(--muted);
+  border-left: 2px solid color-mix(in srgb, var(--blue) 30%, transparent);
+}
+.opening-line__row { display: flex; flex-wrap: wrap; gap: 8px; }
 /* 小测答后的续接动作行（完课提示已上移到输入区上方的 .ready，不再在这里复读） */
 .replies__kicker {
   font-size: 12px;
@@ -5256,7 +5455,7 @@ onBeforeUnmount(() => {
   .gate { margin: 8px 10px 0; flex-wrap: wrap; }
   .gate__actions { width: 100%; justify-content: flex-end; }
   .learn__init { padding: 48px 16px; }
-  .tutor__scroll { padding: 14px; }
+  .tutor__scroll { --tutor-pad-x: 14px; padding: 14px var(--tutor-pad-x); }
   .oscene { padding: 12px 14px; }
   .learn__live { font-size: 12px; }
   /* 续课卡主按钮收小（2026-09-26 用户「从这继续按钮还很大」）：
@@ -5283,19 +5482,14 @@ onBeforeUnmount(() => {
   .learn__kpbtn { padding: 4px 9px; min-height: 36px; }
 }
 
-/* 桌面阅读宽度：>1100（全局列宽收窄不生效的区段）把消息/卡片限在 ~760px 居中，
-   1440 下一行 70-80 字太宽，65-75 字符/行才可扫读（2026-09-26 布局建议批10）。
-   移动端 ≤1100 由 v2.css 列宽收窄覆盖，不受影响。 */
+/* 桌面阅读宽度：>1100（全局列宽收窄不生效的区段）把消息/卡片限在 ~720px 居中。
+   2026-11-25 学生端走查：1000px 下一行四五十个汉字，读起来像运维日志；收到 720 后
+   中文约 32-36 字/行，接近纸书；移动端 ≤1100 由 v2.css 列宽收窄覆盖。 */
 @media (min-width: 1101px) {
-  .tutor__scroll > * { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
-  .composer__box { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
+  .tutor__scroll > * { max-width: 720px; width: 100%; margin-left: auto; margin-right: auto; }
+  .composer__box { max-width: 720px; width: 100%; margin-left: auto; margin-right: auto; }
   /* 滚动区之外的「行动台」同属这一列内容，必须与消息同宽：它们不是 .tutor__scroll 的孩子，
-     拿不到上面那条 760 上限——Chromium 实测（1920 视口 / tutor 1260px）检查点铺满
-     1226px、快捷引导同样 1226px，而消息列和输入盒是 760px：同一个聊天卡里两套宽度
-     （2026-09-28 用户「检查点面板超宽，是整个聊天区宽度」）。
-     开场卡/续课条/快捷引导/检查点都是卡片，直接收窄居中；行动台是通栏分隔条（border-top +
-     底色），条保持通栏、只用内边距把内容收进同一列（与 .composer 收 .composer__box 同法）。 */
-  .tutor > .contract,
+     拿不到上面那条 720 上限——否则检查点/快捷引导会铺满整张聊天卡，同一屏两套宽度。 */
   .tutor > .oscene,
   .tutor > .tutor__resume,
   .tutor > .replies,
@@ -5303,13 +5497,13 @@ onBeforeUnmount(() => {
   .tutor > .ready,
   .tutor > .checkpoint {
     width: calc(100% - 28px);
-    max-width: 760px;
+    max-width: 720px;
     margin-left: auto;
     margin-right: auto;
   }
   .tutor > .kp-actions {
-    padding-left: max(16px, calc((100% - 760px) / 2));
-    padding-right: max(16px, calc((100% - 760px) / 2));
+    padding-left: max(16px, calc((100% - 720px) / 2));
+    padding-right: max(16px, calc((100% - 720px) / 2));
   }
 }
 /* 1024–1279：正文列封顶 880（含 30px 内边距），页头仍按 24px 贴视口，导致标题比正文
@@ -5321,31 +5515,31 @@ onBeforeUnmount(() => {
     padding-right: max(24px, calc((100% - 820px) / 2));
   }
 }
-/* ≥1280：把「放大版手机聊天框」拉成桌面阅读列。顶栏与内容同宽（不再 1920 满宽贴边），
-   消息/小测/输入盒从 760 提到 1000，左右死区从约 475px 收到约 320px。 */
+/* ≥1280：整张课堂卡收到 960，消息/小测/输入盒 720 居中。
+   2026-11-25 学生端走查：此前把阅读列拉到 1000px，一行四五十字，像运维日志；
+   课堂不是数据表，宁可两侧留白。 */
 @media (min-width: 1280px) {
   .learn__head {
     /* 用 100%（父级布局宽度）而不是 100vw：1600–1999 档全局 zoom:1.08 下 vw 不随 zoom
        缩放，按 100vw 算出来的内边距比 .learn__body 的实际左缘多出约 76px（1920 实测
        顶栏内容 464 / 正文列 388）。100% 与正文列满宽一致，两边才对得齐。 */
-    padding-left: max(24px, calc((100% - 1060px) / 2));
-    padding-right: max(24px, calc((100% - 1060px) / 2));
+    padding-left: max(24px, calc((100% - 900px) / 2));
+    padding-right: max(24px, calc((100% - 900px) / 2));
   }
-  .learn__body { max-width: 1120px; }
+  .learn__body { max-width: 960px; }
   .tutor__scroll > *,
-  .composer__box { max-width: 1000px; }
-  .tutor > .contract,
+  .composer__box { max-width: 720px; }
   .tutor > .oscene,
   .tutor > .tutor__resume,
   .tutor > .replies,
   .tutor > .gate,
   .tutor > .ready,
   .tutor > .checkpoint {
-    max-width: 1000px;
+    max-width: 720px;
   }
   .tutor > .kp-actions {
-    padding-left: max(16px, calc((100% - 1000px) / 2));
-    padding-right: max(16px, calc((100% - 1000px) / 2));
+    padding-left: max(16px, calc((100% - 720px) / 2));
+    padding-right: max(16px, calc((100% - 720px) / 2));
   }
   /* 知识点浮窗展开时给右侧留出 420px，不与消息列叠字。只在桌面阅读列生效：
      浮窗 410px 锚在页头右侧，正文列右缘退到浮窗左侧，聊天气泡/小测/输入盒一起收缩。 */
@@ -5364,5 +5558,144 @@ onBeforeUnmount(() => {
   /* 缩放后右上角的「点击放大」会压住第 3 列节点顶边；小测态下让图面保持干净，
      小测卡本身已占据触屏主视线，放大入口不是这一屏的主操作。 */
   .learn--quiz :deep(.teaching-diagram__hint) { display: none; }
+}
+</style>
+
+<style scoped>
+/* 课堂阶段条（课堂阶段协议，2026-11-26）：对话区顶部常驻——课走到哪一步 + 板书入口。
+   它只陈述系统已经定下的进度，不新增任何需要学生处理的动作。 */
+.lessonbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* 整行通栏（2026-11-27 目检）：胶囊条只有 880 宽且带圆角，滚动时正文从两侧和圆角
+     缝里透出来，读成「气泡从阶段条里渗出来」。改成通栏 + 实色底 + 下边框，条下面
+     再用同色投影盖住 flex gap 的头几像素。 */
+  margin: 0 calc(var(--tutor-pad-x, 20px) * -1) 6px;
+  padding: 6px var(--tutor-pad-x, 20px);
+  background: var(--surface);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: 0 6px 0 var(--surface);
+}
+.lessonbar__steps {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lessonbar__step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: var(--mk-radius-pill);
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.lessonbar__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.lessonbar__step.is-done {
+  color: var(--muted);
+}
+.lessonbar__step.is-done .lessonbar__dot {
+  background: var(--green);
+}
+.lessonbar__step.is-current {
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  font-weight: 600;
+}
+.lessonbar__step.is-current .lessonbar__dot {
+  background: var(--blue);
+}
+.lessonbar__detail {
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.lessonbar__board {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lessonbar__board:hover {
+  border-color: var(--blue);
+  color: var(--blue-deep);
+}
+@media (max-width: 640px) {
+  .lessonbar {
+    gap: 6px;
+    padding: 4px var(--tutor-pad-x, 14px);
+  }
+  .lessonbar__step {
+    gap: 3px;
+    padding: 3px 4px;
+  }
+  /* 续课卡在 390 下放不下「标签 + 标题 + 两个按钮」：标题让位，保持单行。 */
+  .oscene--resume .oscene__title { display: none; }
+}
+
+/* 板书放大层：教具纸同 TeachingFigure（浅色纸面，暗色主题下不翻转） */
+.boardmodal {
+  position: fixed;
+  inset: 0;
+  z-index: 2900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.72);
+}
+.boardmodal__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-width: 96vw;
+  max-height: 88vh;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: var(--mk-radius-xl);
+}
+.boardmodal__body {
+  overflow: auto;
+  padding: 8px;
+}
+.boardmodal__close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
 }
 </style>

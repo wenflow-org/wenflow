@@ -33,19 +33,22 @@ function ruleAfter(source: string, selector: string): string {
 }
 
 describe('忘记密码页 · 提交回执点明取回渠道', () => {
-  it('回执按邮件通道能力给文案：未配置发送时不再承诺收信', () => {
+  it('回执按邮件通道能力给文案：可用时承诺收信，不可用时只给「联系管理员」', () => {
     expect(sfc).toContain('result.mailDeliveryAvailable === true');
-    expect(sfc).toContain('当前环境未配置邮件发送，请联系管理员重置密码。');
+    expect(sfc).toContain("'若该账号存在，请联系管理员为你的账号重置密码。'");
   });
 
-  it('提交前也提前说明 @wenflow.local 与当前邮件通道不可用', () => {
-    expect(sfc).toContain('@wenflow.local 邮箱无法接收邮件');
-    expect(sfc).toContain('当前环境未配置邮件发送');
+  // 2026-11-26 AU-01：页面曾把部署限制写给终端用户（@wenflow.local 收不到信、
+  // 「当前环境未配置邮件发送」），与副标题「验证通过后即可设置新密码」自相矛盾。
+  it('页面不再暴露内部邮箱域名与环境配置文案', () => {
+    expect(sfc).not.toContain('@wenflow.local');
+    expect(sfc).not.toContain('当前环境未配置');
+    expect(sfc).not.toContain('验证通过后即可设置新密码');
   });
 
   it('保留「若该账号存在」前置条件，不因点明渠道而变成账号枚举', () => {
     expect(sfc).toContain("'若该账号存在，重置链接会发送到注册邮箱，请查收（含垃圾邮件箱）。'");
-    expect(sfc).toContain("'若该账号存在，系统会生成重置链接。当前环境未配置邮件发送，请联系管理员重置密码。'");
+    expect(sfc).toContain("'若该账号存在，请联系管理员为你的账号重置密码。'");
   });
 });
 

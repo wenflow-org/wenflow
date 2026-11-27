@@ -82,7 +82,7 @@
     <!-- 放大层：窄卡里位置线按比例缩小后标签会挤，点开满屏按 1:1 看 -->
     <Teleport to="body">
       <div v-if="zoomed" class="figure-zoom" role="dialog" aria-modal="true" aria-label="教学图放大" @click="zoomed = false">
-        <div v-if="!isPositionLine && specRendered" class="figure-zoom__canvas" @click.stop v-html="specRendered.svg" />
+        <div v-if="!isPositionLine && zoomRendered" class="figure-zoom__canvas" @click.stop v-html="zoomRendered.svg" />
         <div v-else class="figure-zoom__canvas" @click.stop>
           <svg :viewBox="`0 0 ${W} ${height}`" :width="W" :height="height" role="img" :aria-label="ariaLabel" :style="tfVars">
             <text v-if="unit" class="tf-unit" x="10" :y="20">{{ `单位：${unit}` }}</text>
@@ -152,7 +152,26 @@ import type { TeachingFigure } from '@/views/v2/learningChat';
 import { renderSpecFigure } from './teaching-figure/render';
 import { materialForPalette, resolveTheme } from './teaching-figure/style';
 
-const props = defineProps<{ figure: TeachingFigure }>();
+const props = defineProps<{ figure: TeachingFigure; focusSegment?: number | null }>();
+
+/**
+ * 当前段正在讲的板书行（课堂阶段协议 · 信号化）：阶段读数里的 segment 是 1 基段号，
+ * 板上 rowSegments 给每行标了所属段；两者相交就是「这一轮讲到哪几行」。
+ * 只影响渲染强调，不改图的内容；段号为 null（整合/收束/非协议课）时不亮。
+ */
+const emphasisRows = computed<number[]>(() => {
+  const spec = props.figure?.spec as { rowSegments?: unknown } | undefined;
+  const segment = Number(props.focusSegment);
+  if (!Number.isInteger(segment) || segment < 1 || !Array.isArray(spec?.rowSegments)) return [];
+  return (spec.rowSegments as unknown[])
+    .map((value, index) => (Number(value) === segment ? index : -1))
+    .filter((index) => index >= 0);
+});
+const renderSpec = computed<Record<string, unknown> | null | undefined>(() => {
+  const spec = props.figure?.spec;
+  if (!spec) return spec;
+  return emphasisRows.value.length ? { ...spec, activeRows: emphasisRows.value } : spec;
+});
 
 /**
  * 图型分派：`position-line` 走本文件的 Vue 模板（既有契约，标签避让更精细）；
@@ -162,12 +181,20 @@ const props = defineProps<{ figure: TeachingFigure }>();
 const isPositionLine = computed(() => (props.figure?.kind || 'position-line') === 'position-line');
 const specRendered = computed(() => {
   if (isPositionLine.value) return null;
-  return renderSpecFigure(props.figure?.kind || '', props.figure?.spec, {
+  return renderSpecFigure(props.figure?.kind || '', renderSpec.value, {
     palette: props.figure?.palette as never,
     // 宿主卡片实测宽度（2026-11-08 外评 #2）：写死 620 的看板在宽卡里右侧留白、
     // 左侧列宽不够 CJK 一行。实测前为 0 → 渲染器按自然宽出图，ResizeObserver 回来后重排。
     targetWidth: hostWidth.value || undefined,
   });
+});
+/**
+ * 放大层里的对照表（课堂阶段协议的整课板书）：窄卡里它是「每行一张卡」的竖排，点开放大后应当回到
+ * 完整的横表——放大层本来就能滚动，这里按自然宽出图，不沿用卡内的窄版布局。其它图型沿用卡内渲染。
+ */
+const zoomRendered = computed(() => {
+  if (isPositionLine.value || props.figure?.kind !== 'matrix') return specRendered.value;
+  return renderSpecFigure('matrix', renderSpec.value, { palette: props.figure?.palette as never });
 });
 
 /**
@@ -386,6 +413,15 @@ const ariaLabel = computed(() => {
   background: none;
   text-align: left;
   cursor: zoom-in;
+}
+/* 暗色课堂：纯白纸面在 #141415 底上是全页最亮元素，夜间刺眼（2026-11-26 视觉审查 P1 · LD-04）。
+   纸面本身是有意不翻转的（教具纸），这里只把整张图压一档亮度，不动几何、不动文字层级；
+   亮色主题不受影响。放大层同一处理。 */
+:global([data-theme='dark']) .teaching-figure,
+:global(.dark) .teaching-figure,
+:global([data-theme='dark']) .figure-zoom__canvas,
+:global(.dark) .figure-zoom__canvas {
+  filter: brightness(0.86) saturate(0.96);
 }
 .teaching-figure__hint {
   position: absolute;

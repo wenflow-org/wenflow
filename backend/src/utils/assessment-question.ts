@@ -10,11 +10,22 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * 去掉题干末尾的「回复选项字母」界面指令（2026-11-24 读数课实证）。
+ * 作答交互由界面承担；代码在 appendExitTicketToReply 里会统一补一次提示，
+ * 模型再写一遍就会在同一个气泡里重叠两遍（m11）。保留题干正文，只剥尾句。
+ */
+export function stripOptionLetterInstruction(question: string): string {
+  return String(question || '')
+    .replace(/[\s，,；;]*(?:请|只|直接)?(?:回复|选择|选)?\s*选项字母(?:即可|就行)?[。！？!?]?\s*$/u, '')
+    .trim();
+}
+
 /** Shared by generated and persisted exit tickets and retention probes. */
 export function parseAssessmentQuestion(raw: unknown): AssessmentQuestion | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const item = raw as Record<string, unknown>;
-  const question = text(item.question);
+  const question = stripOptionLetterInstruction(text(item.question));
   const type = item.type;
   if (!question) return null;
   if (type === 'short_answer') {

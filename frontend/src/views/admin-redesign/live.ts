@@ -2360,12 +2360,16 @@ export async function updateRegisterIpQuotaSetting(enabled: boolean, quota: numb
 }
 
 /* ================= 平台公告 ================= */
+export type AnnouncementAudience = 'all' | 'learner' | 'admin'
+
 export interface LiveAnnouncement {
   id: string
   title: string
   body: string
   severity: 'info' | 'warning' | 'critical'
   status: 'draft' | 'published' | 'archived'
+  /** 受众（2026-11-26）：运维/巡检公告落 admin，不出现在学习者顶部横幅 */
+  audience: AnnouncementAudience
   publishedAt: string | null
   expiresAt: string | null
   createdBy: string | null
@@ -2468,6 +2472,7 @@ async function fetchLiveAnnouncements(): Promise<void> {
     body: String(a.body || ''),
     severity: (a.severity as LiveAnnouncement['severity']) || 'info',
     status: (a.status as LiveAnnouncement['status']) || 'draft',
+    audience: (a.audience as AnnouncementAudience) || 'all',
     publishedAt: (a.publishedAt as string) || null,
     expiresAt: (a.expiresAt as string) || null,
     createdBy: (a.createdBy as string) || null,
@@ -2479,6 +2484,7 @@ export async function liveCreateAnnouncement(data: {
   title: string
   body: string
   severity: string
+  audience?: AnnouncementAudience
   expiresAt?: string | null
   publishNow: boolean
 }): Promise<void> {
@@ -2488,7 +2494,7 @@ export async function liveCreateAnnouncement(data: {
 
 export async function liveUpdateAnnouncement(
   id: string,
-  data: { title: string; body: string; severity: string; expiresAt?: string | null }
+  data: { title: string; body: string; severity: string; audience?: AnnouncementAudience; expiresAt?: string | null }
 ): Promise<void> {
   await adminAnnouncementsApi.update(id, data as unknown as Record<string, unknown>)
   await fetchLiveAnnouncements()

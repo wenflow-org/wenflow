@@ -42,15 +42,21 @@ describe('teaching-turn 契约收口', () => {
     expect(rule).toContain('不用于 control.isCompletionCandidate');
   });
 
-  it('figure.kind 枚举包含 split-compare，且给出 normalizer 认的 spec 字段', () => {
-    const figure = ((readCore('teaching-turn').fields || []) as Array<{ name?: unknown; desc?: unknown }>).find((f) => f.name === 'figure');
-    const desc = String(figure?.desc || '');
-    expect(desc).toContain('split-compare');
-    // 只加枚举不够：模型会自创 lines/branch，normalizer 按 head/rows/delta 校验后整图丢弃
-    // （2026-10-29 真 LLM 实测：kind 正确但 spec 用 title/lines/branch → 不出图）。
-    expect(desc).toContain('"head"');
-    expect(desc).toContain('"rows"');
-    expect(desc).toContain('"delta"');
+  it('绘图契约收口：只声明 visualIntent，不再自带 figure/diagram 绘图 JSON（2026-11-26 契约层拆分）', () => {
+    const fields = ((readCore('teaching-turn').fields || []) as Array<{ name?: unknown; desc?: unknown }>);
+    const names = fields.map((f) => f.name);
+    // 老师不再兼绘图工程师：图由 visual-planner 节点按 relation 生成，spec/kind 枚举不该回到 teaching-turn。
+    expect(names).not.toContain('figure');
+    expect(names).not.toContain('diagram');
+
+    const desc = String(fields.find((f) => f.name === 'visualIntent')?.desc || '');
+    for (const relation of ['position', 'range', 'trajectory', 'split', 'overlap', 'hierarchy', 'cycle', 'matrix', 'structure']) {
+      expect({ relation, inContract: desc.includes(relation) }).toEqual({ relation, inContract: true });
+    }
+    // 意图只写关系：模型自写 axis/spec/mermaid 会绕过图型白名单与答案泄漏拦截。
+    expect(desc).toContain('不要输出');
+    expect(desc).toContain('spec');
+    expect(desc).toContain('mermaid');
   });
 });
 

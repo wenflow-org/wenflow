@@ -1,10 +1,10 @@
 /**
  * 课堂「一列内容」护栏（2026-09-28 用户：「learn 课堂环节，检查点面板超宽，是整个聊天区宽度」）
  *
- * 病根：≥1101 的阅读列（760px 居中）只写在 .tutor__scroll > * 与 .composer__box 上，
+ * 病根：≥1101 的阅读列（720px 居中）只写在 .tutor__scroll > * 与 .composer__box 上，
  * 而行动台/开场卡/续课条/检查点是 .tutor 的直接孩子、不在滚动区里，拿不到那条上限。
  * 实测（Chromium 实测真机编译 CSS，1920 视口 tutor 1260px）：检查点铺满 1226px，
- * 消息列 760px —— 同一个聊天卡里两套宽度。
+ * 消息列 720px —— 同一个聊天卡里两套宽度。
  *
  * 护栏锁两件事，缺一不可：
  *  1) 这些卡片确实是 .tutor 的直接孩子（.tutor > .xxx 选择器的前提，被包一层就失效）；
@@ -63,11 +63,11 @@ function mediaBlock(minWidth: number): string {
   throw new Error(`${marker} 不闭合`);
 }
 
-/** 刻意不进 760 列的 .tutor 直接孩子——每条都要能说出为什么 */
+/** 刻意不进 720 列的 .tutor 直接孩子——每条都要能说出为什么 */
 const EXEMPT: Record<string, string> = {
   tutor__scroll: '消息在它内部，由 .tutor__scroll > * 各自收窄',
   'tutor__jump-bottom': 'absolute 浮标，自身 translateX(-50%) 居中',
-  composer: '通栏输入条，内层 .composer__box 已完成 760 居中',
+  composer: '通栏输入条，内层 .composer__box 已完成 720 居中',
   finish: '整卡完成浮层，刻意铺满',
   settle: '整卡结算进度浮层，刻意铺满',
 };
@@ -103,9 +103,9 @@ describe('课堂一列内容：.tutor 直接孩子的宽度契约', () => {
     }
   });
 
-  it('消息 / 输入盒 / 卡片同处一条 760 列', () => {
-    expect(block).toContain('.tutor__scroll > * { max-width: 760px');
-    expect(block).toContain('.composer__box { max-width: 760px');
+  it('消息 / 输入盒 / 卡片同处一条 720 列', () => {
+    expect(block).toContain('.tutor__scroll > * { max-width: 720px');
+    expect(block).toContain('.composer__box { max-width: 720px');
     expect(cappedInBlock(block, 'checkpoint')).toBe(true);
   });
 });

@@ -507,6 +507,10 @@ onUnmounted(() => {
   .v2nav__right :deep(.nc__bell) { width: 44px; height: 44px; }
   .v2nav__right :deep(.nc__bell svg) { width: 19px; height: 19px; }
   /* 内圆与桌面同一档 32（2026-11-06 走查 图3）：28 只差 4px 却让同一头像在两档两种大小 */
+  /* 窄屏吸顶 top 必须归零（2026-11-26 DOM 探针实测）：窄屏的滚动容器是 .v2-page，
+     公告横幅在它外面（App.vue 壳层），--wf-anb-h 在滚动容器里被重复计一次——
+     顶栏整体下移一个公告高度，公告与顶栏之间留出一条空带（390×844 实测 95px）。 */
+  .v2-page .v2nav-bar { top: 0; }
 }
 </style>
 

@@ -13,6 +13,8 @@ import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
 import { normalizeForKeywordMatch, resolveUnderstandingReading } from '../../services/ai-teaching/checkpoint-shared';
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
+// 绘图语法（图型表/形状/spec 样例）只在出图回合随 payload 注入，不常驻系统提示（2026-11-26）
+import { FIGURE_KIND_GUIDE } from '../../services/ai-teaching/figure-kind-guide';
 import type { ChatContentPart, ChatMessageContent } from '../../gateway/api-gateway/types';
 import { normalizeVisionImages, MAX_VISION_IMAGES_PER_MESSAGE } from '../../utils/vision-content';
 import {
@@ -85,6 +87,8 @@ export interface TeachingTurnInput {
      * description 只是简介；核心 yaml 规则「以材料为准组织课堂」按此键判定与消费。
      */
     taskMaterial?: string | null;
+    /** 学生当轮明确说「看不到数/表/图上的数据」：代码检出后置真，reply 必须直接补全文本材料，图文互锁让位。 */
+    materialVisibilityIssue?: boolean;
     /** 课堂契约（2026-11-19）：最低必须完成集；由 lifecycle 建课冻结，模型只读。 */
     lessonContract?: LessonContract | null;
     /** 自由支线状态（预算/停车区）：逐回合变化，载荷尾部注入。 */
@@ -361,6 +365,8 @@ export interface TeachingTurnInput {
     checkpointVerdict?: {
       passed: boolean;
       detail: string | null;
+      /** 正确答案文本（答对时 / 重答次数已用完时才给）：反馈以它为准讲清为什么 */
+      correctAnswer?: string | null;
     };
     /**
      * 课末独立终检的代码裁决（2026-11-19）：上一轮发出的 exit ticket 本轮作答后，
@@ -369,6 +375,8 @@ export interface TeachingTurnInput {
     exitTicketVerdict?: {
       passed: boolean;
       detail: string | null;
+      /** 正确答案文本（同 checkpointVerdict.correctAnswer 的给出条件） */
+      correctAnswer?: string | null;
     };
   };
   classroomContext?: Record<string, any>;
@@ -402,6 +410,33 @@ export interface TeachingTurnInput {
    * 缺省（非编排层调用，如单测/其它入口）时回落到「内容等价于无板」的判据。
    */
   boardPresent?: boolean;
+  /**
+   * 课堂阶段协议（2026-11-26）：代码按本课进度算出本轮所处阶段与指令（见 lesson-phase.ts），
+   * 逐回合变化 → 载荷尾部注入。它是本轮**动作空间**的最高优先级：本轮能不能出题、板书露到哪一段、
+   * 该讲还是该让学生说，都以 `directive` 为准。
+   */
+  lessonPhase?: {
+    phase: string;
+    label: string;
+    segment: number;
+    segmentCount: number;
+    emitCheckpoint: boolean;
+    directive: string;
+  } | null;
+}
+
+/**
+ * 视觉意图（2026-11-26 契约层拆分）：模型只说「要画什么关系」，不写 axis/spec/mermaid。
+ * 画什么图、怎么画由平台视觉节点（复用 teaching-board-design 的单图模式）决定；
+ * 没有 visualOpportunity.suggested=true 时模型不输出本字段。
+ */
+export interface TeachingVisualIntent {
+  need: boolean;
+  relation: 'position' | 'range' | 'trajectory' | 'split' | 'overlap' | 'hierarchy' | 'cycle' | 'matrix' | 'structure' | 'none';
+  /** 一句话说清要画什么关系（≤40 字） */
+  focus: string;
+  /** 可选：模型对图型的偏好（仍由视觉节点归一化校验） */
+  kindHint?: string | null;
 }
 
 export interface TeachingTurnOutput {
@@ -484,6 +519,8 @@ export interface TeachingTurnOutput {
      * 因此不会打断「答错保留、答对消费」的既有语义。
      */
     voidCheckpoint?: boolean;
+    /** 课堂阶段协议（2026-11-26）：本轮是 build 阶段且本段已讲完时为 true（见 lesson-phase.ts）。 */
+    segmentDone?: boolean;
     completionCandidateEvidence?: {
       hasCriteria: boolean;
       acceptanceCriteria: string | null;
@@ -610,6 +647,8 @@ export interface TeachingTurnOutput {
    * - `position-line` 用顶层字段（axis/marks/spans/guides），其余图型用 `spec`（见各图型说明）。
    */
   figure?: TeachingFigure | null;
+  /** 视觉意图（契约层唯一出口）：模型只填关系与焦点，不写绘图 JSON（2026-11-26） */
+  visualIntent?: TeachingVisualIntent | null;
 }
 
 /** 教学图图型：mermaid 表达不了的二维/位置/多对多关系，以及按「关系形状」分的包含/权衡/层级。 */
@@ -739,11 +778,8 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
       // 可选：老师临场请求的一张教学配图（图 = 一段文字的渲染；见 TeachingTurnOutput.visual）。
       // 2026-09-27 起扩散生图默认停用（owner 终审，设计文档 §九），该块保留但不再生成图片。
       visual: { type: 'object' },
-      // 可选：课堂结构图（mermaid 代码，前端确定性渲染；见 TeachingTurnOutput.diagram）
-      diagram: { type: 'object' },
-      // 可选：教学图（确定性 SVG 渲染；kind 见 TeachingTurnOutput.figure）
-      // position-line 用顶层 axis/marks/spans/guides，其余图型用 spec
-      figure: { type: 'object' }
+      // 可选：视觉意图（只写关系，不写绘图 JSON；见 TeachingTurnOutput.visualIntent）
+      visualIntent: { type: 'object' }
     },
     required: ['reply', 'analysis', 'knowledge', 'pedagogy', 'control']
   },
@@ -908,6 +944,12 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
   // 最近一条用户消息：误解台账的逐字核对窗（confusionPoints 现在与之同源，见 resolveConfusionPoints）
   const lastLearnerMessage = [...(input.messages || [])].reverse().find((message) => message?.role === 'user')?.content || '';
 
+  // 2026-11-24「空气读数课」：本轮要出检查点时，图上的答案标注（峰位/最高/落点/结论）
+  // 会被学生直接读走，检查点就退化成送分。出题轮把答案型 marks 从 cartesian-plot 里摘掉；
+  // 曲线/数据点本身保留（学生仍需自己读图），只去掉直接指认答案的标注。
+  const normalizedFigure = normalizeFigureOrLog(parsed.figure)?.figure ?? null;
+  const answerSafeFigure = scrubAnswerBearingFigure(normalizedFigure, Boolean(screenedCheckpoint));
+
   return {
     reply,
     analysis: {
@@ -980,6 +1022,9 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
       // 检查点作废通道（2026-11-07）：本出口是 control 的白名单投影，未在此声明的字段会被静默丢弃——
       // 模型输出的 control.voidCheckpoint 必须显式透传，否则引擎永远收不到作废信号。
       ...(control.voidCheckpoint === true ? { voidCheckpoint: true } : {}),
+      // 课堂阶段协议（2026-11-26）：build 阶段教师声明「本段讲完了」（学生岔开提问时保持 false）。
+      // 同为白名单投影：不透传引擎永远收不到，分段只能靠 3 轮兜底推进。
+      ...(control.segmentDone === true ? { segmentDone: true } : {}),
       completionCandidateEvidence: acceptanceEvidence.hasCriteria
         ? acceptanceEvidence
         : {
@@ -998,7 +1043,8 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
     },
     ...(normalizeVisual(parsed.visual) ?? {}),
     ...(normalizeDiagram(parsed.diagram) ?? {}),
-    ...(normalizeFigureOrLog(parsed.figure) ?? {}),
+    ...(answerSafeFigure ? { figure: answerSafeFigure } : {}),
+    ...(normalizeVisualIntent(parsed.visualIntent) ?? {}),
   };
 }
 
@@ -1207,6 +1253,26 @@ function specArithmeticErrors(value: unknown, out: string[], depth = 0): void {
   if (value && typeof value === 'object') {
     for (const v of Object.values(value as Record<string, unknown>)) specArithmeticErrors(v, out, depth + 1);
   }
+}
+
+const ANSWER_BEARING_MARK_RE = /(峰|最高|最低|谷底|顶不住|答案|交点|落点|结论|正确|应为|撑不住)/;
+
+/**
+ * 出题轮剥离图上「直接指认答案」的标注（2026-11-24）。
+ * 只处理 cartesian-plot 的 marks：曲线与数据点保留，学生仍要自己读图；
+ * 峰位/最高/落点这类 marks 等于把答案印在题干下方，检查点会退化成送分题。
+ */
+export function scrubAnswerBearingFigure<T extends { kind?: string; spec?: any } | null | undefined>(
+  figure: T,
+  hasCheckpoint: boolean,
+): T {
+  if (!hasCheckpoint || !figure || figure.kind !== 'cartesian-plot') return figure;
+  const spec = figure.spec && typeof figure.spec === 'object' ? figure.spec : null;
+  const marks = Array.isArray(spec?.marks) ? spec.marks : null;
+  if (!marks) return figure;
+  const kept = marks.filter((mark: any) => !ANSWER_BEARING_MARK_RE.test(String(mark?.label ?? '')));
+  if (kept.length === marks.length) return figure;
+  return { ...figure, spec: { ...spec, marks: kept } } as T;
 }
 
 function normalizeFigureOrLog(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
@@ -1706,6 +1772,7 @@ function normalizeStateStripSpec(raw: Record<string, unknown>): Record<string, u
   }
   return {
     frames,
+    ...normalizeSegmentMap(raw.frameSegments, frames.length, 'frameSegments'),
     ...(droppedFrames > 0 ? { truncatedFrames: droppedFrames } : {}),
     ...(title ? { title } : {}),
     ...(note ? { note } : {}),
@@ -2231,21 +2298,60 @@ function normalizeBullseyeSpec(raw: Record<string, unknown>): Record<string, unk
 
 
 const MATRIX_TONES = ['hit', 'miss', 'dup', 'key'] as const;
+/**
+ * matrix 的列上限（2026-11-26）：与其它图型的 SPEC.colsMax 解耦——
+ * 实录里 7 列的三阶段对比表被截成 6 列，任务点名的「丙酮酸」正好是丢掉的那一列。
+ */
+const MATRIX_COLS_MAX = 8;
+/** 单元格文本上限：对照表的一格是「2 丙酮酸 + 6 H₂O」这种短语，不是句子 */
+const MATRIX_CELL_TEXT_MAX = 24;
+/** 教学段上限（板书按段逐步露出：rowSegments / frameSegments 的取值 1..N） */
+const BOARD_SEGMENT_MAX = 4;
 
-/** matrix：二维命中矩阵（✓ / — / 叠 / ≡）——对账类课堂的核心教具。 */
+/** 每行/每帧所属的教学段（1 基）：长度必须与行/帧数一致，否则整组丢弃（不让半截分段错位）。 */
+function normalizeSegmentMap(value: unknown, count: number, key: 'rowSegments' | 'frameSegments'): Record<string, number[]> {
+  if (!Array.isArray(value) || value.length !== count) return {};
+  const segments: number[] = [];
+  for (const item of value) {
+    const n = Math.trunc(Number(item));
+    if (!Number.isInteger(n) || n < 1 || n > BOARD_SEGMENT_MAX) return {};
+    segments.push(n);
+  }
+  if (segments.some((n, i) => i > 0 && n < segments[i - 1])) return {};
+  // 段号必须连续（2026-11-26 工程外审）：模型可能给 [1,1,3,3] 这种带洞的段号——
+  // 段数按最大值算 3，而教学段按「不同段号」只得到 2 段，第 3 段永远等不到露出。
+  // 这里按出现顺序重映射成 1..N，保证 boardSegmentCount === 教学段数。
+  const distinct = [...new Set(segments)].sort((a, b) => a - b);
+  return { [key]: segments.map((n) => distinct.indexOf(n) + 1) };
+}
+
+/**
+ * matrix：对照表 / 二维命中矩阵。
+ *
+ * 两种形态（2026-11-26 课堂重设计）：
+ *  - **带文字的对照表**：`cells[].t` 是这一格的短语（课件表、物质—场所表）。此前 matrix 只能放 ✓/—/≡，
+ *    任务要的是一张三阶段对比表时，绘图员只能画出一屏勾叉——学生读不出任何内容，还把
+ *    「第二阶段的水」「第三阶段的 [H]」读反。现在文字直接上板，一行一Predicate，不再用勾叉冒充内容。
+ *  - **命中矩阵**：`cells[].tone`（hit/miss/dup/key），用于对账类课堂。
+ * `rowSegments` 给每行标教学段，板书按段逐步露出（见 lesson-phase.ts）。
+ */
 function normalizeMatrixSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
   const rowLabels = toStringList(raw.rowLabels, SPEC.rowsMax, SPEC.labelMax);
-  const colLabels = toStringList(raw.colLabels, SPEC.colsMax, SPEC.labelMax);
+  const colLabels = toStringList(raw.colLabels, MATRIX_COLS_MAX, SPEC.labelMax);
   if (rowLabels.length < 2 || colLabels.length < 2) return null;
   const cells: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
   for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
     if (!item || typeof item !== 'object') continue;
     const cell = item as Record<string, unknown>;
     const r = toBoundedInt(cell.r, 0, rowLabels.length - 1);
     const c = toBoundedInt(cell.c, 0, colLabels.length - 1);
+    if (r === null || c === null || seen.has(`${r},${c}`)) continue;
+    const text = toFigureText(cell.t ?? cell.text, MATRIX_CELL_TEXT_MAX);
     const tone = normalizeTone(cell.tone, MATRIX_TONES);
-    if (r === null || c === null || !tone) continue;
-    cells.push({ r, c, tone });
+    if (!tone && !text) continue;
+    seen.add(`${r},${c}`);
+    cells.push({ r, c, ...(tone ? { tone } : {}), ...(text ? { t: text } : {}) });
     if (cells.length >= rowLabels.length * colLabels.length) break;
   }
   if (!cells.length) return null;
@@ -2267,6 +2373,7 @@ function normalizeMatrixSpec(raw: Record<string, unknown>): Record<string, unkno
     rowLabels,
     colLabels,
     cells,
+    ...normalizeSegmentMap(raw.rowSegments, rowLabels.length, 'rowSegments'),
     ...(legend.length ? { legend } : {}),
     ...(focus ? { focus } : {}),
     ...(title ? { title } : {}),
@@ -2507,6 +2614,29 @@ function normalizeBoardSpec(raw: Record<string, unknown>): Record<string, unknow
  *   前端 securityLevel:'strict' 是二道防线，这里是首道（纵深防御）；
  * - `caption` 裁长；空串归 null。
  */
+const VISUAL_INTENT_RELATIONS = new Set(['position', 'range', 'trajectory', 'split', 'overlap', 'hierarchy', 'cycle', 'matrix', 'structure', 'none']);
+const VISUAL_INTENT_KINDS = new Set<TeachingFigureKind>([
+  'position-line', 'range-bar', 'cartesian-plot', 'split-compare', 'venn', 'tree', 'cycle', 'matrix', 'concept-map', 'state-strip',
+]);
+
+/**
+ * 视觉意图归一化（2026-11-26）：模型只交关系与焦点，不写绘图 JSON。
+ * need=false / focus 为空 → 不产出（等于本轮不介入）；relation 未知按 structure 兜底；
+ * kindHint 只接受白名单图型，避免模型把非法形状带进视觉节点。
+ */
+function normalizeVisualIntent(raw: unknown): { visualIntent: TeachingVisualIntent } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  if (record.need !== true) return null;
+  const focus = String(record.focus ?? '').trim().slice(0, 120);
+  if (!focus) return null;
+  const relationRaw = String(record.relation ?? '').trim();
+  const relation = (VISUAL_INTENT_RELATIONS.has(relationRaw) ? relationRaw : 'structure') as TeachingVisualIntent['relation'];
+  const kindRaw = String(record.kindHint ?? '').trim() as TeachingFigureKind;
+  const kindHint = VISUAL_INTENT_KINDS.has(kindRaw) ? kindRaw : null;
+  return { visualIntent: { need: true, relation, focus, ...(kindHint ? { kindHint } : {}) } };
+}
+
 function normalizeDiagram(raw: unknown): { diagram: NonNullable<TeachingTurnOutput['diagram']> } | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Record<string, unknown>;
@@ -3274,16 +3404,24 @@ function buildPromptInput(input: TeachingTurnInput) {
 
   // 条件规则按需注入（逐回合变化 → 必须放**载荷尾部**）：输入提供了对应字段才带
   const applicableRules = selectApplicableRules(CONDITIONAL_RULES, input);
+  // 出图回合才带绘图语法（2026-11-26 职责归位）：图型表/形状/spec 样例只在这一轮有用，
+  // 常驻系统提示会稀释教学注意力。与其它条件规则同层放载荷尾部，KV 前缀不被打断。
+  const visualGuide = input.visualOpportunity?.suggested ? FIGURE_KIND_GUIDE : '';
+  const conditionalRuleLines = [
+    ...applicableRules.map((rule) => `- ${rule}`),
+    ...(visualGuide ? [`- 本轮按以下图型指南出图（形状与字段以它为准）：\n${visualGuide}`] : []),
+  ];
   logger.debug('[teaching-turn] 条件规则按需注入', {
     injected: applicableRules.length,
     total: CONDITIONAL_RULES.length,
     injectedChars: applicableRules.reduce((sum, rule) => sum + rule.length, 0),
+    visualGuideChars: visualGuide.length,
   });
-  const conditionalRulesPayload = applicableRules.length > 0
+  const conditionalRulesPayload = conditionalRuleLines.length > 0
     ? {
         conditionalRules:
           '【本轮适用规则】输入提供了以下字段，故以下规则生效：\n'
-          + applicableRules.map((rule) => `- ${rule}`).join('\n'),
+          + conditionalRuleLines.join('\n'),
       }
     : {};
 
@@ -3338,6 +3476,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       // 课堂契约支线（逐回合变化 → 载荷尾部）：预算、停车区、本轮指令
       ...(scenarioBranchState ? { branchState: scenarioBranchState } : {}),
       ...(scenarioBranchDirective ? { branchDirective: scenarioBranchDirective } : {}),
+      // 课堂阶段协议（2026-11-26）：本轮阶段与指令，逐回合变化 → 载荷尾部（离输出最近，最不会被忽略）
+      ...(input.lessonPhase ? { lessonPhase: input.lessonPhase } : {}),
     };
   }
 
@@ -3363,6 +3503,7 @@ function buildPromptInput(input: TeachingTurnInput) {
     latestLearnerMessage,
     // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
     ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
+    ...(input.lessonPhase ? { lessonPhase: input.lessonPhase } : {}),
     ...conditionalRulesPayload,
   };
 }

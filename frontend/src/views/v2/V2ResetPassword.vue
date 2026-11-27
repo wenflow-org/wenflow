@@ -5,7 +5,7 @@
         <h2>{{ hasToken ? '设置新密码' : '找回密码' }}</h2>
         <!-- 不再复述「输入用户名」（label 已说一次，走查 2026-09-27 冗余文案项）；
              也不承诺「发送链接」——当前链路是验证身份后直接设置新密码 -->
-        <p v-if="!hasToken">验证通过后即可设置新密码。</p>
+        <p v-if="!hasToken">输入用户名，获取重置密码的方式。</p>
         <p v-else>输入新密码完成重置，重置后所有已登录设备将退出。</p>
       </div>
 
@@ -81,10 +81,6 @@
           />
           <span v-if="errors.name" id="reset-username-error" class="field__error">{{ errors.name }}</span>
         </label>
-        <!-- 注册时自动生成 @wenflow.local 本地邮箱且当前只有 console 邮件通道；先说清楚，避免用户白等邮件 -->
-        <p class="reset__hint">
-          注册时自动生成的 @wenflow.local 邮箱无法接收邮件。当前环境未配置邮件发送，如需找回密码请联系管理员。
-        </p>
       </template>
 
       <button type="submit" class="btn-primary btn-primary--block" :disabled="submitting">
@@ -171,9 +167,10 @@ async function submit() {
     } else {
       const result = await authAPI.forgotPassword(form.name.trim());
       // 保留账号存在条件以避免账号枚举；只有真实邮件通道可用时才承诺“已发送”。
+      // 自助通道不可用时只给「找管理员」这一条可走的路，不暴露内部邮箱域名与环境配置（AU-01）。
       notice.value = result.mailDeliveryAvailable === true
         ? '若该账号存在，重置链接会发送到注册邮箱，请查收（含垃圾邮件箱）。'
-        : '若该账号存在，系统会生成重置链接。当前环境未配置邮件发送，请联系管理员重置密码。';
+        : '若该账号存在，请联系管理员为你的账号重置密码。';
     }
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error
@@ -217,7 +214,6 @@ function goLogin() {
   box-shadow: var(--mk-focus-ring); /* 全站唯一一圈 */
 }
 .field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
-.reset__hint { margin: 0; font-size: 12px; line-height: 1.6; color: var(--faint); }
 
 .btn-primary--block {
   justify-content: center;

@@ -351,7 +351,8 @@ describe('虚拟学习者：自动驾驶故障（activeError）是异常列的�
   })
 
   it('「只看有异常」保留只有自动驾驶故障的行（不只看失败/无响应计数）', async () => {
-    const w = mount(VirtualLearners)
+    // 下拉弹层已 Teleport 到 body；原位渲染才能从 wrapper 里读选项
+    const w = mount(VirtualLearners, { global: { stubs: { teleport: true } } })
     await flushPromises()
     await nextTick()
     // 2026-11-09 巡检批次：筛选触发器从列头漏斗迁到筛选行胶囊（与「状态」同组）
