@@ -20,7 +20,7 @@
             <span class="vn-quote__years">1946 → 2026</span>
           </div>
           <blockquote>“原子释放出的力量改变了<span class="vn-keep">一切</span>，除了我们的思维方式。”</blockquote>
-          <figcaption>1946 年，爱因斯坦等科学家在写给联合国的电报中留下这句话。八十年后，AI 带来了相似的处境：<span class="vn-keep">工具</span>演进很快，<span class="vn-keep">但大多数</span>学习仍停留在记忆和复述<span class="vn-keep">标准答案</span>上。</figcaption>
+          <figcaption>1946 年，爱因斯坦等科学家在一封公开电报中留下这句话。八十年后，AI 带来了相似的处境：<span class="vn-keep">工具演进</span>很快，<span class="vn-keep">但大多数学习</span>仍停留在记忆和复述<span class="vn-keep">标准答案</span>上。</figcaption>
           <p class="vn-quote__aside">答案越多，问题本身越重要。</p>
         </figure>
       </section>
@@ -56,7 +56,7 @@
               </article>
             </div>
             <p class="vn-problem__note" v-reveal="{ delay: 140 }">
-              具体工具、界面和模型版本都会迭代，但厘清问题、<span class="vn-keep">组织结构</span>与独立判断的能力<span class="vn-keep">长期有效</span>。工具越强，越<span class="vn-keep">需要</span>使用者明确自己的目的。
+              具体工具、界面和模型版本都会迭代，但厘清问题、<span class="vn-keep">组织结构</span>与权衡取舍的能力<span class="vn-keep">长期有效</span>。工具越强，越<span class="vn-keep">需要</span>使用者明确自己的目的。
             </p>
           </div>
         </section>
@@ -93,7 +93,7 @@
               如果它能帮助学习者建立更清晰的学习路径，或为后来做教育产品的团队减少一些<span class="vn-keep">试错成本</span>，<span class="vn-keep">便已</span><span class="vn-keep">达到初衷</span>。
             </p>
             <p class="vn-origin__status">
-              目前项目处于实验型原型阶段：主链路已经跑通，代码与设计文档全部公开，仍在持续<span class="vn-keep">完善细节</span>与稳定性。
+              目前主链路已经跑通，代码与设计文档全部公开，仍在持续<span class="vn-keep">完善细节</span>与稳定性。
             </p>
             <div class="vn-status__links">
               <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
@@ -147,7 +147,7 @@ const loggedIn = ref(false)
 const caps = [
   { n: '01', t: '为什么没有预置课程', d: '许多学习中途停滞，往往源于通用课程与个人当下的实际问题错位，学到一半发现难以应用。WenFlow 从具体问题出发，先澄清目标，再按需生成学习路径与单节内容。' },
   { n: '02', t: '为什么不做自由聊天框', d: '自由对话容易让人产生“看懂了”的错觉，实际却难以独立运用。有效的学习需要节奏控制：分段讲解、随堂提问与即时检验，受阻时切换讲法或补足前置概念。因此课堂按明确回合推进。' },
-  { n: '03', t: '为什么把复习和负荷算进来', d: '短期放弃通常源于前期投入过猛导致疲劳，或缺乏复习导致遗忘。系统会记录每节课的掌握情况，按遗忘曲线安排复习，并持续追踪学习负荷与疲劳度，在状态偏低时提示放缓节奏。' }
+  { n: '03', t: '为什么把复习和负荷算进来', d: '短期放弃通常源于前期投入过猛引发疲劳，或缺乏复习造成遗忘。系统会记录每节课的掌握情况，按遗忘曲线安排复习，并持续追踪学习负荷与疲劳度，在状态偏低时提示放缓节奏。' }
 ]
 
 const capKeepWords = /单节内容|节奏|课堂|提示|当下的|讲解|疲劳度|补足|因此课堂/g
