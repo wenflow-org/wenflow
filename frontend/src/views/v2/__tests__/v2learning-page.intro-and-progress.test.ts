@@ -108,30 +108,6 @@ describe('课堂首屏：目标卡、快选标签与课次进度', () => {
     w.unmount();
   });
 
-  it('契约卡已列出全部要点时，「本节要掌握」不再复读同一批名字', async () => {
-    /* 2026-11-24 走查：契约卡（2026-11-19）与首屏补白块把同一批 coreKcs 上下各列一次。 */
-    api.startSession.mockResolvedValue({
-      sessionId: 's_intro',
-      revision: 1,
-      mode: 'new',
-      opening: {
-        message: '这节课先把你后台导出的那份每小时客流表看明白。',
-        question: '同样是客流数字，为什么不能直接拿来比大小？',
-        quickReplies: [],
-      },
-      knowledgePoints: [{ id: 'k1', name: '同一星期几的时段可比', status: 'learning', progress: 0 }],
-      lessonContract: { coreKcs: [{ kcId: 'k1', name: '同一星期几的时段可比' }] },
-    });
-    const w = mount(V2LearningPage, { global: { stubs: { 'router-link': true } } });
-    await flushPromises();
-    await flushPromises();
-
-    expect(w.find('.contract').exists()).toBe(true);
-    expect(w.find('.tutor__intro').exists()).toBe(false);
-    expect(w.find('.tutor__scroll').classes()).not.toContain('tutor__scroll--intro');
-    w.unmount();
-  });
-
   it('标题副行按任务详情给出「第 2 / 4 节」，不新增接口', async () => {
     const w = mount(V2LearningPage, { global: { stubs: { 'router-link': true } } });
     await flushPromises();

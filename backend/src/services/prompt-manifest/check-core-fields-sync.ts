@@ -157,6 +157,11 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
   },
   {
     skillId: 'path-planning',
+    field: 'pathDeliverable',
+    evidence: 'path-generation.core.ts:581 写入 aiPromptTemplate.pathDeliverable；path-views.queries.ts:705 直接读快照作 firstDeliverable（路径级展示字段，不进下游技能输入路由）',
+  },
+  {
+    skillId: 'path-planning',
     field: 'cognitiveDesign',
     evidence: 'prompts/core/path-planning.yaml:106 自注"兼容镜像 = cognitiveCore"；正式数据走 cognitiveCore.* 路由（path.yaml:341-351）',
   },

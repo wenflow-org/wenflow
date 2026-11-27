@@ -267,25 +267,9 @@
             </div>
         </div>
 
-        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout && !introRedundant, 'tutor__scroll--phase': !!(lessonPhase || currentBoard) }" @scroll="updateNearBottom">
-          <!-- 本节要掌握（2026-11-11 首屏空洞修复）：只在「刚开课、只有开场白」时出现，
-               内容全部来自已有的知识点数据；学员一开口即退场，不长期占位。 -->
-          <section v-if="introLayout && introPoints.length && !introRedundant" class="tutor__intro" aria-label="本节要掌握的知识点">
-            <span class="tutor__intro-kicker">本节要掌握</span>
-            <div class="tutor__intro-row">
-              <span
-                v-for="(kp, i) in introPoints"
-                :key="kp.id || i"
-                class="tutor__intro-chip"
-                :class="{ 'tutor__intro-chip--done': isMastered(kp) }"
-              >
-                <i aria-hidden="true">{{ isMastered(kp) ? '✓' : '○' }}</i>{{ kp.name || kp.title }}
-              </span>
-              <span v-if="knowledgePoints.length > introPoints.length" class="tutor__intro-more">
-                等 {{ knowledgePoints.length }} 个
-              </span>
-            </div>
-          </section>
+        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout, 'tutor__scroll--phase': !!(lessonPhase || currentBoard) }" @scroll="updateNearBottom">
+          <!-- 2026-11-25 学生端减法：顶部常驻的 3 个知识点胶囊撤除。
+               知识点入口保留在页头右侧「知识点 N/M」浮窗里，首屏只留开场白。 -->
           <!-- 课堂阶段条（课堂阶段协议，2026-11-26）：课走到哪一步 + 板书入口。
                板书只随版本变化重发（同一版不重复下发），往下聊几轮就滚出视野——这里给一个常驻入口。 -->
           <div v-if="lessonPhase || currentBoard" class="lessonbar">
@@ -1731,16 +1715,6 @@ watch(checkpoint, (now) => {
 const introLayout = computed(
   () => msgs.value.length <= 1 && !openingScene.value && !checkpoint.value && !typing.value && !completed.value
 );
-const introPoints = computed(() => knowledgePoints.value.slice(0, 4));
-/* 2026-11-24 走查：契约卡（2026-11-19）先列出「本节完成要求」的 coreKcs，紧随其后的
-   「本节要掌握」把同一批名字再列一遍。契约卡已覆盖全部要点时，首屏补白块让位。 */
-const introRedundant = computed(() => {
-  const names = new Set(contractCoreKcs.value.map((kc) => kc.name).filter(Boolean));
-  return introPoints.value.length > 0 && introPoints.value.every((kp) => {
-    const name = kp.name || kp.title || '';
-    return !!name && names.has(name);
-  });
-});
 
 /**
  * 小测收起后的续接快选（2026-11-02 用户反馈「快选没什么意义」）：
