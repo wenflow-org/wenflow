@@ -675,6 +675,14 @@ main {
   .vn-status {
     max-width: 1180px;
   }
+  /* 2K 下内容块从 984 放宽到 1180，但正文仍保持 600px 阅读宽度。
+     左栏同步从 320 让到 516（516 + 64 + 600 = 1180），
+     右正文缘才不会比引用卡片/分隔线短 196px。 */
+  .vn-problem,
+  .vn-cap,
+  .vn-status {
+    grid-template-columns: 516px minmax(0, 1fr);
+  }
 }
 
 .vn-end {

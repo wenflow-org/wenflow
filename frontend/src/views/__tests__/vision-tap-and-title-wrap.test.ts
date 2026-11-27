@@ -150,6 +150,16 @@ describe('愿景页两栏轴（2026-11-26）', () => {
       '内容块缺 984px 居中（1920 下会整块偏左）'
     ).toMatch(/\.vn-hero,\s*\.vn-problem,\s*\.vn-cap,\s*\.vn-status\s*\{[^}]*max-width:\s*984px;[^}]*margin-right:\s*auto;[^}]*margin-left:\s*auto;/);
   });
+
+  it('2K 档左栏让到 516px，600px 正文右缘仍贴齐 1180px 内容块', () => {
+    const at = css.lastIndexOf('@media (min-width: 2000px)');
+    expect(at, '2K 的 1180px 内容块覆写不见了').toBeGreaterThan(-1);
+    const block = blockAt(css, at);
+    expect(
+      block,
+      '2K 下正文停在 984，右缘会比引用卡片/分隔线短 196px'
+    ).toMatch(/\.vn-problem,\s*\.vn-cap,\s*\.vn-status\s*\{[^}]*grid-template-columns:\s*516px\s+minmax\(0,\s*1fr\);/);
+  });
 });
 
 describe('愿景页首屏动效（2026-11-27）', () => {
