@@ -198,7 +198,7 @@ describe('goal/path/stage prompt realism guards', () => {
   it('path-task-design：论文正文只在最后一站，前序阶段不提前写成稿', () => {
     const md = read('prompts/skill.path-task-design.md')
     expect(md).toContain('交付物归属唯一')
-    expect(md).toContain('repairHints.produceScopeFixes')
+    expect(md).toContain('repairHints.artifactFixes')
     expect(md).toContain('正文、架构节初稿、答辩稿只属于最后一个阶段')
     expect(md).toContain('不得要求成段正文或可直接引用的段落')
   })

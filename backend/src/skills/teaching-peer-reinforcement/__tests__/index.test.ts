@@ -61,23 +61,28 @@ describe('teaching-peer-reinforcement model artifact', () => {
       .toEqual({ valid: false, failureReason: 'PEER_FOLLOW_UP_QUESTION_INVALID' })
   })
 
-  it('清理并限制后续问题的数量和长度', () => {
-    const normalized = normalizePeerParsedOutput({
+  it('清理并限制后续问题的数量（最多 1 条）和长度（≤100 字），encourage 时强制清空', () => {
+    const capped = normalizePeerParsedOutput({
       message: '  我们换个角度想想。  ',
       followUpQuestions: [
         '  第一个问题？  ',
-        `  ${'x'.repeat(101)}  `,
-        '第三个问题？',
-        '第四个问题？',
+        '第二个问题？',
       ],
     })
+    expect(capped.message).toBe('我们换个角度想想。')
+    expect(capped.followUpQuestions).toEqual(['第一个问题？'])
 
-    expect(normalized.message).toBe('我们换个角度想想。')
-    expect(normalized.followUpQuestions).toEqual([
-      '第一个问题？',
-      'x'.repeat(100),
-      '第三个问题？',
-    ])
+    const truncated = normalizePeerParsedOutput({
+      message: '我们换个角度想想。',
+      followUpQuestions: [`  ${'x'.repeat(101)}  `],
+    })
+    expect(truncated.followUpQuestions).toEqual(['x'.repeat(100)])
+
+    const encouraged = normalizePeerParsedOutput({
+      message: '你先写写看。',
+      followUpQuestions: ['这里要不要追问？'],
+    }, 'encourage')
+    expect(encouraged.followUpQuestions).toEqual([])
   })
 
   it('保留模型提供的后续问题并写入 runtime envelope', async () => {

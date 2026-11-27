@@ -80,7 +80,7 @@
             <!-- 联网补充资料开关（2026-11-23 同轮复调配套）：用户级偏好，开课时固化进会话；
                  菜单里改对下一节课生效，不骗「本节立即」 -->
             <button type="button" class="learn__menu-item" @click="toggleWebSupplement">
-              {{ webSupplementAllowed ? '联网补充资料：开（点击关闭·闭卷模式）' : '联网补充资料：关·闭卷模式（点击开启）' }}
+              {{ webSupplementAllowed ? '联网补充资料：开（点击切换闭卷·下节生效）' : '联网补充资料：闭卷模式（点击开启·下节生效）' }}
             </button>
           </div>
         </ImmersiveMenu>
@@ -208,6 +208,9 @@
     <div v-else class="learn__body" :class="{ 'learn__body--with-board': !!currentBoard }">
       <!-- 中：导师对话。知识点浮窗相对页头定位，绝对定位不占用对话区高度。 -->
       <section class="tutor" :class="{ 'tutor--kp-open': kpOpen, 'tutor--phase': !!(lessonPhase || currentBoard) }">
+        <div v-if="!online" class="tutor__offline" role="alert">
+          <span class="tutor__offline-text">当前网络已断开，恢复联网后可继续学习</span>
+        </div>
         <!-- 恢复进度横幅：续上历史时可见（短中断刷新场景取代大卡），「接着讲」触发无输入续讲回合 -->
         <div v-if="resumedNotice" class="tutor__resume">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.5H11L9.5 22 19 9.5h-6.5L13 2z"/></svg>
@@ -729,7 +732,7 @@
               class="composer__img-btn"
               title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"
               aria-label="添加图片"
-              :disabled="completed"
+              :disabled="completed || finalizing"
               @click="pickImages"
             ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>
             <!-- 隐藏文件入口：选完清 value，同一张图可再次选择 -->
@@ -747,7 +750,7 @@
               class="composer__textarea"
               rows="1"
               maxlength="800"
-              :disabled="completed"
+              :disabled="completed || finalizing"
               :placeholder="checkpoint && !completed ? '小测请在题目卡作答。这里也可以提问…' : exitTicket?.status === 'pending' ? '在这里独立回答课末题，写下答案和思路…' : '写下你的答案、思路，或具体卡住的地方…'"
               @input="interactionMeta.onInput(input.length)"
               @keydown.enter.exact.prevent="send"
@@ -840,9 +843,9 @@
     </div>
 
     <!-- 伴学浮窗：问流伴学（平台蓝，独立于导师对话）；不占主对话区，可回复、可收起成悬浮球 -->
-    <div v-if="peerOpen && peerItems.length" class="peer-backdrop" aria-hidden="true" @click="minimizePeer"></div>
+    <div v-if="peerOpen" class="peer-backdrop" aria-hidden="true" @click="minimizePeer"></div>
     <Transition name="peer-pop">
-      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="问流伴学" aria-live="polite">
+      <div v-if="peerOpen" class="peerdock" role="dialog" aria-label="问流伴学" aria-live="polite">
         <div class="peerdock__head">
           <span class="peerdock__avatar" aria-hidden="true">
             <svg class="peerdock__avatar-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -862,6 +865,9 @@
           </button>
         </div>
         <div ref="peerScrollEl" class="peerdock__scroll">
+          <div v-if="!peerItems.length && !peerSending" class="peerdock__empty">
+            卡在哪一步了？可以直接问我思路或举个例子，我陪你一起拆。
+          </div>
           <div v-for="(p, i) in peerItems" :key="i" class="peerdock__msg" :class="`peerdock__msg--${p.role}`">
             <div class="peerdock__bubble" v-html="formatMessage(p.text)"></div>
             <template v-if="p.role === 'peer'">
@@ -971,6 +977,7 @@ async function loadMermaid() {
 }
 /** 课堂里所有 Markdown mermaid 占位（排除 TeachingDiagram 自己管理的结构图） */
 function mermaidNodes(): MermaidNode[] {
+  if (typeof document === 'undefined') return [];
   const host = document.querySelector('.tutor');
   if (!host) return [];
   return Array.from(host.querySelectorAll<MermaidNode>('.mermaid')).filter((node) => !node.closest('.teaching-diagram'));
@@ -1010,7 +1017,8 @@ watch(isDark, () => {
 /* 菜单项与确认弹窗标题共用同一句，收成单源避免改一处漏一处（与反馈页共用） */
 import { END_WITHOUT_FINISH_LABEL, resolveClosureGateCopy } from './closureGate';
 
-import { useRoute, useRouter } from 'vue-router';
+import * as VueRouter from 'vue-router';
+import { useOnline } from '@/composables/useOnline';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI, createTeachingIdempotencyKey, type TeachingMessageImage, type ExitTicket, type LessonContract, type LessonReport, type LessonPhaseSummary, type LessonPhaseName, type LessonPhaseStatePayload, type TeachingFigurePayload } from '@/api/aiTeaching';
 import { readMaterialSection } from '@/api/materials';
@@ -1073,9 +1081,10 @@ hljs.registerAliases(['yml'], { languageName: 'yaml' });
 hljs.registerAliases(['c++', 'hpp'], { languageName: 'cpp' });
 hljs.registerAliases(['txt', 'text'], { languageName: 'plaintext' });
 
-const route = useRoute();
-const router = useRouter();
-const taskId = String(route.params.taskId || '');
+const route = VueRouter.useRoute();
+const router = VueRouter.useRouter();
+const { online } = useOnline();
+const taskId = computed(() => String(route.params.taskId || ''));
 const isReviewMode = computed(() => route.query.mode === 'review');
 /** 延伸学（#124）：从完成浮层进入，基于已完成的本课做额外学习；不结算任务。用 ref 而非 computed——
  *  进入延伸课时只改 URL 不触发路由重载，刷新后靠 ?mode=extension 恢复。 */
@@ -1083,10 +1092,10 @@ const extensionMode = ref(route.query.mode === 'extension');
 
 /** 按模式开课：常规 / 复习 / 延伸（三处调用点共用，避免各写一份三元）。 */
 function startSessionByMode() {
-  if (isReviewMode.value) return aiTeachingAPI.startReviewSession(taskId);
-  if (extensionMode.value) return aiTeachingAPI.startExtensionSession(taskId);
+  if (isReviewMode.value) return aiTeachingAPI.startReviewSession(taskId.value);
+  if (extensionMode.value) return aiTeachingAPI.startExtensionSession(taskId.value);
   // 闭卷模式（2026-11-23 同轮复调配套）：用户级偏好存 localStorage，开课时随创建参数下发
-  return aiTeachingAPI.startSession(taskId, undefined, { allowWebSupplement: webSupplementAllowed.value });
+  return aiTeachingAPI.startSession(taskId.value, undefined, { allowWebSupplement: webSupplementAllowed.value });
 }
 
 /* 联网补充资料开关（闭卷模式，2026-11-23）：默认开；关掉 = 本节课老师不联网查资料，
@@ -1556,7 +1565,7 @@ const PHASE_LABELS: Array<{ phase: LessonPhaseName; label: string }> = [
   { phase: 'integrate', label: '整合' },
   { phase: 'transfer', label: '迁移' },
   { phase: 'audit', label: '审错' },
-  { phase: 'close', label: '收束' },
+  { phase: 'close', label: '完成' },
 ];
 const phaseSteps = computed(() => {
   const current = lessonPhase.value;
@@ -1688,6 +1697,46 @@ const {
   if (state.exitTicket) exitTicket.value = state.exitTicket;
   if (state.branch) branchInfo.value = state.branch;
   if (state.lessonPhase !== undefined) lessonPhase.value = state.lessonPhase;
+  // 挂载提交回合产出的板书/结构图/配图到刚结算的那条导师回复，保证右侧/顶栏「板书」即时更新
+  if (state.figures?.length || state.diagrams?.length || state.images?.length) {
+    const lastAi = [...msgs.value].reverse().find((m) => m.role === 'ai');
+    if (lastAi) {
+      if (state.figures?.length) lastAi.figures = state.figures;
+      if (state.diagrams?.length) lastAi.diagrams = state.diagrams;
+      if (state.images?.length) lastAi.images = state.images;
+    }
+  }
+  if (Array.isArray(state.knowledgePoints) && state.knowledgePoints.length) {
+    knowledgePoints.value = state.knowledgePoints;
+    if (state.knowledgePoint) lastTaughtPoint.value = String(state.knowledgePoint);
+    const cc = state.confirmCheck;
+    confirmCheck.value = (!state.reArmed && !state.isCompletion && cc && Array.isArray(cc.actions) && cc.actions.length === 2)
+      ? {
+          prompt: String(cc.prompt || '').trim(),
+          actions: cc.actions
+            .filter((a: any) => a && typeof a.label === 'string' && typeof a.message === 'string')
+            .map((a: any) => ({ label: a.label, message: a.message })),
+        }
+      : null;
+  }
+  if (state.peerTriggered && state.peerMessage) {
+    pushPeerItem({
+      role: 'peer',
+      text: String(state.peerMessage),
+      time: nowTime(),
+      strategy: state.peerStrategy || null,
+      followUps: Array.isArray(state.peerFollowUpQuestions)
+        ? state.peerFollowUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 3)
+        : [],
+    });
+    openPeerByTrigger();
+  }
+  if (!state.reArmed && !state.isCompletion && !completed.value) {
+    postQuizReplies.value = buildPostQuizReplies();
+  }
+  if (state.isCompletion && !extensionMode.value) {
+    void finish(isReviewMode.value ? 'complete_review' : 'complete_task');
+  }
 })
 /* F-W（2026-10-10 新人走查实锤）：检查点裁决+讲解此前只渲染在卡片内——答对后卡片 3 秒自动收起，
    整段回复（含「下一问」）随之消失，聊天流不追加该回合（刷新才在历史里见到），新人会以为
@@ -2255,10 +2304,10 @@ watch(checkpoint, (now, prev) => {
    选前端留痕而非后端「先落用户消息」：回合同样是运营基线写入（messagesBaseCount + revision
    CAS），拆成两段写会破坏基线不变量，风险远大于收益。 */
 const INFLIGHT_KEY_PREFIX = 'wf.learn.inflight.';
-interface InflightMarker { text: string; revision: number; ts: number; key?: string }
-function markInflight(sessionId: string, text: string, revision: number, idempotencyKey: string) {
+interface InflightMarker { text: string; revision: number; ts: number; key?: string; imageCount?: number }
+function markInflight(sessionId: string, text: string, revision: number, idempotencyKey: string, imageCount = 0) {
   try {
-    window.sessionStorage.setItem(INFLIGHT_KEY_PREFIX + sessionId, JSON.stringify({ text, revision, ts: Date.now(), key: idempotencyKey } satisfies InflightMarker));
+    window.sessionStorage.setItem(INFLIGHT_KEY_PREFIX + sessionId, JSON.stringify({ text, revision, ts: Date.now(), key: idempotencyKey, imageCount } satisfies InflightMarker));
   } catch { /* 隐私模式/配额不足：留痕失败不阻断发送 */ }
 }
 function clearInflight(sessionId: string) {
@@ -2275,6 +2324,7 @@ function readInflight(sessionId: string): InflightMarker | null {
 
 /* ---------- 启动 ---------- */
 async function boot() {
+  cancelEvaluationRedirect();
   initing.value = true;
   initError.value = '';
   // 开课挂起计时：20s 无响应亮出「重新尝试」（见 initStuck 注释）
@@ -2285,12 +2335,29 @@ async function boot() {
   assessTarget.value = null;
   confirmCheck.value = null;
   openingQuestion.value = '';
-  /* boot 是「重开这一屏」，必须自带重置（2026-11-02 走查实锤）：此前只清 openingQuestion，
-     消息列表/动作选项/检查点都留着上一次的状态。同一页面实例里 boot 跑第二遍（重进、重新尝试、
-     路由重入）时，旧会话的气泡就会与新开课的开场白并存——其中最刺眼的是开场引导重复出现。 */
+  openingMaterial.value = null;
+  openingScene.value = null;
+  openingSceneDone.value = false;
+  sceneCollapsed.value = false;
+  /* boot 是「重开这一屏」，必须自带全量重置：此前漏清契约/知识点/阶段条/板书与结算门禁，
+     重开或切课时会残留上一局的「本节目标已达成」与旧阶段进度。 */
   msgs.value = [];
   quickReplies.value = [];
   postQuizReplies.value = [];
+  knowledgePoints.value = [];
+  lastTaughtPoint.value = '';
+  lessonContract.value = null;
+  lessonReport.value = null;
+  exitTicket.value = null;
+  branchInfo.value = null;
+  lessonPhase.value = null;
+  boardOpen.value = false;
+  settleBlock.value = null;
+  supplementSearching.value = '';
+  finishAction.value = null;
+  wrapupText.value = '';
+  finishStats.value = [];
+  evaluationUrl.value = '';
   // 图片附件状态一并重置（同页重开课时，旧会话的待发图/坏图占位不该带进来）
   pendingImages.value = [];
   brokenImages.value = {};
@@ -2303,12 +2370,13 @@ async function boot() {
   /* pathId 先用 query 兜底落一次（2026-11-03 锁课走查根因修复）：原先只在 startSessionByMode()
      之后才赋值，而「本节暂时开不了课」这条失败路径根本走不到那一行 —— 锁页的「返回路径详情」
      于是在 pathId 为空时退回列表页。失败路径也要知道自己在哪条路径上。 */
-  pathId.value = (route.query.pathId as string) || pathId.value;
+  pathId.value = (route.query.pathId as string) || '';
   try {
+    const activeTaskId = taskId.value;
     // 任务详情与开课无数据依赖(仅回填标题/路径名),与 LLM 开场生成并行,
     // 省掉开课路径上一个串行 RTT;拿不到任务信息也能上课(原语义)
     const taskPromise = request
-      .get(`/learning/tasks/${taskId}`)
+      .get(`/learning/tasks/${activeTaskId}`)
       .then((t) => unwrap<Record<string, any>>(t))
       .catch(() => null);
     // 开课请求本身可能等十几秒（LLM）。任务详情并行返回后立刻回填标题，
@@ -2337,7 +2405,7 @@ async function boot() {
       // pathId 透传不断：少了它，评估页的「返回学习路径」只能退回列表页（2026-09-25）
       router.replace({
         name: 'LearningEvaluationPage',
-        params: { taskId, sessionId: s.sessionId },
+        params: { taskId: activeTaskId, sessionId: s.sessionId },
         query: pathId.value ? { pathId: pathId.value } : {},
       });
       return;
@@ -2399,6 +2467,7 @@ async function boot() {
                 ...(Array.isArray(m.images) && m.images.length ? { images: m.images } : {}),
                 ...(Array.isArray(m.diagrams) && m.diagrams.length ? { diagrams: m.diagrams } : {}),
                 ...(Array.isArray(m.figures) && m.figures.length ? { figures: m.figures } : {}),
+                ...(m.supplementaryMaterial?.materialId ? { supplement: { ...m.supplementaryMaterial, excerpt: m.supplementaryMaterial.excerpt ?? '' } } : {}),
               }));
             restoredCount = restored.length;
             if (restored.length) scrollDown();
@@ -2425,7 +2494,7 @@ async function boot() {
             if (openingAnalysis?.question) {
               // 与直播同口径：有动作选项 → question 收进面板；没有动作选项 → question 自己成气泡
               if (restoredReplies.length) openingQuestion.value = String(openingAnalysis.question);
-              else msgs.value.push({ role: 'ai', text: String(openingAnalysis.question), time: nowTime() });
+              else pushMsg({ role: 'ai', text: String(openingAnalysis.question), time: nowTime() });
             }
             // 伴学历史回填进伴学浮窗（刷新后不丢失）：
             // ① 主动伴学 = peer 标记消息；② 自动触发伴学 = assistant 消息内嵌的 peerMessage
@@ -2453,10 +2522,20 @@ async function boot() {
           // （刷新落在提交之后）则清除留痕，不重复渲染。
           const inflight = readInflight(s.sessionId);
           if (inflight) {
-            const landed = Array.isArray(detail.messages)
-              && detail.messages.some((m) => m.role === 'user' && String(m.content || '') === inflight.text);
+            const hasText = inflight.text.trim().length > 0;
+            const landed = hasText
+              ? (Array.isArray(detail.messages)
+                  && detail.messages.some((m) => m.role === 'user' && String(m.content || '') === inflight.text))
+              : false;
             if (landed) {
               clearInflight(s.sessionId);
+            } else if (!hasText && (inflight.imageCount || 0) > 0) {
+              clearInflight(s.sessionId);
+              pushMsg({
+                role: 'ai',
+                text: '刚才发送的图片没有送达，请重新选择图片发送。',
+                time: nowTime(),
+              });
             } else {
               lastUserText = inflight.text;
               // 沿用刷新前的幂等键：服务端若已提交，重试只重放结果；未提交则正常重跑。
@@ -2505,13 +2584,31 @@ async function boot() {
           if (artifacts.lessonContract) lessonContract.value = artifacts.lessonContract;
           if (artifacts.lessonReport) lessonReport.value = artifacts.lessonReport;
           if (artifacts.exitTicket) exitTicket.value = artifacts.exitTicket;
+          const bs = artifacts.branchState || (detail.state as Record<string, any> | undefined)?.branchState;
+          if (bs && typeof bs === 'object') {
+            branchInfo.value = {
+              kind: String(bs.active ? 'branch' : 'main'),
+              need: '',
+              active: bs.active ?? null,
+              remaining: Math.max(0, Number(bs.budget || 0) - Number(bs.turnsUsed || 0)),
+              parkingLot: Array.isArray(bs.parkingLot) ? bs.parkingLot : [],
+            };
+          } else if (artifacts.lessonReport?.parkingLot) {
+            branchInfo.value = {
+              kind: artifacts.lessonReport.branch?.active ? 'branch' : 'main',
+              need: '',
+              active: artifacts.lessonReport.branch?.active ?? null,
+              remaining: 0,
+              parkingLot: artifacts.lessonReport.parkingLot,
+            };
+          }
           // 课堂阶段（课堂阶段协议）：阶段状态持久化在 teachingState.lessonPhase，刷新后据此还原顶部阶段条
           lessonPhase.value = phaseFromTeachingState(detail.state?.lessonPhase);
           session.value.revision = typeof detail.revision === 'number' ? detail.revision : session.value.revision;
         }
       } catch { /* 历史回填失败不阻断上课 */ }
     } else if (s.mode === 'new') {
-      aiTeachingAPI.getLatestTaskEvaluation(taskId)
+      aiTeachingAPI.getLatestTaskEvaluation(taskId.value)
         .then((latest) => {
           if (latest?.sessionId) toast.info('本课已学过，本次将重新开始');
         })
@@ -2731,7 +2828,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
   lastSendKeyText = text;
   if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime(), ...(images.length ? { images } : {}) });
   // 发送即留痕（未确认送达）：中途刷新时据此恢复气泡/给重发入口（见 markInflight 注释）
-  markInflight(session.value.sessionId, text, session.value.revision, sendKey);
+  markInflight(session.value.sessionId, text, session.value.revision, sendKey, images.length);
   quickReplies.value = [];
   openingQuestion.value = '';
   confirmCheck.value = null;
@@ -3005,7 +3102,7 @@ async function finish(
       if (knowledgePoints.value.length) stats.push({ label: '知识点', value: `${masteredCount.value}/${knowledgePoints.value.length}` });
     }
     finishStats.value = stats;
-    evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
+    evaluationUrl.value = `/learn/${taskId.value}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
     // 只有用户主动「完成/结束」才自动进反馈；模型判定完课的收尾别把用户从最后一条讲解上拽走
     if (opts.enterEvaluation) scheduleEvaluationRedirect();
   } catch (e: any) {
@@ -3022,7 +3119,7 @@ async function finish(
     // 结算失败不冒充完成：保留重试入口，用户仍可去学习反馈页查看
     const msg = e?.message || e?.response?.data?.error?.message || '结算失败';
     toast.error(`课堂结算未完成：${msg}`);
-    evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
+    evaluationUrl.value = `/learn/${taskId.value}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
     // 会话可能已收束但轮询异常：提供进入反馈页的途径（完成浮层不弹，直接弹全局确认引导，
     // 不再用 setTimeout（此前 timer 未在卸载清理，路由离开后弹窗会出现在下一个页面上））
     if (session.value) {
@@ -3088,7 +3185,7 @@ function goToFeedback() {
   const sid = session.value?.sessionId;
   if (!sid) return;
   const url = evaluationUrl.value
-    || `/learn/${taskId}/evaluation/${sid}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
+    || `/learn/${taskId.value}/evaluation/${sid}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
   // replace 而非 push：本节已是终态，回退不该再回到这间教室（与结算后的自动跳转同口径）
   router.replace(url);
 }
@@ -3322,19 +3419,24 @@ async function recoverSession(sid: string) {
       checkpointPending.value = false;
       completed.value = false;
       finalizing.value = false;
+      openingQuestion.value = '';
+      postQuizReplies.value = [];
+      assessTarget.value = null;
+      confirmCheck.value = null;
+      resetPeer();
       quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
       if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
         knowledgePoints.value = s.knowledgePoints;
       }
       const openingText = s.opening?.message || s.welcomeMessage;
-    openingMaterial.value = s.opening?.material && typeof s.opening.material.text === 'string'
-      ? { title: s.opening.material.title, text: s.opening.material.text }
-      : null;
-      if (openingText) msgs.value.push({ role: 'ai', text: openingText, time: nowTime() });
+      openingMaterial.value = s.opening?.material && typeof s.opening.material.text === 'string'
+        ? { title: s.opening.material.title, text: s.opening.material.text }
+        : null;
+      if (openingText) pushMsg({ role: 'ai', text: openingText, time: nowTime() });
       // 摸底 question 收进面板作一行可选引导（与 boot 一致）；无动作时仍 push 气泡
       if (s.opening?.question) {
         if (quickReplies.value.length) openingQuestion.value = String(s.opening.question);
-        else msgs.value.push({ role: 'ai', text: String(s.opening.question), time: nowTime() });
+        else pushMsg({ role: 'ai', text: String(s.opening.question), time: nowTime() });
       }
       toast.info('已重新开课');
     }
@@ -3379,6 +3481,43 @@ function onVisualViewportResize() {
   syncVvh();
 }
 
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (!finalizing.value) return;
+  e.preventDefault();
+  e.returnValue = '';
+}
+
+let registerBeforeRouteLeave: ((guard: () => Promise<boolean> | boolean) => void) | null = null;
+try {
+  const candidate = (VueRouter as Record<string, unknown>).onBeforeRouteLeave;
+  if (typeof candidate === 'function') {
+    registerBeforeRouteLeave = candidate as (guard: () => Promise<boolean> | boolean) => void;
+  }
+} catch {
+  registerBeforeRouteLeave = null;
+}
+if (registerBeforeRouteLeave) {
+  registerBeforeRouteLeave(async () => {
+    if (!finalizing.value) return true;
+    return Boolean(await askConfirm({
+      title: '正在完成课堂结算',
+      message: '学习总结仍在生成中，现在离开可能导致总结未能及时展示。',
+      confirmText: '仍要离开',
+      danger: false,
+    }));
+  });
+}
+
+watch(taskId, (next, prev) => {
+  if (!next || next === prev) return;
+  taskTitle.value = '';
+  pathName.value = '';
+  stageProgress.value = null;
+  extensionMode.value = route.query.mode === 'extension';
+  resetPeer();
+  void boot();
+});
+
 onMounted(() => {
   boot();
   syncVvh();
@@ -3386,12 +3525,14 @@ onMounted(() => {
   window.visualViewport?.addEventListener('scroll', onVisualViewportResize);
   scheduleMermaidRender();
   window.addEventListener('keydown', onPageKeydown);
+  window.addEventListener('beforeunload', onBeforeUnload);
   window.addEventListener('pagehide', onPageHide);
   document.addEventListener('visibilitychange', onVisibilityChange);
   document.addEventListener('click', onKpDocClick);
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onPageKeydown);
+  window.removeEventListener('beforeunload', onBeforeUnload);
   window.visualViewport?.removeEventListener('resize', onVisualViewportResize);
   window.visualViewport?.removeEventListener('scroll', onVisualViewportResize);
   if (mermaidTimer) window.clearTimeout(mermaidTimer);
@@ -3413,7 +3554,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* 锁视口高度：整页不滚动、tutor 内部滚动、composer 常驻底部（原先只有窄屏锁，桌面档 tutor 随内容长高把输入区顶出首屏）。
    flex:0 0 auto 必须显式——.learn 同时带 .v2-page，需压过其全局 flex:1 拉伸，否则 height 会被拉到内容高度。 */
-.learn { height: calc(var(--vvh, 100dvh) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--canvas); }
+.learn { height: calc((var(--vvh, 100dvh) - var(--wf-anb-h, 0px)) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--canvas); }
 
 /* ---------- 头部 ---------- */
 .learn__head {
@@ -3541,6 +3682,7 @@ onBeforeUnmount(() => {
   .learn__body--with-board .tutor__scroll > *,
   .learn__body--with-board .composer__box,
   .learn__body--with-board .tutor > .oscene,
+  .learn__body--with-board .tutor > .tutor__offline,
   .learn__body--with-board .tutor > .tutor__resume,
   .learn__body--with-board .tutor > .replies,
   .learn__body--with-board .tutor > .gate,
@@ -3556,7 +3698,7 @@ onBeforeUnmount(() => {
     order: -1;
     position: sticky;
     top: 14px;
-    max-height: calc(100dvh - 140px);
+    max-height: calc((100dvh - 140px) / var(--vp-zoom, 1));
     padding: 12px 14px 14px;
     border: 1px solid var(--line);
     border-radius: var(--mk-radius-modal);
@@ -3681,7 +3823,7 @@ onBeforeUnmount(() => {
   /* 单列布局：tutor 吃掉 .learn__body 的全部高度（2026-10-08 起正文只剩它一个），
      高度由 flex 决定 —— 不再写死 vh 上限。 */
   flex: 1 1 auto;
-  min-height: 560px;
+  min-height: 0;
 }
 .tutor__scroll {
   --tutor-pad-x: 20px;
@@ -3714,6 +3856,23 @@ onBeforeUnmount(() => {
 /* 首屏短会话构图：只有开场白时把它在消息区垂直居中，空白变成上下留白。
    2026-11-25 起顶部不再有知识点胶囊，居中组里只剩开场白。 */
 .tutor__scroll--intro { justify-content: center; }
+
+/* 断网提示条：网络断开时固定在对话区顶部 */
+.tutor__offline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 14px 0;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--amber, #d97706) 35%, transparent);
+  border-radius: var(--mk-radius-xl);
+  background: color-mix(in srgb, var(--amber, #d97706) 8%, transparent);
+  color: var(--amber-ink, #92400e);
+  font-size: 12.5px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.tutor__offline-text { flex: 1; }
 
 /* 恢复进度横幅：续上历史时的可见确认（替代一次性 toast） */
 .tutor__resume {
@@ -3952,7 +4111,7 @@ onBeforeUnmount(() => {
 }
 .msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
 /* 追加语义说明（2026-11-21）：让「修正后重发」不再被读成改写历史 */
-.msg__edit-hint { margin-right: auto; font-size: 11.5px; color: var(--muted); }
+.msg__edit-hint { margin-right: auto; font-size: 12px; color: var(--muted); }
 .msg__edit-save, .msg__edit-cancel {
   font-size: 12px; font-weight: 700;
   padding: 5px 14px;
@@ -4210,6 +4369,11 @@ onBeforeUnmount(() => {
   /* 顶部 8px 渐隐：滚到底时上一条消息不会被硬切成半截 */
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
   mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+}
+.peerdock__empty {
+  padding: 18px 14px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--muted); text-align: center;
 }
 .peerdock__msg { display: grid; gap: 3px; justify-items: start; max-width: 100%; }
 .peerdock__msg--me { justify-items: end; }
@@ -5140,7 +5304,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--ink);
   font: inherit;
   font-size: 13px;
   line-height: 1.65;
@@ -5412,6 +5576,8 @@ onBeforeUnmount(() => {
   /* 头部三件套在触屏档抬到 36 / ⋯ 回到 40（桌面是统一的 32/8px 档） */
   .learn__kpbtn, .learn__finishbtn { height: 36px; }
   .learn__head-right :deep(.imm-menu__btn) { width: 40px; height: 40px; }
+  /* 阶段条板书按钮同步抬到 36 高（触控下沿） */
+  .lessonbar__board { min-height: 36px; }
   /* 小测选项在触屏档回到 44（桌面 36）：选项是这一屏最常点的一类目标 */
   .checkpoint__option { min-height: 44px; padding: 10px 12px; }
 }
@@ -5480,6 +5646,7 @@ onBeforeUnmount(() => {
   /* 滚动区之外的「行动台」同属这一列内容，必须与消息同宽：它们不是 .tutor__scroll 的孩子，
      拿不到上面那条 720 上限——否则检查点/快捷引导会铺满整张聊天卡，同一屏两套宽度。 */
   .tutor > .oscene,
+  .tutor > .tutor__offline,
   .tutor > .tutor__resume,
   .tutor > .replies,
   .tutor > .gate,
@@ -5519,6 +5686,7 @@ onBeforeUnmount(() => {
   .tutor__scroll > *,
   .composer__box { max-width: 720px; }
   .tutor > .oscene,
+  .tutor > .tutor__offline,
   .tutor > .tutor__resume,
   .tutor > .replies,
   .tutor > .gate,
@@ -5530,9 +5698,9 @@ onBeforeUnmount(() => {
     padding-left: max(16px, calc((100% - 720px) / 2));
     padding-right: max(16px, calc((100% - 720px) / 2));
   }
-  /* 知识点浮窗展开时给右侧留出 420px，不与消息列叠字。只在桌面阅读列生效：
-     浮窗 410px 锚在页头右侧，正文列右缘退到浮窗左侧，聊天气泡/小测/输入盒一起收缩。 */
-  .tutor--kp-open { padding-right: 420px; }
+  /* 知识点浮窗展开时给右侧留出 420px，不与消息列叠字。只在非分栏板书的桌面阅读列生效：
+     分栏板书态有独立 420px 左板，再给右栏扣 420px 会把聊天气泡挤成窄条，浮窗直接悬停即可。 */
+  .learn__body:not(.learn__body--with-board) .tutor--kp-open { padding-right: 420px; }
   .peerdock { width: min(360px, calc(100vw - 32px)); max-height: 560px; }
 }
 /* 小测出现后消息区被小测卡压短，移动端整幅结构图比可视区高，底部分支节点会被截在小测卡上沿。
@@ -5570,6 +5738,11 @@ onBeforeUnmount(() => {
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
+}
+/* 覆盖 .tutor__scroll > * 的 720px/width:100% 限制：阶段条需贴齐滚区左右边，不能被缩窄或左移 */
+.tutor__scroll > .lessonbar {
+  width: auto;
+  max-width: none;
 }
 .lessonbar__steps {
   display: flex;
@@ -5664,8 +5837,8 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  max-width: 96vw;
-  max-height: 88vh;
+  max-width: calc(96vw / var(--vp-zoom, 1));
+  max-height: calc(88vh / var(--vp-zoom, 1));
   overflow: hidden;
   background: var(--surface);
   border-radius: var(--mk-radius-xl);
@@ -5678,6 +5851,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 12px;
   right: 14px;
+  min-height: 36px;
   padding: 5px 12px;
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-pill);

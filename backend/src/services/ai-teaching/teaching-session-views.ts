@@ -833,10 +833,30 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
   const engagementScores = analyzedMessages
     .map((message) => Number(message.analysis?.engagement))
     .filter((value) => Number.isFinite(value));
-  // 认知负荷：teaching-wrapup 的规则声明了"loadIndex 均值与峰值"，但此前从未提供（审计 §3.19 P0③）
+  // 认知负荷：teaching-wrapup 的规则声明了"loadIndex 均值与峰值"，同时补齐离散负荷档位分布（peakLoadBand / loadBandDistribution）
   const loadIndexScores = analyzedMessages
     .map((message) => Number(message.analysis?.loadIndex))
     .filter((value) => Number.isFinite(value));
+  const loadBandCounts = { under: 0, flow: 0, hint: 0, overload: 0, unknown: 0 };
+  let loadBandTotal = 0;
+  for (const message of analyzedMessages) {
+    const band = message.analysis?.loadBand;
+    if (band === 'under' || band === 'flow' || band === 'hint' || band === 'overload' || band === 'unknown') {
+      loadBandCounts[band] += 1;
+      loadBandTotal += 1;
+    }
+  }
+  const peakLoadBand: 'overload' | 'hint' | 'flow' | 'under' | 'unknown' | null = loadBandCounts.overload > 0
+    ? 'overload'
+    : loadBandCounts.hint > 0
+      ? 'hint'
+      : loadBandCounts.flow > 0
+        ? 'flow'
+        : loadBandCounts.under > 0
+          ? 'under'
+          : loadBandCounts.unknown > 0
+            ? 'unknown'
+            : null;
 
   const confusionCounter = new Map<string, number>();
   const cognitiveCounter = new Map<string, number>();
@@ -903,6 +923,7 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
     completionCandidateSeen,
     avgLoadIndex: avg(loadIndexScores) === null ? null : Math.round((avg(loadIndexScores) as number) * 1000) / 1000,
     maxLoadIndex: loadIndexScores.length > 0 ? Math.round(Math.max(...loadIndexScores) * 1000) / 1000 : null,
+    ...(loadBandTotal > 0 ? { peakLoadBand, loadBandDistribution: loadBandCounts } : {}),
     ...(rsmAttempts.length > 0 ? { rsmAttempts } : {}),
   };
 }

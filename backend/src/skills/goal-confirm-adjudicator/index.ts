@@ -56,10 +56,15 @@ export async function executeGoalConfirmAdjudicator(
       const obj = (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, unknown>;
       return { confirm: obj.confirm === true };
     },
-    validateParsedOutput: (parsed) =>
-      parsed && typeof parsed === 'object'
-        ? { valid: true }
-        : { valid: false, failureReason: 'GOAL_CONFIRM_ADJUDICATOR_OUTPUT_NOT_OBJECT' },
+    validateParsedOutput: (parsed) => {
+      if (!parsed || typeof parsed !== 'object') {
+        return { valid: false, failureReason: 'GOAL_CONFIRM_ADJUDICATOR_OUTPUT_NOT_OBJECT' };
+      }
+      if (typeof (parsed as Record<string, unknown>).confirm !== 'boolean') {
+        return { valid: false, failureReason: 'GOAL_CONFIRM_ADJUDICATOR_CONFIRM_NOT_BOOLEAN' };
+      }
+      return { valid: true };
+    },
   }, input);
 
   if (!result.success || !result.output) {

@@ -73,14 +73,14 @@
                 <span>目标规划</span>
                 <span class="ob__chip">澄清问题</span>
               </div>
-              <div class="ob__bubble ob__bubble--user">每周 Excel 周报太花时间，想用 Python 自动化</div>
+              <div class="ob__bubble ob__bubble--user">季度汇报总像流水账，领导说抓不住重点</div>
               <div class="ob__bubble ob__bubble--ai">
                 <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" />
                 <div class="ob__bubble-body">
-                  <p>好，我们先把问题说小一点。你更想先节省哪一段时间？</p>
+                  <p>好，我们先把问题说小一点。你更想先打通哪一块？</p>
                   <div class="ob__demo-tags">
-                    <span class="is-on">清洗与合并数据</span>
-                    <span>出图与汇报</span>
+                    <span class="is-on">先抛结论的骨架</span>
+                    <span>被追问时拿证据兜住</span>
                   </div>
                 </div>
               </div>
@@ -108,17 +108,17 @@
             <div class="ob__demo" aria-hidden="true">
               <div class="ob__demo-bar">
                 <span>学习路径</span>
-                <span class="ob__chip">Excel 周报自动化</span>
+                <span class="ob__chip">结构化季度汇报</span>
               </div>
               <div class="ob__demo-stages">
                 <div class="ob__stage is-done"><i>✓</i><b>打基础</b><small>已完成</small></div>
-                <div class="ob__stage is-on"><i>2</i><b>数据读取</b><small>当前阶段</small></div>
-                <div class="ob__stage"><i>3</i><b>自动化跑通</b><small>待开始</small></div>
+                <div class="ob__stage is-on"><i>2</i><b>结论先行</b><small>当前阶段</small></div>
+                <div class="ob__stage"><i>3</i><b>追问拆解</b><small>待开始</small></div>
               </div>
               <div class="ob__demo-prog"><i style="--w: 42%"></i></div>
               <div class="ob__demo-action ob__demo-action--stack">
                 <span class="ob__demo-action__tag">今日行动</span>
-                <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>阶段 2 / 3</small></span>
+                <span class="ob__demo-action__body"><b>把背景流水账压成一句话结论</b><small>阶段 2 / 3</small></span>
               </div>
             </div>
 
@@ -152,7 +152,7 @@
               </div>
               <div class="ob__demo-action">
                 <span class="ob__demo-action__tag">今日行动</span>
-                <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>来自「Excel 周报自动化」</small></span>
+                <span class="ob__demo-action__body"><b>把背景流水账压成一句话结论</b><small>来自「结构化季度汇报」</small></span>
               </div>
               <div class="ob__demo-metrics">
                 <span><small>健康度</small><b>良好</b></span>
@@ -257,13 +257,13 @@ async function goDashboard() {
 .ob {
   /* 除以 zoom：1600+ 档有 zoom 时 min-height:100vh 会渲染成 1.08 个视口高，
      页面凭空多出 8% 滚动（v2.css zoom ⚠ 注释同款问题） */
-  min-height: calc(100vh / var(--vp-zoom, 1));
+  min-height: calc((100vh - var(--wf-anb-h, 0px)) / var(--vp-zoom, 1));
   position: relative;
 }
 
 .ob__main {
   position: relative;
-  min-height: calc(100vh / var(--vp-zoom, 1));
+  min-height: calc((100vh - var(--wf-anb-h, 0px)) / var(--vp-zoom, 1));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -737,5 +737,13 @@ async function goDashboard() {
   .ob__nav { position: relative; justify-content: center; }
   .ob__nav > span:empty { display: none; }
   .ob__back { position: absolute; left: 0; top: 50%; transform: translateY(-50%); }
+}
+@media (max-width: 420px) {
+  .ob__nav:has(.ob__back) { justify-content: space-between; }
+  .ob__back { position: static; transform: none; }
+}
+@media (max-width: 360px) {
+  .ob__demo-metrics { flex-wrap: wrap; }
+  .ob__demo-metrics span { min-width: calc(50% - 4px); }
 }
 </style>

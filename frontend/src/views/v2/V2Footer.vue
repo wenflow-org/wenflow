@@ -45,7 +45,7 @@ const version = appVersion;
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 50%, transparent), color-mix(in srgb, var(--surface) 75%, transparent));
 }
 .v2footer__inner {
-  max-width: 1180px;
+  max-width: min(92vw, var(--vp-container, 1360px));
   margin: 0 auto;
   padding: 12px 28px 14px;
   display: flex;
@@ -53,6 +53,9 @@ const version = appVersion;
   align-items: center;
   justify-content: space-between;
   gap: 10px 24px;
+}
+@media (max-width: 1100px) {
+  .v2footer__inner { padding-left: 14px; padding-right: 14px; }
 }
 .v2footer__brand {
   display: inline-flex;

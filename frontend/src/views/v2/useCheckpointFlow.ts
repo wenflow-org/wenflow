@@ -8,6 +8,13 @@ import { toast } from '@/utils/toast';
 import { aiTeachingAPI, type LessonContract, type LessonReport, type ExitTicket, type LessonPhaseSummary, type MessageResult } from '@/api/aiTeaching';
 import { isCheckpointAlreadyHandled } from '@/utils/checkpoint';
 
+function createCheckpointKey(checkpointId: string): string {
+  const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  return `cp-${checkpointId}:${uuid}`;
+}
+
 /**
  * 讲解的落点（2026-11-02 用户定调：讲解是教学正文，归对话区）。
  *
@@ -35,6 +42,19 @@ export function useCheckpointFlow(
     branch?: MessageResult['branch'] | null;
     /** 课堂阶段摘要（课堂阶段协议，2026-11-26）：提交回合也要推进顶部阶段条 */
     lessonPhase?: LessonPhaseSummary | null;
+    /** 板书/结构图/配图、知识点进度、伴学触发与完课信号 */
+    figures?: MessageResult['figures'];
+    diagrams?: MessageResult['diagrams'];
+    images?: MessageResult['images'];
+    knowledgePoint?: string | null;
+    knowledgePoints?: MessageResult['knowledgePoints'];
+    confirmCheck?: MessageResult['confirmCheck'] | null;
+    peerTriggered?: boolean;
+    peerMessage?: string | null;
+    peerStrategy?: string | null;
+    peerFollowUpQuestions?: string[];
+    isCompletion?: boolean;
+    reArmed?: boolean;
   }) => void
 ) {
   const checkpoint = ref<Record<string, any> | null>(null);
@@ -215,6 +235,7 @@ export function useCheckpointFlow(
       const checkpointId = checkpoint.value.id;
       const sessionId = session.value.sessionId;
       const revision = session.value.revision;
+      const checkpointIdempotencyKey = createCheckpointKey(checkpointId);
       let streamed = '';
       let r: Record<string, any>;
       // 讲解流停滞看门狗（#113）：90s 内没有 judgement/delta 就中止，别让卡片永远停在
@@ -230,6 +251,7 @@ export function useCheckpointFlow(
         // 导师讲解随后用 delta 逐段补齐；因此用户可以"秒知对错"而不用干等整个教学回合。
         r = await aiTeachingAPI.streamSubmitCheckpoint(sessionId, checkpointId, payload, revision, {
           signal: submitCtrl.signal,
+          idempotencyKey: checkpointIdempotencyKey,
           // 心跳也算进展（2026-10-31 走查 P0-2）：讲解回合 final 前可整段无字节，只靠
           // onDelta 喂狗会在 90s 处把健康慢回合掐断，用户看到的是「回答正确，可继续」+ 丢了讲解
           onActivity: armSubmitWatchdog,
@@ -264,9 +286,9 @@ export function useCheckpointFlow(
         }) as unknown as Record<string, any>;
       } catch (streamError: any) {
         // 连接层失败且**未收到任何内容**时才安全回退（收到过 judgement/delta 就不能重发：
-        // 服务端可能已经消费了检查点）
+        // 服务端可能已经消费了检查点）；回退请求与流式请求共用同一幂等键
         if (!streamError?.transport) throw streamError;
-        r = await aiTeachingAPI.submitCheckpoint(sessionId, checkpointId, payload, revision) as unknown as Record<string, any>;
+        r = await aiTeachingAPI.submitCheckpoint(sessionId, checkpointId, payload, revision, checkpointIdempotencyKey) as unknown as Record<string, any>;
       } finally {
         window.clearTimeout(submitWatchdog);
       }
@@ -311,6 +333,18 @@ export function useCheckpointFlow(
           exitTicket: r.exitTicket ?? null,
           branch: r.branch ?? null,
           lessonPhase: r.lessonPhase ?? null,
+          figures: Array.isArray(r.figures) ? r.figures : undefined,
+          diagrams: Array.isArray(r.diagrams) ? r.diagrams : undefined,
+          images: Array.isArray(r.images) ? r.images : undefined,
+          knowledgePoint: r.knowledgePoint ?? null,
+          knowledgePoints: Array.isArray(r.knowledgePoints) ? r.knowledgePoints : undefined,
+          confirmCheck: r.confirmCheck ?? null,
+          peerTriggered: r.peerTriggered === true,
+          peerMessage: r.peerMessage ?? null,
+          peerStrategy: r.peerStrategy ?? null,
+          peerFollowUpQuestions: Array.isArray(r.peerFollowUpQuestions) ? r.peerFollowUpQuestions : undefined,
+          isCompletion: r.isCompletion === true,
+          reArmed: Boolean(reArmed),
         });
       }
       clearDraft();

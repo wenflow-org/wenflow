@@ -30,8 +30,10 @@
            /user/agent-logs 高亮错停在「设置」上；激活判定改为与当前路由精确对应，
            深页的当前页由下面这个可见 h1 承担。 -->
       <div v-if="!onCapabilityTab" class="uc__deeptitle">
-        <h1>{{ title }}</h1>
-        <p v-if="description">{{ description }}</p>
+        <div class="uc__deeptitle-main">
+          <h1>{{ title }}</h1>
+          <p v-if="description">{{ description }}</p>
+        </div>
         <div v-if="$slots.actions" class="uc__head-actions">
           <slot name="actions" />
         </div>
@@ -133,7 +135,7 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 }
 
 .uc__seg__btn {
-  min-height: 34px;
+  min-height: 36px;
   padding: 6px 20px;
   display: inline-flex;
   align-items: center;
@@ -163,6 +165,16 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 .uc__seg__btn:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 
 /* 深页（设置/调用日志）标题行：分段器不覆盖时保留可见 h1 */
+.uc__deeptitle {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+}
+.uc__deeptitle-main {
+  min-width: 0;
+}
 .uc__deeptitle h1 {
   margin: 4px 0 0;
   font-size: 20px;
@@ -248,12 +260,6 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
     gap: 12px;
   }
 
-  .uc__head {
-    flex-direction: column;
-    gap: 12px;
-    padding: 0 2px;
-  }
-
   .uc__head-actions {
     width: 100%;
     justify-content: stretch;
@@ -270,25 +276,20 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
     white-space: nowrap;
   }
 
-  /* 移动端页头密度：390 下页头 74px + 分段导航 40px，压到 ~56 + ~34 */
-  .uc__kicker {
-    margin-bottom: 4px;
-  }
-
   /* 移动端页标题：22 → 20 → 18（2026-09-24 两轮反馈，与各页 hero 标题同步收） */
-  .uc__head h1 {
+  .uc__deeptitle h1 {
     margin-bottom: 4px;
     font-size: 18px;
   }
 
-  .uc__head p {
+  .uc__deeptitle p {
     font-size: 13px;
     line-height: 1.55;
   }
 
   /* 分段器窄屏：fit-content 本身就放得下 4 个 2 字 tab（~270px），内衬收一档即可 */
   .uc__seg__btn {
-    min-height: 34px;
+    min-height: 36px;
     padding: 0 14px;
     font-size: 12.5px;
   }

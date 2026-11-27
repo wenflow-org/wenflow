@@ -422,7 +422,7 @@
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
             <span v-if="entryCopy.hint" class="proposal-invite__sub">{{ entryCopy.hint }}</span>
-            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形' }}</span>
+            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个方向 · {{ live.proposal?.outcome || '方向已成形' }}</span>
           </div>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
@@ -803,8 +803,8 @@ const chatPlaceholder = computed(() => {
   // 占位符必须跟着阶段走，否则用户还在按「回答问题」理解这个框，不知道可以直接确认。
   if (live.stage === 'proposing' && live.proposal) {
     return isNarrow.value
-      ? '说调整方向，或点确认方案'
-      : '直接说想调整的地方，或点「查看并确认」';
+      ? '想调整哪块直接说；确认请点「查看并确认」'
+      : '想调整方向可直接输入；确认生成请点「查看并确认」';
   }
   return isNarrow.value ? '回答问题，或补充基础、时间…' : '回答导师的问题，或补充你的基础、时间和限制…';
 });
@@ -907,6 +907,11 @@ onBeforeUnmount(() => {
 function resetToEntry() {
   live.resetView();
   phase.value = 'preview';
+  proposalDismissed.value = false;
+  proposalReviewRequested.value = false;
+  proposalSnapshot.value = null;
+  readOnlyReview.value = false;
+  confirmError.value = false;
   input.value = '';
   // 挂载列表归零（资料跟路径生成走）：新目标干净起步，旧资料不会静默跟到下一次生成
   attachedMaterials.value = [];
@@ -1213,6 +1218,7 @@ const confirmError = ref(false);
 /* ---------- 用户消息内联编辑（仅最后一条用户消息可编辑） ---------- */
 function canEditMessage(msg: LiveMessage): boolean {
   if (live.sending || editingMsgId.value) return false;
+  if (live.isCompleted || live.stage === 'completed' || !!live.stopped) return false;
   const lastUserIdx = live.messages.map((x) => x.role).lastIndexOf('user');
   return lastUserIdx >= 0 && live.messages[lastUserIdx] === msg;
 }
@@ -1559,7 +1565,7 @@ watch(
   (replies) => {
     currentQuickReplies.value = [...replies];
   },
-  { deep: true }
+  { deep: true, immediate: true }
 );
 
 async function doSend(e?: unknown) {
@@ -1592,7 +1598,14 @@ watch(
   () => {
     if (!live.started && !live.conversationId) return;
     if (live.isCompleted || live.stage === 'completed' || live.stage === 'ready' || live.learningPath) {
+      const wasDone = phase.value === 'done';
       phase.value = 'done';
+      // 用户先关闭方案弹窗、随后用自然语言确认（「就按这个来」）时，proposalDismissed 仍为 true；
+      // 首次进入终态时清掉该标记，让 done 面板立即弹出，避免页面静默卡死。
+      if (!wasDone) {
+        proposalDismissed.value = false;
+        proposalReviewRequested.value = false;
+      }
       return;
     }
     // 无路径终局被重新打开（用户「继续补充目标」后服务端把会话置回 proposing/understanding）：
@@ -1762,6 +1775,20 @@ const scenePool = [
     seed: '我想系统了解王阳明心学，不为了考试。心即理、知行合一、致良知到底在讲什么，想能自己读懂《传习录》里的选段',
     bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/></svg>'
+  },
+  {
+    title: '人教版高中生物《细胞呼吸》',
+    desc: '教材同步梳理：场所、过程与实验易混点',
+    seed: '我在学人教版高中生物必修一第5章《细胞呼吸的原理和应用》，总是把有氧和无氧呼吸几个阶段的场所、产物和ATP去向混在一起，想按教材把这块彻底理清',
+    bg: 'rgba(49,177,111,.12)', ink: 'var(--green-ink)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 2.5 1.3 4.7 3.3 5.9L9 20h6l.7-5.1C17.7 13.7 19 11.5 19 9a7 7 0 0 0-7-7zm-1 15v-3.5l-2-2 1.4-1.4 1.6 1.6 1.6-1.6 1.4 1.4-2 2V17h-2z"/></svg>'
+  },
+  {
+    title: '新《公司法》认缴出资与股东责任',
+    desc: '五年实缴过渡期、加速到期与减资边界',
+    seed: '我是公司法务，2024年7月生效的新《公司法》对注册资本五年认缴期限和股东出资加速到期改动很大，我想对照新法条文和权威解读把判断边界理清',
+    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2 3 6.5v2h18v-2L12 2zm-7 9v7H3v2h18v-2h-2v-7h-2v7h-4v-7h-2v7H7v-7H5z"/></svg>'
   }
 ];
 
@@ -2286,7 +2313,7 @@ function shuffleScenes() {
 @media (min-width: 1101px) {
   /* overflow:hidden：锁高之后内容若比视口高，只允许在 entry/chat 内部滚，
      不许把文档撑出滚动条 */
-  .goal { height: calc(var(--vvh, 100dvh) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
+  .goal { height: calc((var(--vvh, 100dvh) - var(--wf-anb-h, 0px)) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
   /* 方案 A（2026-11-06 走查）：右侧整体包进一张白卡——头部/输入区的两块白底从此
      同属一张卡，中间聊天流不再漏画布灰；与左栏画像卡同圆角/描边/投影同族等高 */
   .chat {
@@ -3005,7 +3032,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* 锁定视口高度：会话态整页不滚动，chat 内部滚动、composer 吸底在底部导航之上。
      flex-grow:0 显式置零（.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度）。
      v2.css 全局 .v2-page { padding-bottom:72px } 为底部导航让位，此处保留。 */
-  .goal { height: calc(var(--vvh, 100dvh) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
+  .goal { height: calc((var(--vvh, 100dvh) - var(--wf-anb-h, 0px)) / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
   .work {
     grid-template-columns: 1fr;
     /* 信息面板在移动端改绝对定位（零占位锚点），chat 独占整行撑满 */
@@ -3283,7 +3310,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
      .peerdock 暗色档均已移除——模板早已不渲染这些类。.replies 当时被误列入：
      2026-09-30 快捷补充面板改名 .replies 后重新启用，移动端 margin-left 归零规则仍在。） */
   /* 底衬 14 → 40（2026-11-05）：本条整条覆盖上面的 padding，底部必须显式带上渐变让位值 */
-  .chat__scroll { padding: 14px 14px 40px; }
+  .chat__scroll { padding: 14px 14px 16px; }
   .login-gate { padding: 28px 20px; border-radius: var(--mk-radius-modal); }
   .login-gate h1 { font-size: 18px; }
 }
@@ -3334,7 +3361,10 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   .entry__hero,
   .entry__cards,
   .entry .composer--entry,
+  .entry .recent,
   .entry__hero p { max-width: clamp(640px, 62vw, 960px); }
+  .entry .composer--entry .composer__box,
+  .entry .composer--entry .composer__hint { max-width: none; }
 }
 
 /* 桌面阅读宽度：>1100 对话内容限 ~760px 居中（同课堂页批10） */

@@ -652,7 +652,12 @@ export async function collectMaterialPack(
       if (candidate?.notes?.length) {
         notes.push(...candidate.notes.slice(0, 2).map((note) => `抽取诊断（${sourceUrl}）：${note}`));
       }
-      if (candidate && Array.isArray(candidate.keyPoints) && candidate.keyPoints.length > 0) {
+      if (
+        candidate &&
+        candidate.status !== 'not_found' &&
+        Array.isArray(candidate.keyPoints) &&
+        candidate.keyPoints.length > 0
+      ) {
         chosen = item;
         draft = candidate;
         break;

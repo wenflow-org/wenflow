@@ -32,6 +32,7 @@ export const MAX_PATH_REPLAN_DEPTH = 1;
 export interface PathReviewAnalysis {
   pathName?: string | null;
   summary?: string | null;
+  pathDeliverable?: string | null;
   cognitiveCore?: unknown;
   cognitiveDesign?: unknown;
   /** 路径拓扑（path-planning 输出；缺失时旧路径按 diagnostic 评审） */
@@ -66,6 +67,7 @@ export interface PathReviewSnapshotV1 {
   pathPlan: {
     name?: string | null;
     summary?: string | null;
+    pathDeliverable?: string | null;
     topology?: string | null;
     cognitiveCore?: unknown;
     milestones?: unknown[];
@@ -102,6 +104,7 @@ export function buildPathReviewSnapshot(
     pathPlan: {
       name: analysis.pathName ?? null,
       summary: analysis.summary ?? null,
+      pathDeliverable: analysis.pathDeliverable ?? null,
       topology: analysis.topology ?? null,
       cognitiveCore: analysis.cognitiveCore || analysis.cognitiveDesign || null,
       milestones: Array.isArray(persistedMilestones)
@@ -130,6 +133,7 @@ export function buildPathReviewSnapshotFromAnalysis(
     pathPlan: {
       name: analysis.pathName ?? null,
       summary: analysis.summary ?? null,
+      pathDeliverable: analysis.pathDeliverable ?? null,
       topology: analysis.topology ?? null,
       cognitiveCore: analysis.cognitiveCore || analysis.cognitiveDesign || null,
       milestones: analysis.suggestedMilestones ?? [],
@@ -145,6 +149,7 @@ export function snapshotToAnalysis(snapshot: PathReviewSnapshotV1): PathReviewAn
   return {
     pathName: snapshot.pathPlan.name ?? null,
     summary: snapshot.pathPlan.summary ?? null,
+    pathDeliverable: snapshot.pathPlan.pathDeliverable ?? null,
     topology: snapshot.pathPlan.topology ?? null,
     cognitiveCore: snapshot.pathPlan.cognitiveCore ?? null,
     estimatedTotalHours: snapshot.pathPlan.estimatedHours ?? null,

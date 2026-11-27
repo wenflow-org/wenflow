@@ -230,8 +230,17 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
 
   // 规则「当【理解度】< 0.3 或输入表明学生处于高认知负荷/情绪受挫时：不连续追问、先共情」——
   // 这两个字段此前完全不转发，该分支只能靠【理解度】单腿触发（审计 P1 §2.4a）。
-  const loadSection = typeof input.loadIndex === 'number'
-    ? `\n【本轮认知负荷】${input.loadIndex}`
+  const loadBand = typeof input.loadIndex === 'number' && Number.isFinite(input.loadIndex)
+    ? (input.loadIndex < 0.3
+        ? 'under'
+        : input.loadIndex <= 0.6
+          ? 'flow'
+          : input.loadIndex <= 0.8
+            ? 'hint'
+            : 'overload')
+    : null;
+  const loadSection = loadBand
+    ? `\n【本轮认知负荷】${loadBand}`
     : '';
   const emotionSection = typeof input.emotionalState === 'string' && input.emotionalState
     ? `\n【本轮情绪】${input.emotionalState}`
@@ -277,16 +286,18 @@ export function validatePeerParsedOutput(parsed: unknown) {
   return { valid: true as const };
 }
 
-export function normalizePeerParsedOutput(parsed: unknown): PeerModelArtifact {
+export function normalizePeerParsedOutput(parsed: unknown, effectiveStrategy?: PeerDiscussionInput['strategy']): PeerModelArtifact {
   const artifact = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? parsed as Record<string, unknown>
     : {};
-  const followUpQuestions = Array.isArray(artifact.followUpQuestions)
-    ? artifact.followUpQuestions
-      .filter((question): question is string => typeof question === 'string' && !!question.trim())
-      .slice(0, 3)
-      .map(question => question.trim().slice(0, 100))
-    : [];
+  const followUpQuestions = effectiveStrategy === 'encourage'
+    ? []
+    : (Array.isArray(artifact.followUpQuestions)
+        ? artifact.followUpQuestions
+          .filter((question): question is string => typeof question === 'string' && !!question.trim())
+          .slice(0, 1)
+          .map(question => question.trim().slice(0, 100))
+        : []);
 
   return {
     message: typeof artifact.message === 'string' ? artifact.message.trim() : '',
@@ -320,7 +331,7 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
   buildUserPayload: (input) => buildPeerUserPayload(input),
   coerceParsedForContract: (parsed) => coercePeerParsedForContract(parsed),
   validateParsedOutput: (parsed) => validatePeerParsedOutput(parsed),
-  normalizeOutput: (parsed) => normalizePeerParsedOutput(parsed),
+  normalizeOutput: (parsed, input) => normalizePeerParsedOutput(parsed, resolveEffectivePeerStrategy(input)),
   // 现网实测：peer 的头号失败源是 `response does not contain valid JSON object`（35 次），
   // 其次才是契约缺字段（2 次）。此前没有 retryStrategy ⇒ maxAttempts=1，一次不合规就整条丢。
   // 给一次纠偏重试（与 path-task-design 同模式），把"偶发输出散文"从失败转成成功。
@@ -328,7 +339,7 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
     maxAttempts: 2,
     // P1-14 修复③：纠偏语带上「独立作业进行中不得给线索」约束——重试时也不得把解题钥匙递出去。
     onValidationFail: ({ failureReason, input }) =>
-      `请只输出一个 JSON 对象（字段：message、strategy、followUpQuestions），不要输出解释文字或 markdown 代码块之外的内容。`
+      `请只输出一个 JSON 对象（字段：message、followUpQuestions），不要输出解释文字或 markdown 代码块之外的内容。`
       + (detectAwaitingLearnerWork((input as PeerDiscussionInput | undefined)?.tutorLatestReply).awaiting
         ? '注意：老师本轮正在等学生自己作答，只可鼓励一句，不得给出任何线索、类比、反例或解题方向。'
         : '')

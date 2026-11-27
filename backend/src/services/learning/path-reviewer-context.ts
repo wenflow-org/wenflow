@@ -28,6 +28,8 @@ export interface PathReviewerGoalContext {
   } | null;
   /** 用户自述时间资源（含 timeBudget/timeHorizon），供对照日历容量 */
   resources?: { timeBudget?: string | null; timeHorizon?: string | null } | null;
+  learnerLearningContext?: unknown;
+  schoolAnchor?: unknown;
 }
 
 export function buildPathReviewerGoalContext(input: {
@@ -45,6 +47,8 @@ export function buildPathReviewerGoalContext(input: {
             timeDimensions?: PathReviewerGoalContext['timeDimensions'];
             resources?: PathReviewerGoalContext['resources'];
             clarification?: unknown;
+            learnerLearningContext?: unknown;
+            schoolAnchor?: unknown;
           };
         } | null;
       }
@@ -59,5 +63,7 @@ export function buildPathReviewerGoalContext(input: {
     clarification: framed?.clarification ?? null,
     timeDimensions: framed?.timeDimensions ?? null,
     resources: framed?.resources ?? null,
+    ...(framed?.learnerLearningContext ? { learnerLearningContext: framed.learnerLearningContext } : {}),
+    ...(framed?.schoolAnchor ? { schoolAnchor: framed.schoolAnchor } : {}),
   };
 }

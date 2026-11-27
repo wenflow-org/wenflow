@@ -341,7 +341,7 @@ onMounted(() => {
   display: flex; justify-content: center;
   padding: 4px 0 0;
 }
-.ach__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
+.ach__ai-note :deep(.ai-note) { font-size: 12px; }
 
 /* 内容容器：宽度/内边距交给 CapabilityShell 的 .uc__main，这里只管卡间距 */
 .ach__body {
@@ -555,14 +555,16 @@ onMounted(() => {
 }
 .ach-share:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); }
 
+@media (max-width: 1023.98px) {
+  /* 32×32 → 44×44（2026-11-11 走查 P2：分享是卡角唯一手势目标，须过移动档 44px 地板） */
+  .ach-share { width: 44px; height: 44px; top: 2px; right: 2px; }
+  .ach-card--unlocked .ach-card__text { padding-right: 30px; }
+}
 @media (max-width: 1100px) {
   /* 收进个人中心后的移动端压缩（2026-09-24 反馈「内容都偏大」）：
      390 下 2 列统计卡的 KPI 数字原为 28px（卡宽仅 ~165px）、成就卡内边距 16px、卡片高 176px——
      一张"我是谁"式的概览要吃掉整屏。按学习侧 KPI 刻度压到 21px/12px 边距。 */
   .grid { grid-template-columns: 1fr 1fr; }
-  /* 32×32 → 44×44（2026-11-11 走查 P2：分享是卡角唯一手势目标，须过移动档 44px 地板） */
-  .ach-share { width: 44px; height: 44px; top: 2px; right: 2px; }
-  .ach-card--unlocked .ach-card__text { padding-right: 30px; }
   /* 总览条原来横向 18px，和下面一整列 .ach-card 的 14px 差 4px——
      同宽卡堆在一列里，内容左缘落在 33/29 两条线上（2026-09-26 对齐走查）。 */
   .ov-line { padding-left: 14px; padding-right: 14px; }

@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-confirm-adjudicator
-coreHash: 3669e39f4d9b20ca220d07a81263aa113b7e0fbdd2a4a24a18e5cc296f9cf169
+coreHash: c05b2f96a9fbd3401cbe223eebd532bf308131c2fc450d7e8a396bb71f3e448e
 coreVersion: 1
 temperature: 0
 maxTokens: 64000
@@ -21,10 +21,12 @@ failurePolicy: retry
 
 ## 执行规则
 
-1. 只依据 userUtterance 的语义判断，不看字面有没有「确认」二字；proposal 与 lastAssistantExcerpt 只用来指代「这个方案」和「导师刚问的事」，不是你的判定对象
-2. confirm=true 当且仅当这段话在认可当前方案、同意开始排路径（如「就按你说的办」「明白了，那就这么干」「行，可以」「没问题」「你直接开排」「直接开始吧」「不用再问了」这类，或对导师拍板问句给出肯定答复）
-3. 以下一律 confirm=false：拒绝或犹豫（「先别，我再想想」「这个方向不对」）；改需求或提调整（「只看石库门」「把测验去掉」）；抛新问题或补充信息（「我平时只有周末有空」）；答非所问；对方案细节给出信息式回答
-4. 拿不准时 confirm=false——宁可让导师多接一轮，不得替用户拍板
+1. 你会收到 JSON 载荷 `{ userUtterance, proposal?, lastAssistantExcerpt? }`：只依据 userUtterance 的语义裁决，不看字面有没有「确认」二字；proposal 与 lastAssistantExcerpt 只用来指代「这个方案」和「导师刚问的事」，不是你的判定对象
+2. confirm=true 当且仅当这段话整体上明确认可当前方案并同意开始排路径（如「就按你说的办」「明白了，那就这么干」「行，可以」「没问题」「你直接开排」「直接开始吧」「不用再问了」这类，或对导师拍板问句给出无保留的肯定答复）
+3. 混合表述优先看保留项：若同一句话里既有积极客套又有保留、修改或新增条件（如「方向不错，但我想把测验去掉」「可以，不过先从第二块开始」），一律 confirm=false——优先尊重用户的修改与保留，不跳过调整直接排路径
+4. 非拍板问句答复一律 false：若 lastAssistantExcerpt 末尾问的是信息补充或方向二选一（如「每次大概能坐 25 分钟还是 40 分钟？」「先看概念还是先做题？」），用户仅回答「可以 / 40 分钟 / 前者 / 都行」等回应该具体问题的短答，必须 confirm=false
+5. 以下一律 confirm=false：拒绝或犹豫（「先别，我再想想」「这个方向不对」）；改需求或提调整（「只看石库门」「把测验去掉」）；抛新问题或补充信息（「我平时只有周末有空」）；答非所问；对方案细节给出信息式回答
+6. 拿不准时 confirm=false——宁可让导师多接一轮，不得替用户拍板
 
 ## 输出字段
 

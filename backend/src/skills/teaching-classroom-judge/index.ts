@@ -103,6 +103,13 @@ function clampScore(value: unknown): number {
   return Math.round(Math.max(0, Math.min(100, score)));
 }
 
+function clampNullableScore(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const score = Number(value);
+  if (!Number.isFinite(score)) return null;
+  return Math.round(Math.max(0, Math.min(100, score)));
+}
+
 function text(value: unknown, limit = 1000): string {
   return typeof value === 'string' ? value.trim().slice(0, limit) : '';
 }
@@ -115,11 +122,12 @@ function normalizeEvidence(value: unknown, input: ClassroomQualityJudgeInput): C
     if (!path) return [];
     const rawIndex = item?.index === null || item?.index === undefined ? null : Number(item.index);
     // wrapup 证据不挂轮次；transcript 证据的 index 必须落在记录范围内
-    const index = path === 'wrapup'
+    const isTopLevelBoard = path === 'board' && rawIndex == null && Boolean(input.board?.present);
+    const index = path === 'wrapup' || isTopLevelBoard
       ? null
       : (Number.isInteger(rawIndex) && rawIndex! >= 0 && rawIndex! < input.transcript.length ? rawIndex : null);
-    if (path !== 'wrapup' && index === null) return [];
-    const stableId = path === 'wrapup' ? 'W:wrapup' : `T${index}:${path}`;
+    if (path !== 'wrapup' && !isTopLevelBoard && index === null) return [];
+    const stableId = path === 'wrapup' ? 'W:wrapup' : (isTopLevelBoard ? 'B:board' : `T${index}:${path}`);
     const id = text(item?.id, 40) || stableId;
     if (seen.has(id)) return [];
     seen.add(id);
@@ -165,15 +173,15 @@ export function normalizeClassroomJudgeOutput(parsed: any, input: ClassroomQuali
   }).slice(0, 16) as ClassroomQualityJudgeOutput['recommendations'];
 
   const rawScores = parsed?.scores && typeof parsed.scores === 'object' ? parsed.scores : {};
-  const hasBoardPayload = input.transcript.some(turn => turn.board || turn.figure);
+  const hasBoardPayload = Boolean(input.board?.present) || input.transcript.some(turn => turn.board || turn.figure);
   const scores: ClassroomQualityJudgeOutput['scores'] = {
     overall: clampScore(rawScores.overall),
-    openingAnchor: input.transcript.some(turn => turn.role === 'teacher') ? clampScore(rawScores.openingAnchor) : null,
-    criteriaClarity: clampScore(rawScores.criteriaClarity),
-    scaffolding: clampScore(rawScores.scaffolding),
+    openingAnchor: input.transcript.some(turn => turn.role === 'teacher') ? clampNullableScore(rawScores.openingAnchor) : null,
+    criteriaClarity: clampNullableScore(rawScores.criteriaClarity),
+    scaffolding: clampNullableScore(rawScores.scaffolding),
     // 整课没有任何板书/图文载荷时，「板书一致」无从评起 → null（不按 0 分 punish 渲染链）
-    boardConsistency: hasBoardPayload ? clampScore(rawScores.boardConsistency) : null,
-    closureQuality: clampScore(rawScores.closureQuality),
+    boardConsistency: hasBoardPayload ? clampNullableScore(rawScores.boardConsistency) : null,
+    closureQuality: clampNullableScore(rawScores.closureQuality),
   };
   // 证据不足（2026-11-21）：没有任何可定位证据，或模型给了 findings 但所有引用都失效时，
   // 不得给出结论性 verdict——统一标 inconclusive，让上游按「证据不足」处理而不是误采信。

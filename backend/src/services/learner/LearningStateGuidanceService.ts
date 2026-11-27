@@ -106,7 +106,7 @@ class LearningStateGuidanceService {
          由前端展示「完成第一次学习后…」的静态空态。 */
       if (!assembled.learnerSnapshot) return null;
 
-      const { paths, sessions, primaryPath, learnerSnapshot, learningState, warnings, sessionWrapup } = assembled;
+      const { paths, sessions, primaryPath, learnerSnapshot, learningState, warnings, sessionWrapup, advisory } = assembled;
 
       const summary = learnerStateSummaryService.build({
         learnerSnapshot,
@@ -134,6 +134,7 @@ class LearningStateGuidanceService {
           path: guidanceProjection.path ?? undefined,
           // 收束摘要走投影：剔除 runtimeEnvelope 等运行时元数据（实测占 wrapup 的 5.6KB/12.8KB）
           sessionWrapup: learnerProjectionService.toGuidanceWrapup(sessionWrapup) ?? undefined,
+          advisory,
           userId,
         });
         copy = result.output as AdaptiveGuidanceCopyOutput;
@@ -157,6 +158,7 @@ class LearningStateGuidanceService {
           path: guidanceProjection.path ?? undefined,
           // 收束摘要走投影：剔除 runtimeEnvelope 等运行时元数据（实测占 wrapup 的 5.6KB/12.8KB）
           sessionWrapup: learnerProjectionService.toGuidanceWrapup(sessionWrapup) ?? undefined,
+          advisory,
         });
         source = 'fallback';
         logger.warn('[learning-state-guidance] skill failed, using static copy', {

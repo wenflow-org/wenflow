@@ -388,7 +388,7 @@
                 :aria-expanded="confirmingId === pendingAdjust[0]?.id"
                 @click="openAdjustConfirmation(pendingAdjust[0])"
               >查看并确认调整</button>
-              <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion">保持原计划</button>
+              <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion()">保持原计划</button>
             </div>
             <p v-else-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length > 1" class="advisory__multi">
               有 {{ pendingAdjust.length }} 条待确认调整，请逐条查看。
@@ -429,6 +429,7 @@
                       @click="openAdjustConfirmation(card)"
                     >查看影响范围</button>
                     <button type="button" class="ctl-btn" :disabled="!card.pathId" @click="jumpToAdjust(card)">查看路径</button>
+                    <button type="button" class="ctl-btn ctl-btn--ghost" :disabled="replanBusy" @click="keepSuggestion(card)">保持原计划</button>
                   </div>
                   <div v-else :id="`state-adjust-${card.id}`" class="ctl-card__confirm" tabindex="-1">
                     <span>将调整「{{ card.pathTitle || '当前路径' }}」的{{ adjustmentScopeLabel(card) }}。已完成内容会保留。</span>
@@ -603,12 +604,14 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { getActivePinia } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import request from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
+import { useUserStore } from '@/stores/user';
 import { adjustmentModeBlockReason, replanModeForRecommendation, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
 import { conceptBandOf } from '@/utils/graphSemantics';
 import V2Nav from './V2Nav.vue';
@@ -1423,13 +1426,25 @@ function decisionTime(at: string | null): string {
 }
 
 /* 三段分组：待确认（可操作，可忽略消账）/ 已自动处理 / 已执行 */
+const userStore = getActivePinia() ? useUserStore() : null;
 const DISMISS_KEY = 'learning_state_dismissed_advisories';
-const dismissedAdvisories = ref<string[]>((() => {
-  try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]') as string[]; } catch { return []; }
-})());
+function dismissStorageKey(userId?: string | null): string {
+  return userId ? `${DISMISS_KEY}:${userId}` : DISMISS_KEY;
+}
+function loadDismissedAdvisories(userId?: string | null): string[] {
+  try { return JSON.parse(localStorage.getItem(dismissStorageKey(userId)) || '[]') as string[]; } catch { return []; }
+}
+const dismissedAdvisories = ref<string[]>(loadDismissedAdvisories(userStore?.user?.id));
+if (userStore) {
+  watch(() => userStore.user?.id, (uid) => {
+    dismissedAdvisories.value = loadDismissedAdvisories(uid);
+  });
+}
 function dismissDecision(card: DecisionCard) {
-  dismissedAdvisories.value = [...dismissedAdvisories.value, card.id];
-  try { localStorage.setItem(DISMISS_KEY, JSON.stringify(dismissedAdvisories.value)); } catch { /* ignore */ }
+  if (!dismissedAdvisories.value.includes(card.id)) {
+    dismissedAdvisories.value = [...dismissedAdvisories.value, card.id];
+  }
+  try { localStorage.setItem(dismissStorageKey(userStore?.user?.id), JSON.stringify(dismissedAdvisories.value)); } catch { /* ignore */ }
   confirmingId.value = '';
 }
 
@@ -1572,10 +1587,16 @@ function jumpToAdjust(card: DecisionCard) {
    两条路径的全部动作在下方「学习调控」次级区块里仍然逐条可操作，这里只是把主路径提到卡头。 */
 const advisoryDone = ref('');
 
-function keepSuggestion() {
-  const card = pendingAdjust.value[0];
+function keepSuggestion(targetCard?: DecisionCard | Event) {
+  const explicitCard = targetCard && typeof targetCard === 'object' && 'id' in targetCard
+    ? (targetCard as DecisionCard)
+    : undefined;
+  const card = explicitCard || pendingAdjust.value[0];
   if (card) {
     dismissDecision(card);
+    if (card.sessionId) {
+      void aiTeachingAPI.recordAdvisoryResponse(card.sessionId, 'keep').catch(() => { /* 埋点失败静默 */ });
+    }
     advisoryDone.value = '已保持原计划，这条调整不会再出现在待确认里。';
     return;
   }
@@ -1622,6 +1643,8 @@ const guideActions = computed(() => {
         return '/user/achievements';
       case 'create-goal':
         return '/goal-conversation';
+      case 'dashboard':
+        return '/dashboard';
       default:
         return '/dashboard';
     }
@@ -1963,7 +1986,7 @@ function loadGuidance() {
    1101 以上左 60% 调控中心 / 右 40% 复习 + 掌握分布 + 学习偏好，趋势图满宽横贯顶部。
    .state__col 用 display:contents 拆掉移动端的单列包裹层，让四块卡片直接进栅格——
    DOM 顺序一字不改，移动端（≤1100）仍是原来的单列流。 */
-@media (min-width: 1101px) {
+@media (min-width: 1024px) {
   .state__grid {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     gap: 18px;

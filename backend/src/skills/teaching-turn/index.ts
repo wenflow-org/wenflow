@@ -13,8 +13,6 @@ import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
 import { normalizeForKeywordMatch, resolveUnderstandingReading } from '../../services/ai-teaching/checkpoint-shared';
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
-// 绘图语法（图型表/形状/spec 样例）只在出图回合随 payload 注入，不常驻系统提示（2026-11-26）
-import { FIGURE_KIND_GUIDE } from '../../services/ai-teaching/figure-kind-guide';
 import type { ChatContentPart, ChatMessageContent } from '../../gateway/api-gateway/types';
 import { normalizeVisionImages, MAX_VISION_IMAGES_PER_MESSAGE } from '../../utils/vision-content';
 import {
@@ -1526,6 +1524,7 @@ function normalizeHex(value: unknown): string | null {
 
 /** 虚线只认「数字 + 空格/逗号」：同上，属性注入的首道防线。 */
 function normalizeDash(value: unknown): string | null {
+  if (value === true) return '4 3';
   if (typeof value !== 'string') return null;
   return /^[0-9][0-9\s,.]{0,18}$/.test(value.trim()) ? value.trim() : null;
 }
@@ -3404,18 +3403,11 @@ function buildPromptInput(input: TeachingTurnInput) {
 
   // 条件规则按需注入（逐回合变化 → 必须放**载荷尾部**）：输入提供了对应字段才带
   const applicableRules = selectApplicableRules(CONDITIONAL_RULES, input);
-  // 出图回合才带绘图语法（2026-11-26 职责归位）：图型表/形状/spec 样例只在这一轮有用，
-  // 常驻系统提示会稀释教学注意力。与其它条件规则同层放载荷尾部，KV 前缀不被打断。
-  const visualGuide = input.visualOpportunity?.suggested ? FIGURE_KIND_GUIDE : '';
-  const conditionalRuleLines = [
-    ...applicableRules.map((rule) => `- ${rule}`),
-    ...(visualGuide ? [`- 本轮按以下图型指南出图（形状与字段以它为准）：\n${visualGuide}`] : []),
-  ];
+  const conditionalRuleLines = applicableRules.map((rule) => `- ${rule}`);
   logger.debug('[teaching-turn] 条件规则按需注入', {
     injected: applicableRules.length,
     total: CONDITIONAL_RULES.length,
     injectedChars: applicableRules.reduce((sum, rule) => sum + rule.length, 0),
-    visualGuideChars: visualGuide.length,
   });
   const conditionalRulesPayload = conditionalRuleLines.length > 0
     ? {

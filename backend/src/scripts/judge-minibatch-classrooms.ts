@@ -103,6 +103,11 @@ function digestFigures(figures: any): string | null {
       : Array.isArray(spec.frameRevealed)
         ? spec.frameRevealed.map((v: any) => (v === false ? 'F' : 'T')).join(',')
         : '';
+    const segments = Array.isArray(spec.rowSegments)
+      ? spec.rowSegments.map((s: any) => String(s)).join(',')
+      : Array.isArray(spec.frameSegments)
+        ? spec.frameSegments.map((s: any) => String(s)).join(',')
+        : '';
     // legend 条目真实形状是 {text, fill}（teaching-board-design 产物，2026-11-13 实测 DB）：
     // 只认 .label 会把对象 String 成「[object Object]」，制造「图例未渲染」伪影 finding
     const legend = Array.isArray(spec.legend)
@@ -115,6 +120,7 @@ function digestFigures(figures: any): string | null {
       rows.length ? `行:${rows.join('｜')}` : '',
       cols.length ? `列:${cols.join('｜')}` : '',
       reveal ? `露出:${reveal}` : '',
+      segments ? `分段:${segments}` : '',
       legend ? `图例:${legend}` : '',
       cells ? `标记格:${cells}` : '',
       generic ? `内容:${generic}` : '',

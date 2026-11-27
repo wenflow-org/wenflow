@@ -733,23 +733,30 @@ onBeforeUnmount(() => {
 
 .nc__body { flex: 1 1 auto; min-height: 0; max-height: min(420px, 60vh); overflow-y: auto; }
 
-/* 移动端：面板改为全宽 fixed（铃铛不在屏幕右缘，absolute 右对齐铃铛会向左溢出屏幕） */
-@media (max-width: 1100px) {
+/* 平板与移动端：≤1023.98px 时面板改为 fixed；仅 ≤640px 铺满全宽，641~1023px 保持紧凑右对齐浮层 */
+@media (max-width: 1023.98px) {
   .nc__panel {
     position: fixed;
     /* 2026-11-04 修复：吸顶公告横幅（.anb，z-index:200 > 面板 60）会盖住面板顶部「通知 / AI 任务」
        两枚页签，分栏切换不了——top 不能写死 64px，改由开面板/改视口时实测横幅底边写入
        --nc-panel-top（无横幅或桌面回落 64px 顶栏高；桌面横幅在流内不与面板重叠）。 */
     top: var(--nc-panel-top, 64px);
-    left: 12px;
+    left: auto;
     right: 12px;
-    width: auto;
+    width: min(380px, calc(100vw - 24px));
     /* 上限随 top 一起收缩，保证面板底边不被推到底部 dock 之下 */
     max-height: calc((100dvh - var(--nc-panel-top, 64px) - 76px) / var(--vp-zoom, 1));
     display: flex;
     flex-direction: column;
   }
   .nc__body { flex: 1; min-height: 0; max-height: none; }
+}
+@media (max-width: 640px) {
+  .nc__panel {
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
 }
 
 /* 通知列表：条目 = 蓝点（未读）+ 标题 + 摘要 + 时间（原型 wf-notif 同构） */
@@ -1024,6 +1031,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
   border-radius: var(--mk-radius-pill);
+  min-height: 36px;
   padding: 5px 14px;
   cursor: pointer;
 }

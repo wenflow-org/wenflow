@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-replan-attribution
-coreHash: b777de989ae39bee7bf2467299b6d46f0202c63981b4e8b45af2ac7ccf9ee50b
+coreHash: 3a237e29f5e61b393909c8ee45f35431fd1976e8559a60c7b30bdaf28f678137
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -22,13 +22,13 @@ failurePolicy: propagate
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「recall（object）」`sandbox:profile.snapshot.replanSignal`（编排注入） — 阈值召回 { reasonCodes, recommendation, priority, rationale }——归因必须在它允许的方向内选
 - 「allowedRecommendations（string[]）」`sandbox:path.planningHints`（编排注入） — 系统真正能执行的方向集合（含 keep）；recommendation 必须取自其中
-- 「evidence（object[]）」`sandbox:teaching.session.wrapup`（编排注入） — 归因证据条目 [{ id, 概念名/未解决点名/掌握状态 }]；evidenceRefs 只能引用其中出现过的 id
+- 「evidence（object[]）」`sandbox:teaching.session.wrapup`（编排注入） — 归因证据条目 [{ id, kind, text }]；evidenceRefs 只能引用其中出现过的 id
 - 「pathContext（object?）」`sandbox:path.path.summary`（编排注入） — 路径位置上下文 { milestoneTitle, stageNumber }（可选）
 
 ## 执行规则
 
 1. primaryReasonCode 必须原样取自输入 recall.reasonCodes；不在其中的原因不许编
-2. recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；都不合适时给 keep
+2. recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；当 recall.priority === 'P0' 且 recall.recommendation 非 keep 且存在于 allowedRecommendations 时，必须采用该非 keep 重排方向（不得退回 keep）；所有方向都不合适时才给 keep
 3. 只做归因，不要提出范围外的动作（不要提"改目标""换学科""停课"），也不要承诺具体时长或课程数
 4. reason 必须点名具体卡点：直接引用 evidence 里出现的概念名/未解决点名（如「识别日志痕迹、还原断点还没稳」），禁止「几个关键点」「部分内容」这类泛指——泛指会与学习总结当面打架。evidence 同时给出 wrapup:mastered（本节已学会名单）时，reason 要写清张力：哪些是本课刚学会的、哪些旧点仍挂着。证据里确实没有任何可点名的对象时才允许写系统级原因（如「长期学习疲劳偏高」），并照实说。
 5. reason 一句人话（≤40 字），不要复述指标数值、不要暴露字段名

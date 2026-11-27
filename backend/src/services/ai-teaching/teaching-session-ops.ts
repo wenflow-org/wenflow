@@ -39,7 +39,7 @@ import type { ProcessStudentMessageOptions } from './AITeachingCoordinator';
 
 /**
  * 检查点提交的对外结果（提交路由与幂等重放共用）：
- * 回合载荷 → `{passed, feedback, hint?, revision, checkpoint?, lessonContract?, lessonReport?, exitTicket?, branch?, lessonPhase?}`。
+ * 回合载荷 → `{passed, feedback, hint?, revision, checkpoint?, lessonContract?, lessonReport?, exitTicket?, branch?, lessonPhase?, figures?, diagrams?, images?, knowledgePoint?, knowledgePoints?, confirmCheck?, peerTriggered?, peerMessage?, peerStrategy?, peerFollowUpQuestions?, isCompletion?}`。
  */
 export function buildCheckpointSubmitResult(turn: {
   aiResponse: string;
@@ -58,6 +58,17 @@ export function buildCheckpointSubmitResult(turn: {
    * 前端阶段条直接从「整合/迁移」跳回「协议未生效」——阶段机在跑，读数却断了。
    */
   lessonPhase?: Record<string, any> | null;
+  figures?: any[];
+  diagrams?: Array<{ engine: string; code: string; caption?: string | null }>;
+  images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>;
+  knowledgePoint?: string | null;
+  knowledgePoints?: any[];
+  confirmCheck?: { prompt?: string; actions: Array<{ label: string; message: string }> } | null;
+  peerTriggered?: boolean;
+  peerMessage?: string | null;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
+  isCompletion?: boolean;
 }): CheckpointSubmitResult {
   const passed = turn.checkpointResolution?.passed === true;
   const hint = !passed && turn.analysis?.confusionPoints?.length
@@ -80,6 +91,23 @@ export function buildCheckpointSubmitResult(turn: {
     ...(turn.branch ? { branch: stripCheckpointAnswerKeys(turn.branch) } : {}),
     // 阶段摘要只含阶段名/段号/露出程度，无答案信息，不参与深剥离（同一把剥离也无副作用，但没必要）
     ...(turn.lessonPhase ? { lessonPhase: turn.lessonPhase } : {}),
+    // 板书/结构图/配图、知识点进度、伴学触发与完课信号同步随提交响应下发，
+    // 避免服务端落库新版 boardRevision 后前端白板永久卡在旧版本（需手动刷新才见新版）。
+    ...(Array.isArray(turn.images) && turn.images.length ? { images: turn.images } : {}),
+    ...(Array.isArray(turn.diagrams) && turn.diagrams.length ? { diagrams: turn.diagrams } : {}),
+    ...(Array.isArray(turn.figures) && turn.figures.length ? { figures: turn.figures } : {}),
+    ...(turn.knowledgePoint ? { knowledgePoint: turn.knowledgePoint } : {}),
+    ...(Array.isArray(turn.knowledgePoints) && turn.knowledgePoints.length ? { knowledgePoints: turn.knowledgePoints } : {}),
+    ...(turn.confirmCheck ? { confirmCheck: turn.confirmCheck } : {}),
+    ...(turn.peerTriggered ? {
+      peerTriggered: true,
+      ...(turn.peerMessage ? { peerMessage: turn.peerMessage } : {}),
+      ...(turn.peerStrategy ? { peerStrategy: turn.peerStrategy } : {}),
+      ...(Array.isArray(turn.peerFollowUpQuestions) && turn.peerFollowUpQuestions.length
+        ? { peerFollowUpQuestions: turn.peerFollowUpQuestions }
+        : {}),
+    } : {}),
+    ...(turn.isCompletion === true ? { isCompletion: true } : {}),
   };
 }
 

@@ -590,7 +590,7 @@ onMounted(load);
 
 .library__head h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
@@ -959,7 +959,7 @@ onMounted(load);
 
 .lib-modal__card {
   width: min(860px, 100%);
-  max-height: min(82vh, 760px);
+  max-height: min(calc(82vh / var(--vp-zoom, 1)), 760px);
   display: flex;
   flex-direction: column;
   border-radius: var(--mk-radius-modal);
@@ -1027,8 +1027,8 @@ onMounted(load);
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: var(--mk-radius-sm);
   background: transparent;
@@ -1119,6 +1119,10 @@ onMounted(load);
     padding-left: 14px;
     padding-right: 14px;
   }
+  .library__tab,
+  .lib-action {
+    min-height: 36px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1129,6 +1133,10 @@ onMounted(load);
 
   .library__head {
     align-items: center;
+  }
+
+  .library__head h1 {
+    font-size: 18px;
   }
 
   .library__upload {
@@ -1151,7 +1159,7 @@ onMounted(load);
   }
 
   .lib-modal__card {
-    max-height: 88vh;
+    max-height: calc(88vh / var(--vp-zoom, 1));
   }
 }
 </style>

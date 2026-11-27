@@ -160,14 +160,14 @@ export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanc
   const pathTitle = safeText(input.path?.title || input.path?.name) || '学习路径';
 
   const headlineMap: Record<GuidanceView, string> = {
-    dashboard: `欢迎回来，${name}`,
+    dashboard: `${name}，接着往下学`,
     'learning-state': `先看清当前状态，再决定下一步`,
   };
 
   const subtitleMap: Record<GuidanceView, string> = {
     dashboard: recentTrend === 'declining' ? '先稳住节奏，再继续推进。' : '从上次停下的位置接上学习。',
     'learning-state': recentTrend === 'declining'
-      ? '最近状态有些下滑，先判断是疲劳、卡点，还是任务粒度偏大。'
+      ? '最近状态有些下滑，先判断是疲劳、某步没走通，还是任务粒度偏大。'
       : '结合最近趋势看节奏、负荷和掌握情况，再决定继续推进还是先调整。',
   };
 
@@ -182,7 +182,7 @@ export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanc
     : [
         { title: '查看当前路径', desc: '回到当前任务，确认状态影响的是哪一步。', action: '查看路径', to: 'path-detail' },
         { title: '继续学习', desc: '如果状态稳定，就继续完成当前最小任务。', action: '继续学习', to: 'continue-learning' },
-        { title: '回看学习台', desc: '从总览页面看今天建议和节奏提示。', action: '回到学习台', to: 'continue-learning' },
+        { title: '回看学习台', desc: '从总览页面看今天建议和节奏提示。', action: '回到学习台', to: 'dashboard' },
       ];
 
   return {
@@ -213,8 +213,8 @@ function normalizeAdaptiveOutput(parsed: any, input: AdaptiveGuidanceCopyInput):
     pathHint: safeText(obj.pathHint) || fallback.pathHint,
     nextStep: safeText(obj.nextStep) || fallback.nextStep,
     paceHint: safeText(obj.paceHint) || fallback.paceHint,
-    emptyStateCopy: safeText(obj.emptyStateCopy) || fallback.emptyStateCopy,
-    warningCopy: safeText(obj.warningCopy) || fallback.warningCopy,
+    emptyStateCopy: typeof obj.emptyStateCopy === 'string' ? safeText(obj.emptyStateCopy) : fallback.emptyStateCopy,
+    warningCopy: typeof obj.warningCopy === 'string' ? safeText(obj.warningCopy) : fallback.warningCopy,
   };
 }
 

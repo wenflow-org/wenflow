@@ -272,7 +272,7 @@ const proposal = computed(() => {
   const plannedMilestones = typeof cp.plannedMilestones === 'number' ? cp.plannedMilestones : null;
   const previewStages = toList(cp.previewStages);
   const stages = (previewStages.length ? previewStages : toList(cp.key_stages ?? cp.stages ?? cp.outline))
-    .slice(0, plannedMilestones ?? 5);
+    .slice(0, plannedMilestones ?? 6);
   const stageCount = plannedMilestones ?? stages.length;
   const probes = toProbes(cp.prerequisiteDiagnostics ?? cp.prerequisite_diagnostics ?? cp.prerequisite_diagnostics_list);
   // 2026-11-25 去时间化：确认弹窗只给方向与阶段结构，不再展示平台默认的单次分钟/
@@ -415,14 +415,12 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     && !messages.value.some((m) => m.role === 'ai' && m.content === env.userVisible)) {
     pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
   }
-  // P2-14：恢复会话时用最后一条带快捷补充的 AI 消息回填当前轮面板（刷新后不再只剩输入框）
-  if (!quickReplies.value.length) {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const qr = messages.value[i].quickReplies;
-      if (messages.value[i].role === 'ai' && Array.isArray(qr) && qr.length) {
-        quickReplies.value = qr;
-        break;
-      }
+  // P2-14：恢复会话时只看「最后一条 AI 消息」回填当前轮快选；
+  // 若会话已进入终态或最后一条已是用户发言，绝不跨回合扫描复活过期的首轮/次轮胶囊。
+  if (!quickReplies.value.length && stage.value !== 'completed' && !isCompleted.value && !hardBlocked.value) {
+    const lastMsg = messages.value[messages.value.length - 1];
+    if (lastMsg?.role === 'ai' && Array.isArray(lastMsg.quickReplies) && lastMsg.quickReplies.length) {
+      quickReplies.value = lastMsg.quickReplies;
     }
   }
   // 失败信封（如结构化输出连续未通过校验）：给最后一条 AI 消息补 failed 标记，
@@ -606,8 +604,7 @@ async function send(text: string, skipUserPush = false) {
   if (!conversationId.value) {
     await run('start', t, meta);
   } else {
-    // 打字一律走普通 reply：是否「确认方案」由后端 goal-confirm-adjudicator 裁决
-    // （2026-11-08 减重——前端白名单路由已退役，前端不再猜语义）
+    // 打字一律走普通 reply（仅 UI「查看并确认」按钮走 confirm 触发建路）
     await run('reply', t, meta);
   }
 }
@@ -782,12 +779,15 @@ function reset(clearStorage = true) {
   collected.value = {};
   quickReplies.value = [];
   confirmedProposal.value = null;
+  probeAnswers.value = {};
+  droppedProbeAnswers.value = 0;
   learningPath.value = null;
   completionNote.value = '';
   freshKeys.value = [];
   failed.value = '';
   stopped.value = '';
   failureKind.value = '';
+  lastPayload.value = '';
   started.value = false;
   // 挂载口径回到「新对话默认」：显式空列表（干净起步，旧资料不会静默跟到下一次生成）
   attachedMaterialIds.value = [];

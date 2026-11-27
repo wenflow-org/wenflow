@@ -207,6 +207,7 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px 12px;
   padding-bottom: 2px;
+  margin-bottom: 14px;
 }
 .km__head h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
 .km__head p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
@@ -259,7 +260,7 @@ onMounted(async () => {
        zoom 会把 100dvh 一起放大——直接写 100dvh 渲染出来是「1.08 个视口高」，卡片被顶出折线
        （用户 4K 缩放实测的「还是不行」）。口径与 V2LearningPage 的 .learn 一致。
        用 height 而非 min-height：只有确定高度，整条 flex 链才会按剩余空间分配。 */
-    height: calc(100dvh / var(--vp-zoom, 1));
+    height: calc((100dvh - var(--wf-anb-h, 0px)) / var(--vp-zoom, 1));
     min-height: 0;
   }
   .km__main {

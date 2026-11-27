@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-exit-ticket
-coreHash: f9b3038e04b4d64a9423ca7a32a14ce22a14f2208828c2df9cb6cb5a67413c27
+coreHash: 4488ee03d438273cbe90dccf2e40fc2743066660b46e5c2c2e1545d353c94808
 coreVersion: 1
 temperature: 0.5
 maxTokens: 64000
@@ -33,7 +33,7 @@ failurePolicy: propagate
 2. 优先选 hasIndependentEvidence=false 的 KC（契约仍缺独立证据的点）；若全部已有独立证据，选本课最核心/最易迁移的那个
 3. 题目必须是**新情境**：换材料、换对象、换条件或给一个反例，不得复用课堂已出过的检查点题面、不得直接考课上刚贴过标签的那句话；学生需要把本课口径应用到没见过的例子上
 4. 题目不得包含提示、步骤拆解、答案暗示；不得在题干里写出正确结论或答案键原词
-5. 优先 single_choice（4 项以内，干扰项要像真实误解，不得明显荒谬）；不适合选择题时才用 short_answer，并给 1-3 个「任何正确作答都会出现」的核心词（用 | 合并同义写法，不得用题干里已有的词当要点）
+5. 优先 single_choice（2-4 项，干扰项要像真实误解，不得明显荒谬）；不适合选择题时才用 short_answer，并给 1-3 个「任何正确作答都会出现」的核心词（用 | 合并同义写法，不得用题干里已有的词当要点）
 6. 选择题必须给 correctOptionIds（必须是 options 里真实存在的 id，单选只给一个）；简答题必须给 expectedKeywords
 7. 题干用自然、简短的中文；面向学生，不出现「契约/终检/系统/检查点/证据」等内部词
 8. 题干默认不超过 2 句；**但需要材料才能作答时，先完整给出表头与必要数据行（Markdown 表格或逐行文本），再问一个问题**——材料展示不计入 2 句限制
@@ -45,7 +45,7 @@ failurePolicy: propagate
 - question · string — 一道新情境终检题；默认 ≤2 句，需要材料时可先带完整表头与数据行（材料块不计入句数），不含答案与提示
 - type · enum — single_choice|multi_choice|short_answer
 - conceptName · string — 本题考核的核心 KC 名（逐字取自 coreKcs[].name）
-- options · object[]? — 选择题必填，2-4 项：[{ "id": "A", "text": "选项" }]
+- options · object[]? — 选择题必填，2-4 项：[{ "id": "A", "text": "选项" }]（short_answer 时省略）
 - correctOptionIds · string[]? — 选择题必填：正确选项 id（必须是 options 中真实存在的 id）
 - expectedKeywords · string[]? — 简答题必填：1-3 个核心词（可用 | 合并同义写法）
 

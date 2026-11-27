@@ -86,7 +86,7 @@ describe('teaching-peer-reinforcement payload snapshot parity', () => {
     const [spec] = mockCallPrompt.mock.calls[0]
     const payload = spec.buildUserPayload(input, {})
 
-    expect(payload).toContain('【本轮认知负荷】0.82')
+    expect(payload).toContain('【本轮认知负荷】overload')
     expect(payload).toContain('【本轮情绪】frustrated')
   })
 

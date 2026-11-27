@@ -260,7 +260,7 @@ export async function kcMapper(input: any): Promise<SkillExecutionResult<any>> {
           `上一次输出未通过结构化校验，原因：${failureReason || '输出不是合法 JSON 对象'}。`
           + '请直接输出且只输出一个 JSON 对象，不要输出任何解释、标题、markdown 标题或代码块围栏。'
           + '对象必须包含顶层字段 conceptKcs（数组，每项 { conceptId, kcs: [{ kcId, name, taxonomy, prerequisiteKCs }] }），'
-          + '并可包含 taskKcLinks、kcGraph；字段名必须与约定完全一致，不要自创字段、不要返回讲解文字。',
+          + '并可包含 taskKcLinks；字段名必须与约定完全一致，不要自创字段、不要返回讲解文字。',
       },
     }, input);
 

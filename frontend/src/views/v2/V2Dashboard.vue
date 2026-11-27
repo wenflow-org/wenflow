@@ -118,14 +118,14 @@
                   <template v-else>
                     <button type="button" v-if="todayTask" class="btn-primary" @click="goLearn">
                       <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-                      开始学习
+                      {{ todayTaskStatus === 'in_progress' ? '继续学习' : '开始学习' }}
                     </button>
                     <router-link v-else :to="allPathDone ? '/user/learning-history' : '/learning-paths'" class="btn-primary">{{ allPathDone ? '查看学习记录' : '查看全部路径' }}</router-link>
                   </template>
                   <!-- P2-22（2026-10-04 全站评审 confirmed）：「今天休息」触控 36px 低于 44px 地板，
                        与同排 44px 主按钮并排不齐——独立 .action__rest 类补齐（不污染通用 .link-muted，
                        本页其余 link-muted 是纯文字链，仍走 36px 紧凑带登记口径） -->
-                  <button type="button" class="link-muted action__rest" @click="setResting(true)">今天休息</button>
+                  <button v-if="!allPathDone" type="button" class="link-muted action__rest" @click="setResting(true)">今天休息</button>
                 </div>
               </div>
               <!-- 路径归属（2026-11-05 屏效比）：原独立的右栏路径进度卡（含标题/阶段/进度/详情链）
@@ -588,14 +588,13 @@ const dateText = computed(() => {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()]}`;
 });
 
-/* 起步示例（2026-11-07 用户要求换掉与物理世界发生交互的场景）：
-   「练口语 / 乐器 / 手工 / 画画 / 面试开口」这类目标的练习场在现实里（要张嘴、动手、当面练），
-   本产品能给的是讲解、反馈与路径——教不了、也验不了，列出来等于承诺做不到的事。
-   换成整条链都在屏幕内完成的三类：写脚本、查数据、整理信息。 */
+/* 起步示例（文本大模型原生擅长：条文判断、教材梳理与结构化表达）：
+   「练口语 / 乐器 / 手工 / 画画」及依赖外部桌面软件操作的目标留给专用工具，
+   这里保留完全能在对话、分析、对照与教材理解中闭环的三类示例。 */
 const examples = [
-  { text: '用 Python 自动化处理 Excel 报表', seed: '我想用 Python 自动化处理 Excel 报表，每天能节省时间' },
-  { text: '用 SQL 自己查数，不再等数据组', seed: '我想学会用 SQL 自己查数，不再每次都等数据组排期' },
-  { text: '用 AI 把会议记录整理成行动项', seed: '我想用 AI 把零散的会议记录整理成带责任人和截止时间的行动项' },
+  { text: '拿到劳动合同能自己挑出风险条款', seed: '我下周一要签新公司的劳动合同，竞业限制、试用期和违约金那几段拿不准，想学会自己逐条判断哪些条款有坑' },
+  { text: '人教版高中生物《细胞呼吸》专题梳理', seed: '我在学人教版高中生物必修一第5章《细胞呼吸的原理和应用》，总是把有氧和无氧呼吸的场所、产物和能量去向混在一起，想按教材彻底理清' },
+  { text: '三分钟季度汇报讲清结论与依据', seed: '上周季度评审我讲了三分钟，领导说没抓住重点。我一汇报就变成报流水账，想把结论先行的汇报结构真正练出来' },
 ];
 
 /* ================= 数据加载 ================= */
@@ -655,6 +654,7 @@ const sourceFailed = ref<Record<string, boolean>>({
  */
 function buildDashboardSnapshot() {
   return {
+    userId: userStore.user?.id ?? null,
     stats: stats.value,
     paths: paths.value,
     sessions: sessions.value,
@@ -701,7 +701,8 @@ async function answerProbe(p: RetentionProbeDueItem, answer: string, index: numb
 }
 
 async function loadAll() {
-  const snap = dashboardSnapshot;
+  const currentUserId = userStore.user?.id ?? null;
+  const snap = dashboardSnapshot && dashboardSnapshot.userId === currentUserId ? dashboardSnapshot : null;
   if (snap) {
     // 先渲快照（loading 不置 true → 不出骨架屏），随后静默刷新
     stats.value = snap.stats;
@@ -1065,12 +1066,14 @@ const guidanceCopy = computed(() => guidance.value?.copy || null);
 const guidanceSummary = computed(() => guidance.value?.summary || null);
 
 /* 调控提醒位（2026-09-27）：快照 decisions 里第一条待确认的 path-adjust。
-   忽略记录与学习状态页共用同一 localStorage 键——在那边「保持原计划」过的不再来。 */
+   忽略记录与学习状态页共用同一按 userId 隔离的 localStorage 键——在那边「保持原计划」过的不再来。 */
 const DISMISSED_ADVISORIES_KEY = 'learning_state_dismissed_advisories';
 const pendingControl = computed<Record<string, any> | null>(() => {
   const list = Array.isArray(guidance.value?.decisions) ? guidance.value.decisions : [];
+  const uid = userStore.user?.id;
+  const key = uid ? `${DISMISSED_ADVISORIES_KEY}:${uid}` : DISMISSED_ADVISORIES_KEY;
   let dismissed: string[] = [];
-  try { dismissed = JSON.parse(localStorage.getItem(DISMISSED_ADVISORIES_KEY) || '[]'); } catch { /* ignore */ }
+  try { dismissed = JSON.parse(localStorage.getItem(key) || '[]'); } catch { /* ignore */ }
   return list.find((d: Record<string, any>) => d?.kind === 'path-adjust' && !dismissed.includes(d?.id)) || null;
 });
 
@@ -1123,8 +1126,16 @@ const tipTone = computed(() => {
   return 'normal';
 });
 
+const BENIGN_PACE_HINTS = new Set([
+  '当前节奏稳定，继续保持。',
+  '当前节奏正常，可以继续推进。',
+]);
+
 const tipText = computed(() => {
-  // 失败 / 生成中的说明已由「今日行动」卡承载（标题+描述+标签），提示条不复读
+  // 空态 / 失败 / 生成中的说明已由「今日行动」卡或引导页承载，提示条不复读
+  if (pageState.value === 'empty' || pageState.value === 'generating' || pageState.value === 'attention') {
+    return '';
+  }
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;
@@ -1135,7 +1146,11 @@ const tipText = computed(() => {
     const action = typeof sug.action === 'string' ? sug.action.trim() : '';
     return sug.level === 'normal' && action ? action : String(sug.message);
   }
-  if (copy?.paceHint && copy.paceHint !== '当前节奏稳定，继续保持。') return copy.paceHint;
+  // 正常态（tipTone=normal）且 skill 明确把 warningCopy 置空时，不拿常规 paceHint 顶替，保留问候副标题（greetSub）
+  if (typeof copy?.warningCopy === 'string' && !copy.warningCopy.trim() && tipTone.value === 'normal') {
+    return '';
+  }
+  if (copy?.paceHint && !BENIGN_PACE_HINTS.has(copy.paceHint)) return copy.paceHint;
   return '';
 });
 
@@ -1238,8 +1253,9 @@ const agendaMeta = computed(() => {
 /** 激励行（原 side-stack mini 卡内容压平）：天数已在问候栏 pill，这里只给行动建议 */
 const streakNote = computed(() => {
   if (streakDays.value > 0) return todayMinutes.value > 0 ? '连续记录保住了，继续保持' : '今天还没点亮 · 学一会儿就能续上';
-  // 0 天时用条件句，避免「今天学 10 分钟」被读成「今天已学 10 分钟」与 0 分钟打架
-  return `今日学满 10 分钟，即可点亮第 1 天连续记录（当前 ${Math.min(todayMinutes.value, 10)}/10 分钟）`;
+  if (pageState.value === 'empty') return '规划好第一个目标并开始学习后，这里会记录你的学习节奏';
+  // 与 streak.ts（分钟 > 0 即计入连续天数）保持同一口径
+  return '今天开始学习，即可点亮第 1 天连续记录';
 });
 /* P1-6（2026-10-04）：「还剩约 N 分钟」句尾已撤（0/30 镜像复读且 nowrap 下把「去处理」推出视口），
    todayRemaining 计算随之退役 */
@@ -1541,11 +1557,20 @@ const daySheet = computed(() => {
           ? '专注度较好'
           : '过程平稳';
 
-  // 当天观察（沿用旧版文案引擎：时长分档 × 状态摘要）
+  const isSessionInProgress = (s: Record<string, any>) =>
+    s.taskStatus === 'in_progress' || (!s.endTime && s.status === 'active');
+  const inProgressCount = daySessions.filter(isSessionInProgress).length;
+  const completedCount = daySessions.length - inProgressCount;
+  const onlyInProgress = daySessions.length > 0 && completedCount === 0;
+
+  // 当天观察（沿用旧版文案引擎：时长分档 × 状态摘要，未结课会话不写成「已完成」）
   const taskFragment = daySessions.length && primaryTask !== '未关联具体任务' ? `主要围绕“${primaryTask}”展开。` : '';
   let analysis: string;
   if (!daySessions.length) {
     analysis = EMPTY_DAY_MSG;
+  } else if (onlyInProgress) {
+    if (stateSummary === '有卡点需要巩固') analysis = `今天开展了一次学习（尚在进行中），累计 ${fmtDuration(minutes)}，过程中出现了卡点，可以接着完成或复习巩固。${taskFragment}`;
+    else analysis = `今天进行了一次轻量学习（尚未结课），累计 ${fmtDuration(minutes)}，下次可从上次进度继续。${taskFragment}`;
   } else if (minutes >= 120) {
     if (stateSummary === '有卡点需要巩固') analysis = `今天学习时长较长，累计 ${fmtDuration(minutes)}，过程中出现了卡点。建议之后安排一次针对性复习，把卡住的概念巩固下来。${taskFragment}`;
     else if (stateSummary === '专注度较好') analysis = `今天学习时长较长，累计 ${fmtDuration(minutes)}，但整体专注度不错。后续注意恢复，就能把这个节奏维持住。${taskFragment}`;
@@ -1563,13 +1588,19 @@ const daySheet = computed(() => {
   const zone = minutes >= 120 ? '高强度' : minutes >= 60 ? '中度' : minutes > 0 ? '轻度' : '无记录';
   const zoneCls = minutes >= 120 ? 'high' : minutes >= 60 ? 'mid' : minutes > 0 ? 'low' : 'none';
 
+  const headline = !daySessions.length
+    ? '这一天没有学习记录'
+    : onlyInProgress
+      ? (daySessions.length === 1 ? '这一天开始了 1 次学习（进行中）' : `这一天有 ${daySessions.length} 次进行中的学习`)
+      : inProgressCount > 0
+        ? `这一天完成了 ${completedCount} 次学习，另有 ${inProgressCount} 次进行中`
+        : daySessions.length === 1
+          ? '这一天完成了 1 次学习'
+          : `这一天完成了 ${daySessions.length} 次学习`;
+
   return {
     title: selectedInfo.value.title,
-    headline: !daySessions.length
-      ? '这一天没有学习记录'
-      : daySessions.length === 1
-        ? '这一天完成了 1 次学习'
-        : `这一天完成了 ${daySessions.length} 次学习`,
+    headline,
     count: daySessions.length,
     minutes,
     primaryTask,

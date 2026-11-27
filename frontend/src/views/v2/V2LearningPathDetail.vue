@@ -888,6 +888,7 @@ const openMaterialRef = (ref: any) => {
     sectionTitle: String(ref.sectionTitle || ''),
     quote: String(ref.quote || ''),
   };
+  sideOpen.value = true;
 };
 
 /* ---------- 全文阅读弹窗（2026-11-06 走查 图6） ---------- */
@@ -1425,7 +1426,12 @@ async function runAdjustIntent(mode: NonNullable<AdjustMode>, t: string, fromSta
 function handleSessionConflict(err: any, retry: () => Promise<void>): boolean {
   const code = err?.response?.data?.error?.code;
   const sessions = err?.response?.data?.error?.details?.sessions;
-  if (err?.response?.status === 409 && code === 'PATH_MUTATION_HAS_OPEN_SESSION' && Array.isArray(sessions) && sessions.length > 0) {
+  if (
+    err?.response?.status === 409
+    && (code === 'PATH_MUTATION_HAS_OPEN_SESSION' || code === 'PATH_MUTATION_HAS_IN_PROGRESS')
+    && Array.isArray(sessions)
+    && sessions.length > 0
+  ) {
     clearedSessionIds.value = [];
     blockingSessions.value = sessions;
     pendingAdjustRetry.value = retry;
@@ -1588,8 +1594,10 @@ async function confirmAiAdvice() {
       triggerSource: 'system',
       requireConfirmation: false,
       ...(aiAdvice.value.stageNumber ? { stageNumber: aiAdvice.value.stageNumber } : {}),
+      ...(clearedSessionIds.value.length ? { clearedSessionIds: [...clearedSessionIds.value] } : {}),
     }) as unknown as { message?: string; data?: any };
     const data = (result as any)?.data ?? result;
+    clearedSessionIds.value = [];
     adjustDialogOpen.value = false;
     aiAdvice.value = null;
     if (data?.status === 'redesigned-stage') {
@@ -2041,7 +2049,7 @@ function onWindowResize() {
   display: flex; justify-content: center;
   padding: 10px 28px 4px;
 }
-.detail__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
+.detail__ai-note :deep(.ai-note) { font-size: 12px; }
 
 .detail__main {
   max-width: 1080px; margin: 0 auto;
@@ -2970,6 +2978,7 @@ function onWindowResize() {
   .hero__ring-text b { font-size: 16px; }
   .hero__desc,
   .hero__desc-toggle,
+  .hero__deliverable,
   .hero__metrics,
   .hero__actions { grid-column: 1 / -1; }
   .stages__empty { padding: 20px 16px; }

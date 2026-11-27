@@ -173,6 +173,42 @@ describe('buildCheckpointSubmitResult：重答卡随提交响应带回', () => {
     // 协议未生效（旧课堂/杀开关）→ 键缺席，前端保持原读数不动
     expect('lessonPhase' in buildCheckpointSubmitResult({ aiResponse: '好。', revision: 2 })).toBe(false)
   })
+
+  it('提交回合同步透传板书/配图/知识点/伴学与完课信号（缺席时不补空键）', () => {
+    const bare = buildCheckpointSubmitResult({ aiResponse: '好。', revision: 2 })
+    expect('figures' in bare).toBe(false)
+    expect('knowledgePoints' in bare).toBe(false)
+    expect('peerTriggered' in bare).toBe(false)
+    expect('isCompletion' in bare).toBe(false)
+
+    const result = buildCheckpointSubmitResult({
+      aiResponse: '理解得很准，板书已更新。',
+      revision: 10,
+      checkpointResolution: { passed: true },
+      checkpoint: null,
+      figures: [{ engine: 'svg', kind: 'concept-map', board: true, boardRevision: 2 } as any],
+      diagrams: [{ engine: 'mermaid', code: 'graph LR; A-->B;' }],
+      knowledgePoint: '作用域查找链',
+      knowledgePoints: [{ name: '作用域查找链', status: 'mastered', progress: 100 }],
+      confirmCheck: { prompt: '要继续吗', actions: [{ label: '继续', message: '继续' }] },
+      peerTriggered: true,
+      peerMessage: '这块顺手举个反例试试？',
+      peerStrategy: 'counterexample',
+      peerFollowUpQuestions: ['换成闭包还成立吗？'],
+      isCompletion: true,
+    })
+
+    expect(result.figures).toHaveLength(1)
+    expect(result.diagrams).toHaveLength(1)
+    expect(result.knowledgePoint).toBe('作用域查找链')
+    expect(result.knowledgePoints).toEqual([{ name: '作用域查找链', status: 'mastered', progress: 100 }])
+    expect(result.confirmCheck?.actions).toHaveLength(1)
+    expect(result.peerTriggered).toBe(true)
+    expect(result.peerMessage).toBe('这块顺手举个反例试试？')
+    expect(result.peerStrategy).toBe('counterexample')
+    expect(result.peerFollowUpQuestions).toEqual(['换成闭包还成立吗？'])
+    expect(result.isCompletion).toBe(true)
+  })
 })
 
 describe('submitCheckpoint 答错链路：响应带回重答卡', () => {

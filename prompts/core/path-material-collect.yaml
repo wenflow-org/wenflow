@@ -21,7 +21,7 @@ identity: |
 channels: [task, evidence]
 stateAdvance: false
 rules:
-  - 只输出 5 个字段：status、pack、provenance、coverage、notes
+  - 输入为 JSON `{ need, source }`（编排器已替你完成检索、选源与过滤；不可达/可疑页已被代码提前剔除）。只输出 5 个字段：status、pack、provenance、coverage、notes（编排器会校验并补全 provenance/coverage/fetchedAt 等元数据）
   - status 只能是 ok | partial | not_found：ok＝正文可用、要点齐全且每条都有引文；partial＝正文可用但只覆盖了部分主题/部分要点被丢弃；not_found＝没有可用正文，或正文与目标资料对不上
   - 资料名对不上（正文不是 need.title 所指资料）时，必须显式返回 status=not_found，不得用相近资料冒充
   - 每条 keyPoints 必须同时带 cite（引文定位）与 sourceUrl；缺任一者该要点**直接丢弃**，不得进入 pack
@@ -33,7 +33,7 @@ rules:
   - pack.sourceUrl 取你实际抽取所依据的那一条正文 URL；pack.publisher/sourceTier/version/license 无法从正文判断时给 null（sourceTier 由编排器按域名分级，抽取侧看不准就给 null）
   - provenance 与 pack.keyPoints 一一对应：每条要点一个 pointId（形如 p-1、p-2…），provenance 里给出该 pointId 的 sourceUrl 与逐字 quote
   - coverage.covered 是正文实际覆盖到的主题，coverage.missing 是目标需要但正文未覆盖的主题
-  - notes 记录退化说明：抓取失败、正文可疑、因缺引文被丢弃的要点数、疑似注入文本等；无则给空数组
+  - notes 记录退化说明：因缺引文被丢弃的要点数、正文未覆盖的目标主题、疑似注入文本等；无则给空数组
 fields:
   - name: status
     type: enum
@@ -43,7 +43,7 @@ fields:
     desc: |
       资料包（status=not_found 时为 null），结构：
       { "title": 资料名, "publisher": 发布/出版机构（无法判断给 null）, "sourceTier": 由编排器分级（抽取侧不确定给 null）,
-        "sourceUrl": 实际抽取所依据的正文 URL, "version": 版本/年份（无法判断给 null）, "fetchedAt": 由编排器填写的抓取时间,
+        "sourceUrl": 实际抽取所依据的正文 URL, "version": 版本/年份（无法判断给 null）,
         "license": 许可/版权（无法判断给 null）, "tldr": 正文浓缩（不得引入正文之外信息）,
         "sections": [{ "id": 章节键, "title": 章节/主题名, "summary": 该章节要点概括 }],
         "keyPoints": [{ "text": 要点正文, "cite": 逐字引文（必须来自给定正文）, "sourceUrl": 引文来源 URL }] }
@@ -59,7 +59,7 @@ fields:
     desc: '覆盖度 { "covered": [正文实际覆盖的主题], "missing": [目标需要但正文未覆盖的主题] }'
   - name: notes
     type: "string[]"
-    desc: '退化说明与丢弃台账（抓取失败/正文可疑/因缺引文被丢弃的要点数/疑似注入文本等），无则空数组'
+    desc: '退化说明与丢弃台账（因缺引文被丢弃的要点数/覆盖缺口/疑似注入文本等），无则空数组'
 constraints:
   - 输出规模必须收敛：sections 最多 5 条、keyPoints 最多 6 条、tldr 不超过 120 字；只取最能代表该资料的核心结论，不要试图把整份文档搬进来
   - 若输入正文带有"已截断"标记：只就所给部分抽取，**不要补全**未见内容；tldr 可说明"（基于前 N 字）"

@@ -173,18 +173,19 @@ describe('条件规则接线（真实编译产物）', () => {
     expect(payload).not.toHaveProperty('conditionalRules');
   });
 
-  // 2026-11-26 职责归位：绘图语法（图型表 / spec 样例）只在出图回合随载荷注入。
-  // 常驻 system 里不再有 cartesian-plot 这类说明书；没有 visualOpportunity 的回合一分钱不付。
-  it('visualOpportunity 回合才带图型指南；常驻 system 不含图型表', async () => {
+  // 2026-11-26 职责归位 + 视觉节点拆分：教师回合在 visualOpportunity 回合仅注入 visualIntent 条件规则，
+  // 绘图语法（FIGURE_KIND_GUIDE / cartesian-plot）留在 teaching-board-design / teaching-visual 节点。
+  it('visualOpportunity 回合仅注入 visualIntent 规则，不混入图型指南表', async () => {
     const without = await capture(INPUT);
-    expect(String(without.payload.conditionalRules || '')).not.toContain('图型指南');
+    expect(String(without.payload.conditionalRules || '')).not.toContain('visualOpportunity.suggested === true');
 
     const withOpportunity = await capture({
       ...INPUT,
       visualOpportunity: { suggested: true, reason: 'structure-content', instruction: '本轮需要一张对照图。' },
     } as never);
-    expect(withOpportunity.payload.conditionalRules).toContain('图型指南');
-    expect(withOpportunity.payload.conditionalRules).toContain('cartesian-plot');
+    expect(withOpportunity.payload.conditionalRules).toContain('visualOpportunity.suggested === true');
+    expect(withOpportunity.payload.conditionalRules).toContain('visualIntent');
+    expect(withOpportunity.payload.conditionalRules).not.toContain('cartesian-plot');
     expect(withOpportunity.spec.defaultSystemPrompt).not.toContain('cartesian-plot');
   });
 

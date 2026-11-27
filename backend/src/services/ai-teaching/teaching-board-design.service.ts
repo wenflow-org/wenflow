@@ -14,7 +14,13 @@ import type { BoardIntent } from './board-intent';
 import { BOARD_LESSON_KIND_GUIDE, isDegenerateMatrixFigure } from './board-lesson';
 import { logger } from '../../utils/logger';
 
-const BOARD_DESIGNER_PROMPT = loadPromptFile('skill:teaching-board-design')?.systemPrompt || '';
+const rawBoardPrompt = loadPromptFile('skill:teaching-board-design')?.systemPrompt || '';
+const BOARD_DESIGNER_PROMPT = rawBoardPrompt
+  ? rawBoardPrompt
+      .replace(/<!--\s*mode:full\s*-->[\s\S]*?<!--\s*\/mode:full\s*-->\s*/g, '')
+      .replace(/<!--\s*\/?mode:load\s*-->\s*/g, '')
+      .trim()
+  : '';
 // 图型契约（每种 kind 的 spec 字段）原本只在 teaching-turn 的 system prompt 里；teaching-board-design
 // 自己那份只讲「画到哪为止」。不拼进来，模型会照着脑补的 `states` 画 state-strip，归一化直接拒绝。
 const BOARD_DESIGNER_SYSTEM = BOARD_DESIGNER_PROMPT

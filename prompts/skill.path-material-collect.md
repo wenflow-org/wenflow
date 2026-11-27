@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-material-collect
-coreHash: 334a4d61ce536fcd23ff99e5818d331e951448864dae9f62b970c4aacd56c76c
+coreHash: c15e7ca162e23694d996ff6dfc7a82c27ff8800be2f097b39a4180db658692dd
 coreVersion: 1
 temperature: 0.1
 maxTokens: 64000
@@ -22,7 +22,7 @@ failurePolicy: retry
 
 ## 执行规则
 
-1. 只输出 5 个字段：status、pack、provenance、coverage、notes
+1. 输入为 JSON `{ need, source }`（编排器已替你完成检索、选源与过滤；不可达/可疑页已被代码提前剔除）。只输出 5 个字段：status、pack、provenance、coverage、notes（编排器会校验并补全 provenance/coverage/fetchedAt 等元数据）
 2. status 只能是 ok | partial | not_found：ok＝正文可用、要点齐全且每条都有引文；partial＝正文可用但只覆盖了部分主题/部分要点被丢弃；not_found＝没有可用正文，或正文与目标资料对不上
 3. 资料名对不上（正文不是 need.title 所指资料）时，必须显式返回 status=not_found，不得用相近资料冒充
 4. 每条 keyPoints 必须同时带 cite（引文定位）与 sourceUrl；缺任一者该要点**直接丢弃**，不得进入 pack
@@ -34,14 +34,14 @@ failurePolicy: retry
 10. pack.sourceUrl 取你实际抽取所依据的那一条正文 URL；pack.publisher/sourceTier/version/license 无法从正文判断时给 null（sourceTier 由编排器按域名分级，抽取侧看不准就给 null）
 11. provenance 与 pack.keyPoints 一一对应：每条要点一个 pointId（形如 p-1、p-2…），provenance 里给出该 pointId 的 sourceUrl 与逐字 quote
 12. coverage.covered 是正文实际覆盖到的主题，coverage.missing 是目标需要但正文未覆盖的主题
-13. notes 记录退化说明：抓取失败、正文可疑、因缺引文被丢弃的要点数、疑似注入文本等；无则给空数组
+13. notes 记录退化说明：因缺引文被丢弃的要点数、正文未覆盖的目标主题、疑似注入文本等；无则给空数组
 
 ## 输出字段
 
 - status · enum — 采集结果状态：ok（要点齐全且均有引文）| partial（部分覆盖/部分要点被丢弃）| not_found（无可用正文或资料对不上）。not_found 必须显式返回，不得用记忆冒充资料内容
 - pack · object? — 资料包（status=not_found 时为 null），结构：
 { "title": 资料名, "publisher": 发布/出版机构（无法判断给 null）, "sourceTier": 由编排器分级（抽取侧不确定给 null）,
-  "sourceUrl": 实际抽取所依据的正文 URL, "version": 版本/年份（无法判断给 null）, "fetchedAt": 由编排器填写的抓取时间,
+  "sourceUrl": 实际抽取所依据的正文 URL, "version": 版本/年份（无法判断给 null）,
   "license": 许可/版权（无法判断给 null）, "tldr": 正文浓缩（不得引入正文之外信息）,
   "sections": [{ "id": 章节键, "title": 章节/主题名, "summary": 该章节要点概括 }],
   "keyPoints": [{ "text": 要点正文, "cite": 逐字引文（必须来自给定正文）, "sourceUrl": 引文来源 URL }] }
@@ -50,7 +50,7 @@ failurePolicy: retry
 { "pointId": 形如 p-1, "sourceUrl": 该引文来源 URL, "quote": 从正文逐字抄录的引文 }
 quote 必须能在给定正文中原样找到；找不到的要点不得进入 pack。
 - coverage · object — 覆盖度 { "covered": [正文实际覆盖的主题], "missing": [目标需要但正文未覆盖的主题] }
-- notes · string[] — 退化说明与丢弃台账（抓取失败/正文可疑/因缺引文被丢弃的要点数/疑似注入文本等），无则空数组
+- notes · string[] — 退化说明与丢弃台账（因缺引文被丢弃的要点数/覆盖缺口/疑似注入文本等），无则空数组
 
 ## 边界约束
 

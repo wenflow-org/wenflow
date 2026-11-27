@@ -141,6 +141,15 @@ export interface TeachingSessionMessage {
     /** 命中的原文片段（凭什么判它是出图时机） */
     matched?: string[];
   } | null;
+  /** 教师补充材料卡片（批次 E）：本轮晋升或同轮同步复调交付的公开网络资料窗口，随消息持久落库供刷新恢复 */
+  supplementaryMaterial?: {
+    materialId: string;
+    title: string;
+    topic: string;
+    sourceUrl?: string | null;
+    publishedAt?: string | null;
+    excerpt?: string;
+  } | null;
 }
 
 /**

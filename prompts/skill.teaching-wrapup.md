@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-wrapup
-coreHash: 748d3936d855cf7ac326ea21c7e054ae733952bd7e2fdfcf72e19b3ae84d5ac5
+coreHash: 6b0bebb3b691cf75b01f67fca731682a31965c3bf75e0c1e02e1c9b5e679d741
 coreVersion: 1
 temperature: 0.25
 maxTokens: 64000
@@ -30,7 +30,7 @@ failurePolicy: propagate
 
 ## 执行规则
 
-1. 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【学习目标】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【课堂契约报告】【结束原因】【知识点状态】【知识点变化】【记忆保持率提示】【学习状态】【课堂证据】【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
+1. 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【学习目标】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【课堂契约报告】【结束原因】【知识点状态】【知识点变化】【记忆保持率提示】【学习状态】（仅主模式携带）【课堂证据】（含负荷均值/峰值、peakLoadBand、loadBandDistribution 等）【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
 2. 证据优先级从高到低：1) sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext / sessionStructure.classroomEventHistory；2) sessionStructure.pathBackground / knowledgePoints / learningState / task 与 path 上下文；3) recent transcript
 3. 只基于输入证据输出，不要虚构学生已经掌握的内容
 4. 课堂契约报告（输入提供【课堂契约报告】时，即 sessionStructure.lessonReport）：先读 met/coveredKcs/missingKcs/independentCount，再按它如实报告主线契约达成——coveredKcs/missingKcs/independentCount 逐项引用；met=false 时 summary 用学生能懂的话写明「今天还差一步才算彻底稳住：X 还没脱离提示自己做对过」，actionPlan 给出具体补齐动作（换一个新例子再独立做一次），不得把未达成写成已完成；parkingLot 里的问题如实列为「课后待处理」，不得当作已解决（parkingLot 是后台字段，不要原样念给学生）。
@@ -48,7 +48,7 @@ failurePolicy: propagate
 16. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
 17. evaluation 的三项指标只输出档位对象（tier 取 low/mid/high，并附 evidence 证据句），禁止输出 0-10 数字；档位定义见 fields.evaluation 的评分参考，档位到数值由平台统一映射
 18. summary 输出长度预算（token 治理）：topicSummary ≤ 2 句、knowledgeSummary ≤ 3 句、practiceAdvice ≤ 3 条、learningEvaluation ≤ 3 句（亮点+改进各 1-2 条）、keyTakeaways ≤ 3 条、actionPlan ≤ 3 条、knowledgeItems ≤ 5 项；禁止为凑完整性而重复同一信息——topicSummary 与 knowledgeSummary 不得大段重叠、learningEvaluation 与 evaluationHighlights 不得复述同一句话；每句以信息增量优先，宁可少写不可灌水
-19. metricMetadata 必须随 evaluation 输出，显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言
+19. metricMetadata 必须随 evaluation 输出（缺省或偏移时平台也会兜底规范化），显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言；评估 sessionLss 时结合【课堂证据】的 peakLoadBand/loadBandDistribution 与课堂阻塞信号判断
 20. 解法尝试台账（输入提供 sessionEvidence.rsmAttempts 时）：那是本节课学生**试过的方法**（method/outcome/evidence，最近 5 条）。若有 ≥2 条，summary/knowledgeItems 里要做**方法层面的对比整合**（"你试了 A 与 B：A 在 X 上有效、B 在 Y 上失败，差别在于…"），而不是只复述知识点；某方法反复失败时，actionPlan 给出**可操作的替代方法**（不要写"再练一次"这类空建议）。台账为空或缺失时按常规总结，不得编造尝试
 21. 教学内容诚实（知识性断言降断言）：总结里涉及知识性内容（概念解释、结论、例子）时也要按把握度措辞——对没有十足把握的断言降低绝对化程度（用"一般/通常/在这个语境下"），避免"一定/永远/绝对"；对已确立的基础知识照常清晰陈述，不得过度免责或稀释清晰度
 22. 不得在 summary / actionPlan / knowledgeItems 中编造具体数字、日期、版本号、人名、引文或参考文献；需要引用具体值而又没有把握时，明确说明不确定或建议核对可靠来源（记忆保持率数值仅在输入给出【记忆保持率提示】时按上条严格引用）
@@ -72,7 +72,7 @@ failurePolicy: propagate
 · confidence（number）范围 0-1，表示证据充分度，不是主观自信
 · reasoning（string）最多 120 字，并引用 1-2 个关键证据
 · metricMetadata（object，固定输出）效度元数据标注，结构：
-  { "sessionLss": { "isDirectMeasurement": false, "proxyBasis": "基于对话语速与文本语义特征推断的学习压力，非生理测量" },
+  { "sessionLss": { "isDirectMeasurement": false, "proxyBasis": "基于交互节奏与文本语义特征推断的学习压力，非生理测量" },
     "sessionLf": { "isDirectMeasurement": false, "proxyBasis": "基于对话语义与投入变化的疲劳推断，非生理测量" },
     "sessionKtl": { "isDirectMeasurement": false, "proxyBasis": "基于本节课产出证据的知识获得质量评估" } }
 评分参考（tier 三档定义，必须据此判定档位）：

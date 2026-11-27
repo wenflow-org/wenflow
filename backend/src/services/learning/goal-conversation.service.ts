@@ -16,7 +16,6 @@ import {
   resolvePrerequisiteCheckResultsFromUnderstanding,
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
-import { adjudicateGoalConfirm } from '../../skills/goal-confirm-adjudicator';
 import { hasConfirmableProposal } from './goal-proposal-guard';
 import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
@@ -793,71 +792,26 @@ async continueConversation(
           }
         }
 
-        // 确认两通道（2026-11-08 确认动作减重）：
-        // ①UI 按钮 flag——最强信号，直接推进，不再做文本否决（按钮确认发送固定话术，
-        //   旧「拒绝文本压过 flag」只对 API 驱动方/VL legacy 开关有意义，删）；
-        // ②打字——proposing 阶段先过一次裁决 skill（goal-confirm-adjudicator，temperature 0，
-        //   只回答「这句话是否表达就要这个方案、开始排路径」）：confirm=true 直接推进，
-        //   **不跑主对话回合**（比旧 confirmIntent 通道快一个完整回合）；false（调整/拒绝/提问）
-        //   落库走正常回合，由模型自然接住。裁决失败一律 fail-open 按非确认处理——
-        //   行为与旧白名单未命中完全一致，不阻塞对话。
-        // 提案内容门禁（#162，develop 侧修复并入）：没有可用提案时不代签——按钮与裁决都
-        // 不该对着 null/半截提案生成路径，转普通回合由模型先补提案（判据见 goal-proposal-guard）。
+        // 确认单通道（仅 UI 按钮 flag）：
+        // 方案确认必须由用户通过前端 UI「查看并确认」显式点击发起（options.confirmProposal=true），
+        // 对话框内打字不再经 goal-confirm-adjudicator 直接推进或触发路径生成；
+        // 打字发言一律落库走正常 goal-conversation 回合，由模型引导点击 UI 按钮或继续微调方案。
+        // 提案内容门禁（#162）：没有可用提案时不代签——转普通回合由模型先补提案。
         const collected = JSON.parse(conversation.collectedData || '{}');
-        // 跨轮确认放行（修复批 17-①，u19 GOAL_STUCK_LOOP critical）：硬字段压回会把 stage
-        // 打回 understanding，而 collected.confirmedProposal 仍在案——此时学员打字确认
-        // （「确认，按这个方向排路径吧」）若仍要求 stage==='proposing'，裁决器永远不触发，
-        // 确认流死锁。改为：提案在案即裁决（用户 agency 先例「坚持 ≥2 次 → 放行」同向）。
         const proposalConfirmable = hasConfirmableProposal(conversation.collectedData, { conversationId, userId, stage: conversation.stage })
           && (conversation.stage === 'proposing' || Boolean((JSON.parse(conversation.collectedData || '{}') as Record<string, unknown>).confirmedProposal));
-        // answer-only 出口（2026-11-10 外评：一句话能讲透的理解型诉求不排路径）：
-        // 分诊判 answer_only 且用户坚持 <2 次 → 两确认通道都不放行，落普通回合——
-        // 提示词层「一句话讲透测试」规则引导模型直接给出完整解答并收口；
-        // 坚持 ≥2 次 → 放行照常排路径（用户 agency 兜底，不搞死拦）。
-        // 2026-11-11 方案二：answer_then_hook（一次性操作/排障）同闸——首轮直答给解法，
-        // 用户坚持要课（或说「生成排障课」触发重分诊为 capability）后照常放行。
+        // answer-only 出口（一句话能讲透的理解型诉求不排路径）：
+        // 分诊判 answer_only / answer_then_hook 且用户通过 UI 按钮坚持 <2 次 → 转普通回合直答；
+        // 坚持 ≥2 次 → 放行照常排路径（用户 agency 兜底）。
         const answerOnlyTriage = resolveResponseTriageFromCollectedData(collected);
         const answerOnlyGate = (answerOnlyTriage?.mode === 'answer_only'
           || answerOnlyTriage?.mode === 'answer_then_hook') && proposalConfirmable;
         const answerOnlyNudges = Number((collected as any)?.answerOnlyNudges || 0);
         // 按钮 flag 的判据只看「有没有可确认的方案」，不再要求 stage==='proposing'
-        // （2026-11-17 真机会话 gc_1794910169154_01o30g0）：硬必需字段缺时间预算时
-        // 模型会把 stage 停在 understanding，却已经产出完整 confirmedProposal 并在
-        // 正文里说「点确认」；旧判据让按钮永远不出现，用户只能一直聊。按钮是显式
-        // 确认动作，方案内容门禁已由 proposalConfirmable 守住，stage 不该再拦。
         const flagConfirmWanted = options?.confirmProposal === true
           && proposalConfirmable;
-        let adjudicatedConfirm = false;
-        // answer-only 闸也要先裁决用户这句话是不是确认（2026-11-13 批量跑数实证）：
-        // 旧实现用 `!answerOnlyGate` 跳过了裁决，导致「好，那就开始吧」这类打字确认既不算
-        // confirmIntent、也进不了 answerOnlyNudges 计数——学习者连续说三次「开始吧」，界面仍
-        // 只让他点确认，goal 一直卡到 20 步。裁决是零成本语义判断，闸门应该消费它而不是绕过它。
-        if (proposalConfirmable && !flagConfirmWanted) {
-          // 纵深防御：adjudicateGoalConfirm 自带 fail-open（内部 catch → 非确认），
-          // 但 service 不假设它永不抛——任何意外异常也按非确认走正常回合，不阻塞对话。
-          let verdict = { confirm: false };
-          try {
-            verdict = await adjudicateGoalConfirm({
-              userUtterance: userReply,
-              proposal: {
-                learning_direction: collected.confirmedProposal?.learning_direction,
-                first_deliverable: collected.confirmedProposal?.first_deliverable,
-              },
-              lastAssistantExcerpt: this.lastAssistantExcerpt(collected),
-            });
-          } catch (error) {
-            logger.warn('[goal-conversation] 确认裁决调用异常，按非确认走正常回合', {
-              conversationId,
-              userId,
-              error: (error as Error).message,
-            });
-          }
-          adjudicatedConfirm = verdict.confirm;
-        }
-        const confirmIntentArrived = flagConfirmWanted || adjudicatedConfirm;
-        // 「坚持 ≥2 次」按**累计确认意图**计数（含本次）：第一次仍先直答，第二次才放行。
-        // 旧实现 `answerOnlyNudges >= 2` 在增量前判断，实际要第三次才放行（off-by-one），
-        // 且打字确认永远进不到增量分支。
+        const confirmIntentArrived = flagConfirmWanted;
+        // 「坚持 ≥2 次」按**累计 UI 确认意图**计数（含本次）：第一次仍先直答，第二次才放行。
         const persistedConfirmCount = answerOnlyNudges + (confirmIntentArrived ? 1 : 0);
         const confirmAllowed = !answerOnlyGate || persistedConfirmCount >= 2;
         if (confirmIntentArrived && confirmAllowed) {
@@ -926,7 +880,12 @@ async continueConversation(
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       const persistedData = await this.updateCollectedData(conversation.id, responseWithConversationId);
-      const stage = this.resolveStageFromResponse(responseWithConversationId);
+      const rawStage = this.resolveStageFromResponse(responseWithConversationId);
+      // updateCollectedData 在存在 confirmedProposal 且 userMessageCount>=2 时会把 DB stage 提升为 proposing；
+      // 响应体必须同步采信该提升，避免前端确认条晚一轮（刷新后才出现）。
+      const stage = (rawStage === 'understanding' && persistedData?.stage === 'proposing')
+        ? 'proposing'
+        : rawStage;
       const confidence = this.resolveConfidenceFromResponse(responseWithConversationId);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 

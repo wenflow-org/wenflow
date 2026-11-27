@@ -60,7 +60,7 @@ describe('profile-state-review evidenceRefs 护栏', () => {
     ])
   })
 
-  it('无已知证据集时，仅要求至少一条引用', async () => {
+  it('无已知证据集时，伪造的 evidenceRefs 一律拦掉', async () => {
     const spec = await capturedSpec(baseInput([]))
     const out = spec.normalizeOutput({
       insights: [
@@ -68,6 +68,6 @@ describe('profile-state-review evidenceRefs 护栏', () => {
         { type: 'b', claim: 'no-ref', evidenceRefs: [], action: '' },
       ],
     })
-    expect(out.insights.map((i: any) => i.claim)).toEqual(['has-ref'])
+    expect(out.insights).toEqual([])
   })
 })

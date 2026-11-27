@@ -222,7 +222,7 @@ onMounted(() => {
 .field__label { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .field__input {
   width: 100%;
-  border: 1px solid var(--line);
+  border: 1px solid var(--mk-input-line);
   border-radius: var(--mk-radius-xl);
   padding: 11px 14px;
   font: inherit; font-size: 14px;
@@ -234,10 +234,11 @@ onMounted(() => {
 }
 .field__input:focus {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
+  box-shadow: var(--mk-focus-ring);
 }
 .field--error .field__input { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
 .field--error .field__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent); }
+.v2-page .field__input:focus-visible { outline: none; }
 .field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
 .btn-primary--block {
@@ -305,7 +306,7 @@ onMounted(() => {
      改用 --ink 与灰阶的派生：亮 2.61:1 / 暗 3.91:1，与 main.css 的卡片描边补丁
      （--mk-card-line 3.25:1）同一层级；不写死颜色，两档自动翻转。 */
   border: 1.5px solid color-mix(in srgb, var(--ink) 30%, var(--wf-border-dark));
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   background: var(--surface);
   cursor: pointer;
   position: relative;

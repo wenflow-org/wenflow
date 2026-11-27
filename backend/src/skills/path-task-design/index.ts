@@ -123,6 +123,10 @@ export function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
       // 白名单归一**必须带上** materialRefs，否则任务级资料引用在此被丢掉
       // （随后由 withMaterialRefs 逐字核对；核对不过会在那里被删除）
       materialRefs: Array.isArray(item?.materialRefs) ? item.materialRefs : undefined,
+      // subject 拓扑覆盖核对（2026-11-26）：保留 covers 正整数序号数组，否则下游封面校验永远判缺
+      covers: Array.isArray(item?.covers)
+        ? item.covers.filter((n: unknown) => typeof n === 'number' && Number.isInteger(n) && n > 0)
+        : undefined,
       // 同理必须带上 anticipatedMisconceptions（2026-09-26 课前注入）：白名单归一没带 =
       // 模型输出了也被剥掉（真实 LLM 端到端实测：原始输出含键、sidecar 空）
       anticipatedMisconceptions: Array.isArray(item?.anticipatedMisconceptions)

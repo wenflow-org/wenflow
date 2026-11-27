@@ -1016,6 +1016,7 @@ export async function processStudentMessage(
       });
     }
   }
+  const deliveredSupplement = supplementPromotion.payload || supplementSyncPayload || null;
   const assistantMessage: TeachingSessionMessage = {
     role: 'assistant',
     content: teachingOutput.reply,
@@ -1028,6 +1029,7 @@ export async function processStudentMessage(
     peerMessage: peerMessage || null,
     peerStrategy,
     peerFollowUpQuestions,
+    ...(deliveredSupplement ? { supplementaryMaterial: deliveredSupplement } : {}),
   };
 
   // 教学配图（owner 口径 2026-09-23「图片是一种特殊的文字」）：老师临场请求 → 代码闸门 → 画一张，

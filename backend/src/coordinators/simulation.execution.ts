@@ -830,18 +830,13 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         input.userId,
         {
           systemPromptOverrides: getSessionPromptOverrides(session),
-          // 平台硬规则：proposing 阶段只有显式确认动作才会收束并触发 Path 生成。
-          // 确认信号归学习者自己（2026-11-07 用户裁定）：模拟器在判断方案可行时用自己的
-          // 口吻把确认说出来（提示词真源 simulation-goal-dialogue.yaml），
-          // 后端按确认文本判定——按钮 flag 直通 / 打字走 goal-confirm-adjudicator 裁决
-          //（goal-conversation 侧已上线并经真机验证）。协调器不再按 readyToAdvance 代发：
-          // 双方互为黑盒，agent 只认学习者实际说出的话。
-          // 旧跑数工具（batch-experiment / autopilot）若依赖代发确认，设
-          // VIRTUAL_LEARNER_PROXY_CONFIRM=1 恢复旧行为——此时仍按诚实状态代发：
-          // readyToAdvance===true 且 readyToProceed!==false 且 wantsClarification!==true
-          //（显式拒绝不得代签），防卡死仍由 goal agent 侧轮次上限承担。
-          ...(process.env.VIRTUAL_LEARNER_PROXY_CONFIRM === '1'
-            ? { confirmProposal: shouldAutoConfirmGoalProposal(currentGoalLearnerState) }
+          // 平台硬规则（仅 UI 按钮确认）：Goal 阶段方案确认必须由 UI confirmProposal flag 触发，
+          // 用户侧打字不再走自然语言裁决直通。
+          // 虚拟学习者模拟器没有浏览器 UI 按钮，因此默认（非 VIRTUAL_LEARNER_PROXY_CONFIRM=0）
+          // 在学习者判断方案可行且未主动要求澄清/拒绝时，由编排层代发 confirmProposal flag。
+          ...(process.env.VIRTUAL_LEARNER_PROXY_CONFIRM !== '0' &&
+          shouldAutoConfirmGoalProposal(currentGoalLearnerState)
+            ? { confirmProposal: true }
             : {}),
           ...(probeAnswers.length ? { probeAnswers } : {})
         }

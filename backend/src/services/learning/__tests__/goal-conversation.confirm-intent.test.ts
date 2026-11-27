@@ -181,27 +181,27 @@ beforeEach(() => {
   mockMarkActiveGenerationFailed.mockResolvedValue(undefined);
 });
 
-describe('打字确认裁决（goal-confirm-adjudicator）', () => {
-  it('a) 裁决 confirm=true → 直接推进，不跑主对话回合（executeSkill 零调用）', async () => {
-    mockCallPrompt.mockResolvedValue({ success: true, output: { confirm: true } });
+describe('Goal 确认单通道（仅 UI 按钮 confirmProposal flag，不走打字确认）', () => {
+  it('a) 无 confirmProposal flag 时，即使用户打字说「行，就照你说的办」也不调裁决、不建路，走正常模型回合', async () => {
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '好，那咱就按这个路子走；你点一下「查看并确认」把方案定下来，我就开始排路径。',
+      stage: 'proposing',
+      confirmedProposal: {
+        learning_direction: '复盘写作',
+        first_deliverable: '一份能直接用的月度复盘提纲',
+        key_stages: ['S1 复盘框架', 'S2 结论提炼'],
+      },
+    }));
 
     const result = await goalConversationService.continueConversation('conv-1', '行，就照你说的办', 'user-1');
 
-    // 关键：裁决命中即推进——主对话回合（executeSkill）一次都不跑，比旧 confirmIntent 通道快一个回合
-    expect(mockCallPrompt).toHaveBeenCalledTimes(1);
-    expect(mockExecuteSkill).not.toHaveBeenCalled();
-    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
-    expect(result.internal.core.stage).toBe('completed');
-    // 同意计量：打字确认通道 = text
-    const persisted = JSON.parse(conversationRecord.collectedData);
-    expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
-      channel: 'text',
-      refusalVetoed: false,
-    }));
+    expect(mockCallPrompt).not.toHaveBeenCalled();
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
   });
 
-  it('b) 裁决 confirm=false（调整/拒绝/提问）→ 落库走正常回合，由模型接住', async () => {
-    mockCallPrompt.mockResolvedValue({ success: true, output: { confirm: false } });
+  it('b) 调整/拒绝/提问类输入 → 落库走正常回合，由模型接住', async () => {
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
       userVisible: '好，我们不着急，你想先调整哪部分？',
       stage: 'proposing',
@@ -209,7 +209,7 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
 
     const result = await goalConversationService.continueConversation('conv-1', '先别，我再想想', 'user-1');
 
-    expect(mockCallPrompt).toHaveBeenCalledTimes(1);
+    expect(mockCallPrompt).not.toHaveBeenCalled();
     expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(result.internal.core.stage).toBe('proposing');
@@ -219,8 +219,7 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
     expect(roles).toEqual(expect.arrayContaining(['user', 'ai']));
   });
 
-  it('c) 裁决失败 → fail-open 按非确认（走正常回合）+ P3 降级留痕，不阻塞对话', async () => {
-    mockCallPrompt.mockRejectedValue(new Error('GOAL_CONFIRM_ADJUDICATOR_TIMEOUT'));
+  it('c) 已确认方案前再次补充/随便说点什么 → 正常走主对话回合，不触发裁决调用', async () => {
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
       userVisible: '收到，这版方向你可以先看看，想调随时说。',
       stage: 'proposing',
@@ -228,7 +227,7 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
 
     const result = await goalConversationService.continueConversation('conv-1', '随便说点什么', 'user-1');
 
-    expect(mockRecordDegradation).toHaveBeenCalledTimes(1);
+    expect(mockCallPrompt).not.toHaveBeenCalled();
     expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(result.internal.core.stage).toBe('proposing');
@@ -254,7 +253,7 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
     expect(result.internal.core.stage).toBe('proposing');
   });
 
-  it('d) UI 按钮 flag → 直接推进，不调裁决（按钮是最强信号，不再做文本否决）', async () => {
+  it('d) UI 按钮 flag → 直接推进，不调裁决，计量 channel=flag', async () => {
     const result = await goalConversationService.continueConversation('conv-1', '确认并生成路径', 'user-1', { confirmProposal: true });
 
     expect(mockCallPrompt).not.toHaveBeenCalled();
@@ -271,8 +270,6 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
   it('d-3) stage 仍停在 understanding 但方案已完整：按钮 flag 同样推进（2026-11-17 真机 gc_1794910169154_01o30g0）', async () => {
     seedProposingConversation();
     const seeded = JSON.parse(conversationRecord.collectedData);
-    // 硬必需字段缺 time_budget → 模型把 stage 停在 understanding，但 confirmedProposal 已完整；
-    // 旧实现要求 stage==='proposing' 才认按钮，导致前端没有确认入口、用户只能继续聊。
     seeded.stage = 'understanding';
     conversationRecord.stage = 'understanding';
     conversationRecord.collectedData = JSON.stringify(seeded);
@@ -287,12 +284,11 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
     expect(persisted.lastConfirmation).toEqual(expect.objectContaining({ channel: 'flag' }));
   });
 
-  it('e) answer_then_hook：打字确认第一次拦截计数、第二次放行（不再要求第三次）', async () => {
+  it('e) answer_then_hook：UI 按钮第一次拦截计数、第二次放行', async () => {
     seedProposingConversation();
     const seeded = JSON.parse(conversationRecord.collectedData);
     seeded.responseTriage = { mode: 'answer_then_hook', confidence: 'medium', reasons: ['一次性操作'] };
     conversationRecord.collectedData = JSON.stringify(seeded);
-    mockCallPrompt.mockResolvedValue({ success: true, output: { confirm: true } });
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
       userVisible: '先直接给你这一处的解法，想系统练再生成课。',
       stage: 'proposing',
@@ -303,13 +299,13 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
       },
     }));
 
-    const first = await goalConversationService.continueConversation('conv-1', '好，那就开始吧', 'user-1');
+    const first = await goalConversationService.continueConversation('conv-1', '确认并生成路径', 'user-1', { confirmProposal: true });
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(first.internal.core.stage).toBe('proposing');
     expect(JSON.parse(conversationRecord.collectedData).answerOnlyNudges).toBe(1);
 
-    const second = await goalConversationService.continueConversation('conv-1', '好，就按这版开始排吧', 'user-1');
+    const second = await goalConversationService.continueConversation('conv-1', '确认并生成路径', 'user-1', { confirmProposal: true });
     expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
     // 第二次确认直接推进，不再跑主对话回合（executeSkill 仍只有第一次那一次）
     expect(mockExecuteSkill).toHaveBeenCalledTimes(1);

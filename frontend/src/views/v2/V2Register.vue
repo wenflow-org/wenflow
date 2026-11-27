@@ -222,7 +222,7 @@ onMounted(loadStatus);
 .field__label { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .field__input {
   width: 100%;
-  border: 1px solid var(--line);
+  border: 1px solid var(--mk-input-line);
   border-radius: var(--mk-radius-xl);
   padding: 11px 14px;
   font: inherit; font-size: 14px;

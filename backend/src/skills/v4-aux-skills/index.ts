@@ -271,6 +271,9 @@ async function teachingOpeningGeneratorHandler(input: any) {
           topic: d.topic,
           taskTitle: d.taskTitle,
           taskDescription: d.taskDescription,
+          ...(d.singleBoardPlanned ? { singleBoardPlanned: true } : {}),
+          ...(typeof d.taskMaterial === 'string' && d.taskMaterial.trim() ? { taskMaterial: d.taskMaterial } : {}),
+          ...(typeof d.priorClaimConstraint === 'string' && d.priorClaimConstraint.trim() ? { priorClaimConstraint: d.priorClaimConstraint } : {}),
           ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
           ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
           // 画像/学情锚/任务目标（2026-10-14）：core rules 已引用，caller 已传——
@@ -288,6 +291,9 @@ async function teachingOpeningGeneratorHandler(input: any) {
           taskTitle: d.taskTitle,
           taskDescription: d.taskDescription,
           taskType: d.taskType,
+          ...(d.singleBoardPlanned ? { singleBoardPlanned: true } : {}),
+          ...(typeof d.taskMaterial === 'string' && d.taskMaterial.trim() ? { taskMaterial: d.taskMaterial } : {}),
+          ...(typeof d.priorClaimConstraint === 'string' && d.priorClaimConstraint.trim() ? { priorClaimConstraint: d.priorClaimConstraint } : {}),
           currentMilestoneTitle: d.currentMilestoneTitle,
           // 2026-11-08 全 skill 缓存调查：删掉零引用键 pathSummary（提示词对 pathSummary /
           // 「路径概要」/「路径摘要」的引用数均为 0；真正被消费的是 currentMilestoneTitle 与 task* 系列）
@@ -352,6 +358,7 @@ async function teachingProbeHandler(
       topic: d.topic,
       taskTitle: d.taskTitle,
       coreKcs: Array.isArray(d.coreKcs) ? d.coreKcs : [],
+      ...(typeof d.taskMaterial === 'string' && d.taskMaterial.trim() ? { taskMaterial: d.taskMaterial } : {}),
       recentDialogue: Array.isArray(d.recentDialogue) ? d.recentDialogue.slice(-8) : [],
     }),
     normalize: (parsed, d) => {
@@ -422,19 +429,31 @@ async function learnerStateReviewHandler(input: any) {
           .map((entry: any) => asTrimmedString(entry?.id))
           .filter(Boolean),
       );
+      const ALLOWED_INSIGHT_TYPES = new Set([
+        'prerequisite_gap',
+        'misconception',
+        'fatigue',
+        'motivation',
+        'granularity',
+        'strategy_fit',
+      ]);
       const insights = (Array.isArray(parsed?.insights) ? parsed.insights : [])
         .filter((item: any) => item && asTrimmedString(item.claim))
+        .map((item: any) => {
+          const rawType = asTrimmedString(item.type);
+          return {
+            type: ALLOWED_INSIGHT_TYPES.has(rawType) ? rawType : 'strategy_fit',
+            claim: asTrimmedString(item.claim),
+            evidenceRefs: Array.isArray(item.evidenceRefs) ? item.evidenceRefs.map((x: any) => asTrimmedString(x)).filter(Boolean) : [],
+            confidence: typeof item.confidence === 'number' ? Math.max(0, Math.min(1, item.confidence)) : null,
+            action: asTrimmedString(item.action),
+          };
+        })
+        // 护栏：无证据引用或不在已知证据集内一律丢弃（knownEvidenceIds 为空时同样拦掉伪造引用）
         .map((item: any) => ({
-          type: asTrimmedString(item.type) || 'strategy_fit',
-          claim: asTrimmedString(item.claim),
-          evidenceRefs: Array.isArray(item.evidenceRefs) ? item.evidenceRefs.map((x: any) => asTrimmedString(x)).filter(Boolean) : [],
-          confidence: typeof item.confidence === 'number' ? Math.max(0, Math.min(1, item.confidence)) : null,
-          action: asTrimmedString(item.action),
+          ...item,
+          evidenceRefs: item.evidenceRefs.filter((ref: string) => knownEvidenceIds.has(ref)),
         }))
-        // 护栏：无证据引用即丢弃；已知证据集非空时过滤不存在的引用，过滤后为空仍丢弃
-        .map((item: any) => (knownEvidenceIds.size > 0
-          ? { ...item, evidenceRefs: item.evidenceRefs.filter((ref: string) => knownEvidenceIds.has(ref)) }
-          : item))
         .filter((item: any) => item.evidenceRefs.length > 0)
         .slice(0, 5);
       const conceptAssessments = (Array.isArray(parsed?.conceptAssessments) ? parsed.conceptAssessments : [])
@@ -648,7 +667,7 @@ async function replanAttributionHandler(input: any) {
       const primaryReasonCode = asTrimmedString(parsed?.primaryReasonCode);
       const evidenceRefs = (Array.isArray(parsed?.evidenceRefs) ? parsed.evidenceRefs : [])
         .map((item: any) => asTrimmedString(item))
-        .filter((id: string) => id && (knownEvidenceIds.size === 0 || knownEvidenceIds.has(id)));
+        .filter((id: string) => id && knownEvidenceIds.has(id));
       return {
         primaryReasonCode: allowedReasons.includes(primaryReasonCode) ? primaryReasonCode : (allowedReasons[0] || ''),
         recommendation: allowedRecommendations.includes(recommendation) ? recommendation : 'keep',

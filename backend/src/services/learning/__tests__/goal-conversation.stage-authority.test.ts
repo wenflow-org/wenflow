@@ -243,4 +243,26 @@ describe('172-1 goal stage 单一权威源', () => {
     expect(payload.previousStage).toBe('proposing');
     expect(payload.previousState.stage).toBe('proposing');
   });
+
+  it('P0-2：模型报 understanding 但已产出 confirmedProposal 且 ≥2 轮用户发言 → 响应同步返回 proposing', async () => {
+    const proposal = {
+      learning_direction: '先打通三表字段对齐',
+      first_deliverable: '能跑通一次合并报表',
+      key_stages: ['对齐三表列名', '写出合并与去重校验'],
+      scope_size: '[单点概念] 聚焦三表合并一个窄动作',
+    };
+    const resp = buildSelfReportedReadyResponse('proposing');
+    resp.internal.core.stage = 'understanding' as any;
+    resp.runtimeEnvelope.businessState.phase = 'understanding' as any;
+    (resp.internal.ext.goalConversation as any).confirmedProposal = proposal;
+    (resp.runtimeEnvelope.contextUpdate.nextState as any).stage = 'understanding';
+    (resp.runtimeEnvelope.contextUpdate.nextState as any).confirmedProposal = proposal;
+    mockExecuteSkill.mockResolvedValue(resp);
+
+    const result = await goalConversationService.continueConversation('conv-1', '先合出日汇总就行', 'user-1');
+
+    expect(result.internal.core.stage).toBe('proposing');
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.stage).toBe('proposing');
+  });
 });

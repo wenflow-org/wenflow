@@ -1201,7 +1201,7 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
       '你已经追问多轮仍没给方案，时间紧张的学习者会直接离场（2026-11-13 u10 实证：6 轮追问后 learner-left、零路径）。',
       '本轮只做三件事：',
       '① 用一句话确认你已经掌握的问题与方向判断（不要复述原话、不要罗列分析过程）；',
-      '② 缺的硬条件按最小档显式假设并在 reply 里说明（例：「单次时长你没说，我先按 40 分钟算，不对你改」）；',
+      '② 缺的单次坐姿上限按平台默认 25 分钟静默落进 time_dimensions（不在 reply 逐条播报假设）；',
       '③ 输出 confirmedProposal（learning_direction / first_deliverable / key_stages / out_of_scope），stage=proposing，',
       '   reply 结尾只请用户确认或调整，不得再问任何新问题。',
       `违规格条目: ${(prevViolations || []).join('；')}`,
@@ -1222,7 +1222,7 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
   lines.push('- 若把 nextQuestions 嵌进 state.nextQuestions，请改为放到顶层');
   lines.push('- 不要使用 goalConversation 包装层；quickReplies / understanding / nextQuestions 等字段直接放在顶层');
   lines.push('- state 必须包含 stage / confidence 两个字段（stage 即阶段权威，不要再填 done），不要把 understanding 塞进 state');
-  lines.push('- time_dimensions 只填 sessionsLengthMin/sessionLengthMin、sessionsLengthSource、objectiveScopeHours、deadlineDate；数值字段必须是 number，sessionsLengthSource 用 explicit/estimated/default，deadlineDate 用 YYYY-MM-DD 或 null');
+  lines.push('- time_dimensions 只填 sessionsLengthMin/sessionLengthMin、sessionsLengthSource、deadlineDate；数值字段必须是 number，sessionsLengthSource 用 explicit/estimated/default，deadlineDate 用 YYYY-MM-DD 或 null');
   lines.push('- 起草时严格按 system prompt 的输出规格，参考但不要照搬输入 payload 的嵌套形态');
   return lines.join('\n');
 }

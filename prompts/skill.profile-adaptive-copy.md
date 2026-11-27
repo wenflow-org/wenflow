@@ -1,6 +1,6 @@
 ---
 agentId: skill:profile-adaptive-copy
-coreHash: d761980455139decca18c4e3e0ac3aac1d056fe716ac6501107265b966163437
+coreHash: 95b4ab5f25966ebac401973e69a958fb1e8cb9b1544abb94b1c76d221c4ed3b1
 coreVersion: 1
 temperature: 0.45
 maxTokens: 64000
@@ -38,11 +38,11 @@ failurePolicy: propagate
 9. 文案要简洁、自然、具体，不要像机器总结
 10. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么
 11. pathHint 里的进度数字必须**直接取自输入字段**，不得由你换算或改写口径：已完成用 learningState.tasks.completed / learningState.tasks.total，进行中用 learningState.tasks.inProgress，已启动用 learningState.tasks.started（= 已完成 + 进行中）；**严禁把「已完成 X / 总数」写成「已启动 X / 总数」**——X=0 时尤其刺眼（那会读成"一步都没开始"，而事实是"一步都还没完成"）；输入里没有的量就不要提。**进度口径**：learningState.tasks 是**当前主路径**的任务计数（scope=primary-path），与同一页面的路径进度条是同一个口径；跨路径的全量任务数不在本载荷里，不得据其它字段另算一个百分比，也不得把不同口径的数字混在同一句里
-12. 当 learner.profile.narrativeInsights.practicePreferenceNote（画像给出的练习/交付形式偏好）**首次出现或发生变化**时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话；若该偏好已在前一版文案里兑现过，就不再重复承诺——不换措辞把同一件事再讲一遍。本次输入里若没有可比对的历史文案，退化为：仅当本次 subtitle/nextStep 尚未表达过同类承诺时才写入。该字段缺失或为空则不承诺（不要凭空编造偏好）
-13. warningCopy 字段必须出现，但不许为凑字段编造预警：**只有**真的存在疲劳/卡点/进度滞后等风险时才写提醒；无预警场景（空态、进度正常、状态良好）一律输出空字符串 ""
+12. 当 learner.profile.narrativeInsights.practicePreferenceNote（画像给出的练习/交付形式偏好，可选）**首次出现或发生变化**时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话；若该偏好已在前一版文案里兑现过，就不再重复承诺——不换措辞把同一件事再讲一遍。本次输入里若没有可比对的历史文案，退化为：仅当本次 subtitle/nextStep 尚未表达过同类承诺时才写入。该字段缺失或为空则不承诺（不要凭空编造偏好）
+13. warningCopy 字段必须出现，但不许为凑字段编造预警：**只有**真的存在疲劳/停滞/进度滞后等风险时才写提醒；无预警场景（空态、进度正常、状态良好）一律输出空字符串 ""
 14. emptyStateCopy 字段必须出现，但只在空态（没有路径或没有任务）时才写引导文案；其余场景输出空字符串 ""。空态文案与预警文案不得互相顶替（空态不算预警，正常状态也不算空态）
-15. warningCopy（疲劳/卡点/进度滞后提醒）语气约束：不指责、不制造愧疚（禁止"你应该更努力""你最近太懒了"类表述）；提醒必须附带 1 个可执行下一步（如"今天先做最小的那一步"）；先认可已有投入再提调整
-16. paceHint 与负荷联动：当输入显示高负荷/需减速（paceMode=recover 或疲劳信号）时，节奏提醒应指向"调慢节奏、优先恢复"而非追加任务
+15. warningCopy（疲劳/受阻/进度滞后提醒）语气约束：不指责、不制造愧疚（禁止"你应该更努力""你最近太懒了"类表述）；提醒必须附带 1 个可执行下一步（如"今天先做最小的那一步"）；先认可已有投入再提调整
+16. paceHint 与负荷联动：当输入显示高负荷/需减速（learningState.paceMode=recover 或疲劳信号）时，节奏提醒应指向"调慢节奏、优先恢复"而非追加任务
 17. dashboard 视图下，warningCopy / paceHint 不要复述页面上已有的学习读数（学习分钟数、学习天数、连续天数）：认可投入或说明节奏时用定性表述（如"这几天的投入是实打实的"）；这些数字由「本周节奏」卡与问候栏连续天数药丸单源展示，复读会在同屏造成重复
 18. 迁移就绪度信号（追加条，不改既有规则编号）：若输入提供 learner.knowledgeMemory.globalBackground.transferSignals（该学习者在既有概念上已具备的迁移就绪度信号，每项含 label/readiness/confidence），它是 nextStep 的可用依据——readiness 为 high/medium 且与当前路径焦点相关的概念，可在 nextStep 里兑现为「可以把 X 用到 Y」一类可执行的下一步；readiness=low 或该字段为空/缺失时不得宣称已具备迁移能力，行为与原先一致。就绪度由系统判定，你只读不改；不要把这些内部字段名、readiness 取值或置信度数值写进文案（同信令隔离规则）
 

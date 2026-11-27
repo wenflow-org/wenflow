@@ -93,7 +93,7 @@ describe('adaptiveGuidanceCopy', () => {
     expect(result.success).toBe(true)
     expect(result.cached).toBe(true)
     expect(result.quality).toBe('fallback')
-    expect(result.output?.headline).toBe('欢迎回来，小明')
+    expect(result.output?.headline).toBe('小明，接着往下学')
   })
 })
 
@@ -207,5 +207,12 @@ describe('adaptiveGuidanceCopy · 视图口径（#187）', () => {
     }))
     const result = await adaptiveGuidanceCopy(INPUT)
     expect(result.output.todayActions[0].to).toBe('continue-learning')
+  })
+
+  it('learning-state 兜底动作「回看学习台」指向 dashboard 而非 continue-learning', () => {
+    const fallback = buildFallback(LS_INPUT)
+    const backHome = fallback.todayActions.find((item) => item.title === '回看学习台')
+    expect(backHome).toBeDefined()
+    expect(backHome?.to).toBe('dashboard')
   })
 })

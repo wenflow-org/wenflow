@@ -269,7 +269,7 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
     expect(skillCall.visibleContext.history[0].content).toContain('我的真实问题是什么')
     expect(skillCall.visibleContext.lastGoalAgentMessage).not.toContain('<reminder>')
 
-    // 未收敛：goal 状态落库；协调器不再代发确认（确认信号在学习者文本里，由后端按文本判定）
+    // 未收敛：goal 状态落库；学习者未就绪时协调器不代发 confirmProposal
     expect(mockContinueConversation).toHaveBeenCalledWith(
       'conv-1',
       '我从零开始，想转行数据分析',
@@ -288,9 +288,8 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
   it('P1-12 回归：矛盾组合（readyToProceed=false + goalReadiness=0.8）协调器不代发确认', async () => {
     // DB 实证 pcl_1a58b16c：learner 明说「时间不好说…每周三四个小时」，
     // goalReadiness=0.8/readyToProceed=false/wantsClarification=false。
-    // 2026-11-07 起协调器默认完全不代发——确认与否只看学习者文本（后端判定）；
-    // 「诚实状态才代发」的旧语义保留在 legacy 开关（VIRTUAL_LEARNER_PROXY_CONFIRM=1）下，
-    // 其真值表由 simulation.coordinator.helpers.test.ts 的 shouldAutoConfirmGoalProposal 用例钉住。
+    // UI-only 确认下协调器默认按学习者诚实状态（shouldAutoConfirmGoalProposal）决定是否代发 confirmProposal：
+    // 存在顾虑或显式拒绝时不代发；可用 VIRTUAL_LEARNER_PROXY_CONFIRM=0 关闭代发。
     sessionRecord.goalConversationId = 'conv-1'
     mockGoalFindFirst.mockResolvedValue({
       id: 'conv-1',
@@ -377,7 +376,7 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
     expect(goal.learnerState.goalReadiness).toBeLessThan(0.86)
   })
 
-  it('回复分支收敛（stage=ready）：goalReady=true、同步 path 与 finalStage；协调器不代发，确认在学习者文本里', async () => {
+  it('回复分支收敛（stage=ready）：goalReady=true、同步 path 与 finalStage；诚实就绪时默认代发 confirmProposal', async () => {
     sessionRecord.goalConversationId = 'conv-1'
     mockGoalFindFirst.mockResolvedValue({
       id: 'conv-1',
@@ -414,7 +413,7 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
       'conv-1',
       '我从零开始，想转行数据分析',
       'user-1',
-      { systemPromptOverrides: undefined }
+      { systemPromptOverrides: undefined, confirmProposal: true }
     )
     expect(sessionRecord.currentStage).toBe('path')
     expect(sessionRecord.learningPathId).toBe('path-1')
@@ -426,9 +425,8 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
     }))
   })
 
-  it('legacy 开关：VIRTUAL_LEARNER_PROXY_CONFIRM=1 恢复按诚实状态代发确认', async () => {
-    // 旧跑数工具（batch-experiment / autopilot）的过渡开关：恢复「协调器按 readyToAdvance
-    // 代发确认」的旧行为——代发依据仍是学习者的诚实状态（显式拒绝不得代签）。
+  it('opt-out 开关：VIRTUAL_LEARNER_PROXY_CONFIRM=0 关闭协调器代发确认', async () => {
+    // 显式置 VIRTUAL_LEARNER_PROXY_CONFIRM=0 时，协调器不自动代发 confirmProposal flag。
     sessionRecord.goalConversationId = 'conv-1'
     mockGoalFindFirst.mockResolvedValue({
       id: 'conv-1',
@@ -455,14 +453,14 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
     mockGoalFindUnique.mockResolvedValue({ id: 'conv-1', learningPathId: 'path-1' })
 
     const prev = process.env.VIRTUAL_LEARNER_PROXY_CONFIRM
-    process.env.VIRTUAL_LEARNER_PROXY_CONFIRM = '1'
+    process.env.VIRTUAL_LEARNER_PROXY_CONFIRM = '0'
     try {
       await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' })
       expect(mockContinueConversation).toHaveBeenCalledWith(
         'conv-1',
         '我从零开始，想转行数据分析',
         'user-1',
-        { systemPromptOverrides: undefined, confirmProposal: true }
+        { systemPromptOverrides: undefined }
       )
     } finally {
       if (prev === undefined) delete process.env.VIRTUAL_LEARNER_PROXY_CONFIRM

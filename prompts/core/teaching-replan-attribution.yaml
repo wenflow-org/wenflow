@@ -24,14 +24,14 @@ inputs:
   - name: evidence
     type: object[]
     ref: sandbox:teaching.session.wrapup
-    desc: 归因证据条目 [{ id, 概念名/未解决点名/掌握状态 }]；evidenceRefs 只能引用其中出现过的 id
+    desc: 归因证据条目 [{ id, kind, text }]；evidenceRefs 只能引用其中出现过的 id
   - name: pathContext
     type: object?
     ref: sandbox:path.path.summary
     desc: 路径位置上下文 { milestoneTitle, stageNumber }（可选）
 rules:
   - primaryReasonCode 必须原样取自输入 recall.reasonCodes；不在其中的原因不许编
-  - recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；都不合适时给 keep
+  - recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；当 recall.priority === 'P0' 且 recall.recommendation 非 keep 且存在于 allowedRecommendations 时，必须采用该非 keep 重排方向（不得退回 keep）；所有方向都不合适时才给 keep
   - 只做归因，不要提出范围外的动作（不要提"改目标""换学科""停课"），也不要承诺具体时长或课程数
   - reason 必须点名具体卡点：直接引用 evidence 里出现的概念名/未解决点名（如「识别日志痕迹、还原断点还没稳」），禁止「几个关键点」「部分内容」这类泛指——泛指会与学习总结当面打架。evidence 同时给出 wrapup:mastered（本节已学会名单）时，reason 要写清张力：哪些是本课刚学会的、哪些旧点仍挂着。证据里确实没有任何可点名的对象时才允许写系统级原因（如「长期学习疲劳偏高」），并照实说。
   - reason 一句人话（≤40 字），不要复述指标数值、不要暴露字段名

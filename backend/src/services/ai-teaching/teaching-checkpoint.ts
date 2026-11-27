@@ -104,13 +104,27 @@ export interface CheckpointSubmitResult {
    * 答对/跳过/到顶强消时为 null（检查点已消费，无卡可挂）。
    */
   checkpoint?: TeachingCheckpoint | null;
-  /** 契约四件套随提交回合下发（小测是拿证据的主通道；出站已剥离答案键） */
+  /** 契约四件套随提交回合下发：小测是拿证据的主通道；出站已剥离答案键 */
   lessonContract?: Record<string, any> | null;
   lessonReport?: Record<string, any> | null;
   exitTicket?: Record<string, any> | null;
   branch?: Record<string, any> | null;
   /** 课堂阶段摘要（提交回合下发；缺了前端阶段条会回落到「协议未生效」） */
   lessonPhase?: Record<string, any> | null;
+  /** 本回合同步产出的板书/结构图/配图（缺席则白板卡在旧 revision，直到刷新） */
+  figures?: any[];
+  diagrams?: Array<{ engine: string; code: string; caption?: string | null }>;
+  images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>;
+  /** 知识点与确认动作组 */
+  knowledgePoint?: string | null;
+  knowledgePoints?: any[];
+  confirmCheck?: { prompt?: string; actions: Array<{ label: string; message: string }> } | null;
+  /** 同伴伴学触发与完课信号 */
+  peerTriggered?: boolean;
+  peerMessage?: string | null;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
+  isCompletion?: boolean;
 }
 
 export function shouldEmitCheckpoint(  session: {

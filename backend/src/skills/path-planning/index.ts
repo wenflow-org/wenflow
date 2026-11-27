@@ -304,7 +304,7 @@ export function enforceBudgetConservation(
  * `PATH_PLANNING_HUB_CONCEPT_MISSING` 19 次，是**头号失败门**；模型常把概念写成
  * `{name, understanding}` 并漏掉 `role`。因此这里给**字面骨架**，而不是再描述一遍规则。
  */
-const PATH_OUTPUT_SKELETON = '{"name":"…","summary":"…","totalMilestones":N,"estimatedHours":N,"estimatedWeeks":N,'
+const PATH_OUTPUT_SKELETON = '{"name":"…","summary":"…","pathDeliverable":"…","totalMilestones":N,"estimatedHours":N,'
   + '"topology":"builder",'
   + '"milestones":[{"stageNumber":1,"title":"…","description":"…","goal":"…","coreConcept":"concept-1"}],'
   + '"cognitiveCore":{"coreConcepts":[{"id":"concept-1","name":"…","role":"hub","description":"…"},'
@@ -505,6 +505,12 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
           : {}),
         ...(normalizePromptString(learnerProfile.platformJudgment)
           ? { platformJudgment: normalizePromptString(learnerProfile.platformJudgment) }
+          : {}),
+        ...(normalizePromptString(learnerProfile.targetDiscipline)
+          ? { targetDiscipline: normalizePromptString(learnerProfile.targetDiscipline) }
+          : {}),
+        ...(normalizePromptString(learnerProfile.applicationContext)
+          ? { applicationContext: normalizePromptString(learnerProfile.applicationContext) }
           : {}),
       },
       problemSpace: {
@@ -1278,7 +1284,7 @@ ${JSON.stringify(promptFriendlySceneFraming, null, 2)}
 - 优先依据其中的 normalizedInput.problemSpace.realProblem、normalizedInput.successCriteria、normalizedInput.confirmedProposal 设计路径
 - 第一阶段必须直接服务于 normalizedInput.confirmedProposal.firstDeliverable（若存在）
 - 不要把 confirmedProposal.keyStages 直接抄成 coreConcept；keyStages 是阶段提示，不是隐藏概念名称。
-- 每个 milestone 的 rationale 必须逐条引用 normalizedInput.clarification 的 core/baseline/stopping/constraints；最后一个 milestone 的 rationale.serves 必须是 stopping，evidence 对上 stopping.statement。` : ''}
+- 每个 milestone 的 rationale 必须逐条引用 normalizedInput.clarification 的 core/baseline/stopping/constraints；最后一个 milestone 的 rationale.serves 必须是 stopping，evidence 对上 stopping.statement（subject 拓扑除外）。` : ''}
 
 ${conversationHistory && conversationHistory.length > 0 ? `
 完整对话历史（用于验证关键信息）：
@@ -1468,8 +1474,8 @@ ${replan ? renderReplanSection(replan) : ''}
         + (failureReason.includes('CLARIFICATION_RATIONALE_NOT_SATISFIED')
           ? String.fromCharCode(10) + '每个 milestone 必须补 rationale：'
             + '{ "serves": "core|baseline|stopping|constraint", "evidence": "引用澄清契约的哪一条", "assumes": "可选" }；'
-            + '最后一个 milestone 的 rationale.serves 必须是 stopping，且 evidence 要对上 stopping.statement。'
-            + '缺 rationale 或终点不服务 stopping 会被拒绝落库。' + String.fromCharCode(10)
+            + '最后一个 milestone 的 rationale.serves 必须是 stopping，且 evidence 要对上 stopping.statement（subject 拓扑除外）。'
+            + '缺 rationale 或终点不服务 stopping（非 subject 拓扑）会被拒绝落库。' + String.fromCharCode(10)
           : '')
         + `上次失败原因：${failureReason}`,
     },

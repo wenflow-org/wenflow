@@ -503,9 +503,9 @@ onUnmounted(() => {
 }
 /* 窄屏顶栏：头像 44px 触控（已由基线保证），图标微缩 */
 @media (max-width: 1023.98px) {
-  .v2nav__right { gap: 4px; }
-  .v2nav__right :deep(.nc__bell) { width: 44px; height: 44px; }
-  .v2nav__right :deep(.nc__bell svg) { width: 19px; height: 19px; }
+  .v2nav-bar__right { gap: 4px; }
+  .v2nav-bar__right :deep(.nc__bell) { width: 44px; height: 44px; }
+  .v2nav-bar__right :deep(.nc__bell svg) { width: 19px; height: 19px; }
   /* 内圆与桌面同一档 32（2026-11-06 走查 图3）：28 只差 4px 却让同一头像在两档两种大小 */
   /* 窄屏吸顶 top 必须归零（2026-11-26 DOM 探针实测）：窄屏的滚动容器是 .v2-page，
      公告横幅在它外面（App.vue 壳层），--wf-anb-h 在滚动容器里被重复计一次——

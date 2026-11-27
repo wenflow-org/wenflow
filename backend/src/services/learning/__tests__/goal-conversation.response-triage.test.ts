@@ -348,7 +348,7 @@ describe('确认通道（2026-11-08 减重：flag 直推 + 打字裁决）', () 
       'user-1'
     );
 
-    expect(mockAdjudicateGoalConfirm).toHaveBeenCalledTimes(1);
+    expect(mockAdjudicateGoalConfirm).not.toHaveBeenCalled();
     expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(result.internal.core.stage).toBe('proposing');
@@ -383,7 +383,7 @@ describe('确认通道（2026-11-08 减重：flag 直推 + 打字裁决）', () 
     }));
   });
 
-  it('自然语言确认（无 flag）→ 裁决命中 → 照常生成 + 计量 channel=text', async () => {
+  it('自然语言确认（无 flag）→ 不触发裁决或建路，回落普通对话回合（仅 UI 按钮确认）', async () => {
     seedConversation({
       stage: 'proposing',
       collectedData: JSON.stringify({
@@ -396,16 +396,17 @@ describe('确认通道（2026-11-08 减重：flag 直推 + 打字裁决）', () 
         },
       }),
     });
-    mockAdjudicateGoalConfirm.mockResolvedValue({ confirm: true, source: 'adjudicator' });
-
-    await goalConversationService.continueConversation('conv-1', '就按这个来，确认', 'user-1');
-
-    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
-    const persisted = JSON.parse(conversationRecord.collectedData);
-    expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
-      channel: 'text',
-      refusalVetoed: false,
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '好，那你点一下界面上的「查看并确认」我就开始排路径。',
+      stage: 'proposing',
     }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '就按这个来，确认', 'user-1');
+
+    expect(mockAdjudicateGoalConfirm).not.toHaveBeenCalled();
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
   });
 });
 

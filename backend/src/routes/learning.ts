@@ -757,11 +757,16 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
     // 已完成任务的历史课堂/记录仍保留在库中（孤儿化），新路径从头规划；
     // 进行中任务与未结束课堂依旧拦截（需先结束/放弃当前任务）。
     if (isRebuildAll) {
-      // 前置校验：有进行中任务 → 直接 409（整建不能丢未完成的进行中进度，用户需先结束或放弃）
+      // 前置校验：有进行中任务 → 409，并尽可能附带挡路课堂清单供前端一键收尾后重试 rebuild-all
       if (hasInProgress) {
+        const blockingSessions = await openSessionClearanceService.listBlocking({ pathId, userId });
         return sendPathMutationConflict(res, Object.assign(
           new Error('当前任务尚未结束，请先完成、暂停或放弃当前任务后再整条重建'),
-          { status: 409, code: 'PATH_MUTATION_HAS_IN_PROGRESS' }
+          {
+            status: 409,
+            code: 'PATH_MUTATION_HAS_IN_PROGRESS',
+            ...(blockingSessions.length > 0 ? { details: { sessions: blockingSessions } } : {})
+          }
         ));
       }
       // 重建必须回灌 goal 结构化画像：只带 description 时规划器仅看得到污染单行

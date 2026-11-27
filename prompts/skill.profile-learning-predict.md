@@ -1,6 +1,6 @@
 ---
 agentId: skill:profile-learning-predict
-coreHash: 534db2d44802f572f1db2efdccd22ee02448f097f1d075e02e2c01d8568b5dd0
+coreHash: d51be9c078b4c2e48c181b096de441ffa9776fde3c7390dfcb102d20dfcb4f72
 coreVersion: 1
 temperature: 0.2
 maxTokens: 64000
@@ -23,7 +23,7 @@ checkpointEvidence 代码裁决检查点正误 / retentionHints 快忘旧知的�
 - task：当前任务 / 场景 / 控制指令
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「fatigueSignal（string?）」`sandbox:teaching.learningState`（编排注入） — 学习者负荷分类得到的疲劳风险（low|medium|high），调用方由 learningState 的 ktl/lf 计算后注入；无学习状态时不出现
+- 「fatigueSignal（string?）」`sandbox:teaching.learningState`（编排注入） — 学习者近期的疲劳风险信号（low|medium|high），调用方由近期学习状态计算后注入；无学习状态时不出现
 - 「knowledgeStateSummary（string?）」`sandbox:teaching.knowledgeStateSummary`（编排注入） — 最近一次课后知识状态摘要（画像快照 knowledgeMemory.globalBackground；任务前预测输入）；无历史摘要时调用方填「无历史摘要」
 - 「taskContext（object）」`sandbox:teaching.taskContext`（编排注入） — 目标任务描述 {title, knowledgeType?, learningObjectives?}（任务标题/知识类型/目标概念，编排层组装）
 - 「contractGaps（object?）」`sandbox:teaching.lessonReport`（编排注入） — 上一节课的**平台确定式契约事实**（代码产出的 lessonReport 投影）：{met?, missingKcs?, exitTicketPassed?}——这是最硬的证据，优先级高于任何自然语言摘要；缺失（首课/无上一节）时不出现
@@ -61,5 +61,5 @@ checkpointEvidence 代码裁决检查点正误 / retentionHints 快忘旧知的�
 - stallRisk 与 predictedTone 必须自洽（如 stallRisk≥0.7 时 predictedTone 不应是 smooth——与代码侧纠偏阈值同线）
 - 预测要敢于区分：允许 stallRisk 接近 0 或接近 1，只要 rationale 能说清依据；禁止"不确定就往 0.5 靠""为保险统一给 standard"这类抹平方差的做法（纯冷启动按 rules 的冷启动豁免执行）
 - predictedTone/toneDetail 语义含「反复卡壳/吃力/受阻/放慢」时不得同时给出 smooth 基调；描述混合时按**最主要的风险面**定枚举，并在 toneDetail 里点明哪部分有风险、哪部分顺畅
-- 枚举与原文不得互相矛盾：predictedTone 必须与 toneDetail 语义一致，suggestedDepth 必须与 depthDetail 语义一致；两者冲突时以枚举为准，并把原文改写到与枚举一致
+- 枚举与原文不得互相矛盾：predictedTone 必须与 toneDetail 语义一致，suggestedDepth 必须与 depthDetail 语义一致；产出前逐对核查，以输入证据与核心风险面先定枚举、再据此写一致的自由描述
 - 只输出一个 JSON 对象，字段名与上方输出字段表完全一致，不输出表外字段与解释文字。

@@ -234,6 +234,20 @@ export interface CheckpointSubmitResult {
   exitTicket?: ExitTicket | null;
   branch?: MessageResult['branch'] | null;
   lessonPhase?: LessonPhaseSummary | null;
+  /** 本回合同步产出的板书/结构图/配图 */
+  figures?: MessageResult['figures'];
+  diagrams?: MessageResult['diagrams'];
+  images?: MessageResult['images'];
+  /** 知识点与确认动作组 */
+  knowledgePoint?: string | null;
+  knowledgePoints?: KnowledgePointStatus[];
+  confirmCheck?: MessageResult['confirmCheck'] | null;
+  /** 同伴伴学触发与完课信号 */
+  peerTriggered?: boolean;
+  peerMessage?: string | null;
+  peerStrategy?: string | null;
+  peerFollowUpQuestions?: string[];
+  isCompletion?: boolean;
 }
 
 export interface MessageResult {
@@ -269,6 +283,7 @@ export interface MessageResult {
   strategies: string[];
   knowledgePoint: string | null;
   knowledgePoints: KnowledgePointStatus[];
+  confirmCheck?: { prompt?: string; actions: Array<{ label: string; message: string }> } | null;
   isCompletion: boolean;
   /** 课堂契约与实时报告（2026-11-19）：契约卡/支线标签/结课报告直接消费 */
   lessonContract?: LessonContract | null;
@@ -380,7 +395,7 @@ export interface SessionDetail {
   endTime: string | null;
   duration: number | null;
   status: string;
-  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean; images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>; diagrams?: Array<{ engine: string; code: string; caption?: string | null }>; figures?: TeachingFigurePayload[] }>;
+  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean; images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>; diagrams?: Array<{ engine: string; code: string; caption?: string | null }>; figures?: TeachingFigurePayload[]; supplementaryMaterial?: { materialId: string; title: string; topic: string; sourceUrl?: string | null; publishedAt?: string | null; excerpt?: string } | null }>;
   state: Record<string, unknown> | null;
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;
