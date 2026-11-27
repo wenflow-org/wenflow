@@ -2253,22 +2253,6 @@ function onWindowResize() {
 }
 .task-edit__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .task-edit__row--split { justify-content: space-between; }
-.task-edit__field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.task-edit__label { color: var(--faint); }
-/* 数值居中定宽：加减各按一次时数字不左右横跳 */
-.task-edit__minutes {
-  min-width: 54px; text-align: center;
-  font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums;
-}
-/* 步进键：比「缩短 10 分钟」这种 5 字按钮窄一半，宽度留给真正要读的东西 */
-.task-edit__step {
-  font: inherit; font-size: 12px; height: 32px; padding: 0 8px;
-  display: inline-flex; align-items: center;
-  border-radius: var(--mk-radius-md); border: 1px solid var(--line);
-  background: var(--surface); color: var(--ink); cursor: pointer;
-}
-.task-edit__step:hover:not(:disabled) { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
-.task-edit__step:disabled { opacity: .55; cursor: not-allowed; }
 /* 删除是这条抽屉里唯一的破坏性动作：独立在右端，与下面的「插入」上下错开 */
 .task-edit__danger {
   font: inherit; font-size: 12px; height: 32px; padding: 0 10px;
@@ -2365,8 +2349,6 @@ function onWindowResize() {
 .stage__pending { margin: 6px 2px 2px; padding: 10px 12px; border-radius: var(--mk-radius-md); font-size: 12.5px; color: var(--faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
-/* 时长标签禁词中折行（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」 */
-.task__mins { white-space: nowrap; }
 .task__cta {
   height: 32px;
   display: inline-flex; align-items: center;
@@ -2388,7 +2370,6 @@ function onWindowResize() {
   display: flex; align-items: flex-start; justify-content: center;
   padding: 56px 16px 24px; overflow: auto;
   background: color-mix(in srgb, var(--canvas) 62%, transparent);
-  backdrop-filter: blur(3px);
 }
 .side-modal {
   /* Teleport 出 .v2-page 后不再继承页面 zoom，由 sideZoom 内联补偿；
@@ -3004,9 +2985,8 @@ function onWindowResize() {
      守住仓库 mobile:spec「可点元素任何一维 ≥36px」（lt36 预算 0）的硬线，
      375 实测口径下不再新增不足 36 的点击目标；字号维持 12px 不动。 */
   .task__cta, .task__edit, .task__done-label { height: 40px; padding: 0 14px; }
-  /* 微调抽屉（点开后才出现在 DOM 里）：步进键 / 删除 / 插入组合框同抬到 40px，
+  /* 微调抽屉（点开后才出现在 DOM 里）：删除 / 插入组合框同抬到 40px，
      避免触屏上出现 <36 的目标（lt36 预算 0）；字号维持 12px 不动。 */
-  .task-edit__step,
   .task-edit__danger,
   .task-edit__insert { height: 40px; }
   .task-edit__input { height: 38px; }

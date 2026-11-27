@@ -5301,27 +5301,6 @@ onBeforeUnmount(() => {
   border-left: 2px solid color-mix(in srgb, var(--blue) 30%, transparent);
 }
 .opening-line__row { display: flex; flex-wrap: wrap; gap: 8px; }
-/* 小测答后的续接动作行（完课提示已上移到输入区上方的 .ready，不再在这里复读） */
-.replies__kicker {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: var(--blue-deep);
-}
-.replies__hint { font-size: 12px; color: var(--faint); }
-/* 开场引导（opening.question 收进面板）：一行可选的小字，想回答就打字，不答可直接选动作。
-   2026-11-02 首屏观感：此前是虚线圆角框，学生误以为又有一个输入框要填；改成带左侧引导线的提示行。 */
-.replies__question {
-  margin: 0 2px;
-  padding: 2px 0 2px 10px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--muted);
-  background: none;
-  border: 0;
-  border-left: 2px solid color-mix(in srgb, var(--blue) 30%, transparent);
-  border-radius: 0;
-}
 /* 暗色：底/字已令牌化自动翻转，原字面量覆写退役 */
 /* 快捷选项回归横向紧凑排（2026-11-06 走查）：此前是 width:100% 的竖排长条——
    3 个 8 字选项各占一条近 1000px 的整行，右侧 85% 全是空，光这一块就吃掉 ~160px 高度。
@@ -5427,7 +5406,6 @@ onBeforeUnmount(() => {
    不再给它套白面板（基础规则已是裸按钮列表）。 */
 @media (max-width: 900px) {
   .replies { margin: 8px 14px 0; }
-  .replies__question { margin-bottom: 2px; padding: 6px 9px; font-size: 12px; }
   .replies__row { gap: 6px; }
   /* 触屏档：短签抬到 36 高（触控下沿），仍按内容宽横排 */
   .reply { height: 36px; min-height: 36px; padding: 0 12px; }
@@ -5584,15 +5562,14 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 10px;
   /* 整行通栏（2026-11-27 目检）：胶囊条只有 880 宽且带圆角，滚动时正文从两侧和圆角
-     缝里透出来，读成「气泡从阶段条里渗出来」。改成通栏 + 实色底 + 下边框，条下面
-     再用同色投影盖住 flex gap 的头几像素。 */
-  margin: 0 calc(var(--tutor-pad-x, 20px) * -1) 6px;
-  padding: 6px var(--tutor-pad-x, 20px);
+     缝里透出来，读成「气泡从阶段条里渗出来」。改成通栏 + 实色底 + 下边框；下沿留白
+     放在条内（padding），外面不再留透明 gap，正文不会从条下钻出来。 */
+  margin: 0 calc(var(--tutor-pad-x, 20px) * -1);
+  padding: 6px var(--tutor-pad-x, 20px) 10px;
   background: var(--surface);
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
-  box-shadow: 0 6px 0 var(--surface);
 }
 .lessonbar__steps {
   display: flex;
@@ -5690,7 +5667,7 @@ onBeforeUnmount(() => {
   max-width: 96vw;
   max-height: 88vh;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: var(--mk-radius-xl);
 }
 .boardmodal__body {

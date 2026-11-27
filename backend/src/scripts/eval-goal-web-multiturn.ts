@@ -358,7 +358,7 @@ async function runArm(
       stage,
       understanding,
       needsMaterial: needsMaterial ?? null,
-      parseError: parsed.parseError || (json ? null : 'no_json'),
+      parseError: parsed.parseError ? 'parse_error' : (json ? null : 'no_json'),
       researchUsed: Boolean(withWeb && pendingNotes),
       queries,
     });

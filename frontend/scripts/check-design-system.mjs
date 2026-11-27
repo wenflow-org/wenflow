@@ -208,6 +208,31 @@ function templatePart(text) {
   return end === -1 ? text : text.slice(0, end)
 }
 
+/** 把标签（含属性）换成哨兵，只留下模板文本节点。
+ *  不能用 `<[^>]*>`：属性表达式里的 `x > 0` 会让正则提前收尾，把后面的属性值当正文。 */
+function templateTextNodes(tpl) {
+  const src = tpl.replace(/<!--[\s\S]*?-->/g, '')
+  let out = ''
+  let i = 0
+  while (i < src.length) {
+    const lt = src.indexOf('<', i)
+    if (lt === -1) { out += src.slice(i); break }
+    out += src.slice(i, lt)
+    let j = lt + 1
+    let quote = ''
+    while (j < src.length) {
+      const ch = src[j]
+      if (quote) { if (ch === quote) quote = '' }
+      else if (ch === '"' || ch === "'") quote = ch
+      else if (ch === '>') break
+      j += 1
+    }
+    out += '\u0000'
+    i = j + 1
+  }
+  return out
+}
+
 /* ---------- 已定义的 mk-* 原语集合 ---------- */
 function collectDefinedPrimitives() {
   const defined = new Set()
@@ -648,7 +673,10 @@ for (const abs of vueFiles) {
     //   这个决策不在守卫职责内，故此处只把闸门收窄到 admin 并留登记。
     if (isAdminGoverned(relPath)) {
       const hasSpinner = /class="[^"]*\bmk-spinner\b/.test(tpl)
-      const hasText = />[^<>]*加载中…|>[^<>]*正在加载/.test(tpl)
+      // 只认文本节点：先去注释与标签（属性一并剥掉），否则 `:hint="…'统计加载中…'"` 会因同一行
+      // 前面的 `>` 被误判成手写加载态（属性是数据，不是页面上的一块 loading UI）。
+      const textNodes = templateTextNodes(tpl)
+      const hasText = /加载中…|正在加载/.test(textNodes)
       if (hasSpinner || hasText) {
         handRolledLoading.push({ file: relPath, spinner: hasSpinner, text: hasText })
       }

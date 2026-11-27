@@ -22,7 +22,7 @@
 import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ensureFixtureMaterialsForVirtualSession } from '../virtual-lab/fixture-materials';
+import { ensureFixtureMaterialsForVirtualSession, type FixtureUploadResult } from '../virtual-lab/fixture-materials';
 
 const BASE_URL = process.env.GOLDEN_EVAL_BASE_URL || 'http://127.0.0.1:3002';
 const ORIGIN = 'http://localhost:5173'; // 必须在 .env CORS_ORIGIN 白名单内（CSRF 写请求校验）
@@ -149,6 +149,7 @@ interface RunState {
   runs: Record<string, {
     profileId?: string; userId?: string; sessionId?: string; goalSteps?: number; learningPathId?: string;
     phase: string; note?: string; triage?: Record<string, unknown>; seconds?: number;
+    fixtures?: FixtureUploadResult;
   }>;
 }
 

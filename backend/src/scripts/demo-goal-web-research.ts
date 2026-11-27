@@ -346,7 +346,7 @@ async function runGoalArm(goal: GoalCase, notes: string | null): Promise<GoalOut
     understanding: json?.understanding || json?.state?.understanding || null,
     nextQuestions: Array.isArray(json?.nextQuestions) ? json.nextQuestions : null,
     raw,
-    parseError: parsed.parseError || (json ? null : 'no_json'),
+    parseError: parsed.parseError ? 'parse_error' : (json ? null : 'no_json'),
   };
 }
 

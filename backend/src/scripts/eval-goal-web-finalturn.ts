@@ -276,7 +276,7 @@ async function runArm(goal: GoalCase, notes: string | null, temperature = 0.1): 
     understanding,
     stage: json?.state?.stage ? String(json.state.stage) : null,
     needsMaterial: rawNeedsMaterial ?? understanding?.needsMaterial ?? null,
-    parseError: parsed.parseError || (json ? null : 'no_json'),
+    parseError: parsed.parseError ? 'parse_error' : (json ? null : 'no_json'),
   };
 }
 
