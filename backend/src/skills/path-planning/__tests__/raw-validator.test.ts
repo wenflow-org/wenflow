@@ -253,7 +253,7 @@ describe('#171-3 落库层：去掉 conceptIds[0] 静默回退（不塌缩到 co
   };
 
   it('命中已声明 id 时正常绑定；未命中时置空（非 conceptIds[0]）并记 warning 暴露塌缩', () => {
-    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     try {
       const milestones = [
         { stageNumber: 1, title: 't1', coreConcept: 'concept-1' },
