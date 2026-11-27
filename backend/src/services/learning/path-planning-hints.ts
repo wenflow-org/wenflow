@@ -553,12 +553,22 @@ export const ONE_SITTING_MAX_HOURS = 1;
 export function clampStageTasksToHints<T extends { estimatedMinutes?: number }>(
   tasks: T[],
   hints?: { subtasksPerStageRange?: [number, number]; subtaskMinutesRange?: [number, number] } | null,
+  options?: {
+    /**
+     * 跳过任务数上界裁剪（subject 教材路径专用，2026-11-25）。
+     * 实证：数学/高数阶段描述列了 5-6 个小节，模型也产出了 6-7 节课并逐节点名；
+     * 时间预算推导出的 subtasksPerStageRange 上界=4 把它们裁成 4 节，1.5 量词、
+     * 1.6/1.8 连续性整节消失——内容覆盖被时间锚吃掉。教材路径以覆盖优先（与 prompt 同口径），
+     * 只保留单课分钟上界钳制。
+     */
+    skipCountCap?: boolean;
+  },
 ): T[] {
   if (!Array.isArray(tasks) || tasks.length === 0 || !hints) return tasks;
   const capCount = Number(hints.subtasksPerStageRange?.[1]);
   const capMinutes = Number(hints.subtaskMinutesRange?.[1]);
   let out = tasks;
-  if (Number.isFinite(capCount) && capCount >= 1 && out.length > capCount) {
+  if (!options?.skipCountCap && Number.isFinite(capCount) && capCount >= 1 && out.length > capCount) {
     out = out.slice(0, Math.floor(capCount));
   }
   const overMinutes = (task: T): boolean => {

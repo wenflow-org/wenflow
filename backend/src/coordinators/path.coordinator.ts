@@ -6,6 +6,7 @@ import {
   runBackgroundTask
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
+import { resolvePathTopologyPolicy } from '../services/learning/path-topology-policy';
 import { buildFramedNormalizedInput, type LearnerLoadProfile, type TriageHint } from '../services/learning/path-planning-hints';
 import {
   buildUploadedMaterialPacks,
@@ -1318,7 +1319,21 @@ class PathCoordinator {
     // 不能把一条不可追溯的路径以 active 形态交出去。
     if (input.clarification && isClarificationEnforceEnabled()) {
       const milestones = resolveMilestonesForRationaleAudit(result);
-      const audit = auditMilestoneRationales(milestones, input.clarification);
+      // 拓扑策略：没有单一收口作品的拓扑（教材/多单元）豁免 stopping 硬要求。
+      const topology = (() => {
+        const raw = (result as { aiPromptTemplate?: unknown })?.aiPromptTemplate;
+        if (typeof raw !== 'string') return null;
+        try {
+          const parsed = JSON.parse(raw) as { pathTopology?: unknown; topology?: unknown };
+          const value = parsed.pathTopology ?? parsed.topology;
+          return typeof value === 'string' ? value : null;
+        } catch {
+          return null;
+        }
+      })();
+      const audit = auditMilestoneRationales(milestones, input.clarification, {
+        requireStopping: resolvePathTopologyPolicy(topology).requiresStoppingRationale,
+      });
       if (!audit.ok) {
         logger.error('[path-coordinator] MilestoneRationale 回读审计未通过，阻断路径', {
           userId: input.userId,

@@ -1,7 +1,8 @@
 /**
  * 量级守恒硬执行（enforceBudgetConservation）单元测试：
- * 欠填放大 / 超填收缩 / 容量钳制 / 缺口声明 / 缺失学时补锚 / 无预算锚跳过。
+ * 欠填放大 / 超填收缩 / 容量钳制 / 缺失学时补锚 / 无预算锚跳过。
  * 根因案例：mastery-eng 90h 预算产出 37h（2026-09-28）。
+ * 2026-11-25：容量不足时不再向用户拼「容量说明」文案，只在 report 里留 clampReason 痕迹。
  */
 import { enforceBudgetConservation } from '../index';
 
@@ -10,7 +11,7 @@ function milestones(hours: (number | null)[]) {
 }
 
 describe('enforceBudgetConservation（量级守恒硬执行）', () => {
-  it('欠填放大：90h 预算产出 37h → 拉到结构容量（8×14×30min=56h），无缺口声明', () => {
+  it('欠填放大：90h 预算产出 37h → 拉到结构容量（8×14×30min=56h），不产出用户文案', () => {
     const ms = milestones([4, 3, 4, 4, 7, 4, 4, 7]); // sum=37
     const hints = {
       targetTotalHours: 90,
@@ -23,7 +24,7 @@ describe('enforceBudgetConservation（量级守恒硬执行）', () => {
     expect(r.report!.capacitySum).toBe(56);
     expect(r.totalAfter).toBeGreaterThan(53.9); // ≥ 0.6×90=54
     expect(r.totalAfter).toBeLessThanOrEqual(56);
-    expect(r.gapNote).toBeNull(); // 容量 56 ≥ 下限 54，诚实可达
+    expect(r).not.toHaveProperty('gapNote');
     // 逐阶段学时被改写（一位小数、不超每阶段容量 7）
     for (const m of ms) {
       expect(m.estimatedHours).toBeGreaterThan(0);
@@ -31,7 +32,7 @@ describe('enforceBudgetConservation（量级守恒硬执行）', () => {
     }
   });
 
-  it('容量低于守恒下限 → 放大到容量并产出缺口声明（heavy-fp 形态：540h 预算 / 56h 容量）', () => {
+  it('容量低于守恒下限 → 放大到容量并留痕（heavy-fp 形态：540h 预算 / 56h 容量），不写用户文案', () => {
     const ms = milestones([7, 7, 7, 7, 7, 7, 7, 7]); // sum=56=容量
     const hints = {
       targetTotalHours: 540,
@@ -41,9 +42,10 @@ describe('enforceBudgetConservation（量级守恒硬执行）', () => {
     };
     const r = enforceBudgetConservation(ms, hints);
     expect(r.totalAfter).toBe(56);
-    expect(r.gapNote).toBeTruthy();
-    expect(r.gapNote).toMatch(/540/);
-    expect(r.gapNote).toMatch(/56/);
+    expect(r.report!.capacitySum).toBe(56);
+    expect(r.report!.target).toBe(540);
+    expect(r.report!.clampReason).toBe('capacity');
+    expect(r).not.toHaveProperty('gapNote');
   });
 
   it('超填收缩：10h 预算产出 25h → 压回 [0.6,1.8]×10 带内（受容量钳制）', () => {
@@ -76,7 +78,7 @@ describe('enforceBudgetConservation（量级守恒硬执行）', () => {
     const ms = milestones([3, 4, 5]);
     const r = enforceBudgetConservation(ms, null);
     expect(r.totalAfter).toBe(12);
-    expect(r.gapNote).toBeNull();
+    expect(r.report).toBeNull();
     expect(ms.map((m) => m.estimatedHours)).toEqual([3, 4, 5]);
   });
 
@@ -90,7 +92,7 @@ describe('enforceBudgetConservation（量级守恒硬执行）', () => {
     };
     const r = enforceBudgetConservation(ms, hints);
     expect(r.totalAfter).toBe(70);
-    expect(r.gapNote).toBeNull();
+    expect(r.report).toBeNull();
     expect(ms.map((m) => m.estimatedHours)).toEqual([14, 14, 14, 14, 14]);
   });
 

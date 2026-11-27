@@ -13,6 +13,8 @@ import {
   buildQueries,
   detectQueryLanguage,
   documentSourceScore,
+  isMetaLiteratureSource,
+  matchesMetaLiteratureNeed,
   rankSources,
   selectDiversifiedSources,
 } from '../index';
@@ -115,5 +117,25 @@ describe('rankSources preferDocuments=false（补充槽语义）', () => {
     expect(rankSources([hardDoc, officialPage], { preferDocuments: false })[0].url).toBe(
       'https://www.moe.gov.cn/page'
     );
+  });
+});
+
+describe('体裁闸（元文献不采）', () => {
+  it('教材对比研究/期刊论文判为元文献', () => {
+    expect(isMetaLiteratureSource(
+      'https://pdf.hanspub.org/ae20221200000_60165755.pdf',
+      '人教版高中英语教材的对比与传承——以必修一阅读为例',
+    )).toBe(true);
+    expect(isMetaLiteratureSource('https://example.com/j', 'Advances in Education 教育进展')).toBe(true);
+  });
+
+  it('教材/课标/目录正文不拦', () => {
+    expect(isMetaLiteratureSource('https://example.com/textbook.pdf', '人教版高中英语必修第一册目录')).toBe(false);
+    expect(isMetaLiteratureSource('https://example.com/std', '普通高中英语课程标准（2017年版）')).toBe(false);
+  });
+
+  it('需求本身就是研究/综述时不启用体裁闸（用户要的就是论文）', () => {
+    expect(matchesMetaLiteratureNeed('高中英语教材对比研究综述')).toBe(true);
+    expect(matchesMetaLiteratureNeed('人教版高中英语必修第一册')).toBe(false);
   });
 });

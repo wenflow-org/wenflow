@@ -423,6 +423,15 @@ describe('goal-clarification-contract · Phase 2 门控与 Path 回路', () => {
     expect(audit.reasons.some((reason) => reason.includes('stopping'))).toBe(true);
   });
 
+  it('auditMilestoneRationales：subject 拓扑末单元不是全书终评 → requireStopping=false 时通过', () => {
+    const audit = auditMilestoneRationales([
+      { title: '第1章 机械运动', rationale: { serves: 'core', evidence: 'core.question' } },
+      { title: '第6章 质量与密度', rationale: { serves: 'baseline', evidence: 'baseline.known' } },
+    ], { ...cltAfterTurn2, unknowns: [] }, { requireStopping: false });
+    expect(audit.ok).toBe(true);
+    expect(audit.stoppingCovered).toBe(false);
+  });
+
   it('auditMilestoneRationales：非法 serves 计入 invalidServes', () => {
     const audit = auditMilestoneRationales([
       { rationale: { serves: 'whatever', evidence: 'x' } },

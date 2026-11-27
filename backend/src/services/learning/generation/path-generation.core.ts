@@ -64,6 +64,7 @@ import { createDomainEvent } from '../../../events/contracts';
 import { enqueueDomainEvent } from '../../../events/outbox.repository';
 import { enqueuePathQualityReviewEvent, hashPathReviewSnapshot, PATH_REVIEW_REVIEWER_KIND } from '../../../events/path-quality-review-event';
 import { learnerSnapshotRefreshService } from '../../learner/LearnerSnapshotRefreshService';
+import { resolvePathTopologyPolicy } from '../path-topology-policy';
 import { learnerProjectionService } from '../../learner/LearnerProjectionService';
 import { dashboardGuidanceSnapshotService } from '../../learner/DashboardGuidanceSnapshotService';
 import { runBackgroundTask } from '../../background-task-tracker.service';
@@ -82,13 +83,54 @@ import {
 import { enrichLearningPathWithAnderson } from './stage-enrichment';
 import { isProgressiveStageDesignEnabled } from './progressive-design';
 
-const PATH_TOPOLOGIES: readonly PathTopology[] = ['exploratory', 'builder', 'exam', 'diagnostic'];
+const PATH_TOPOLOGIES: readonly PathTopology[] = ['exploratory', 'builder', 'exam', 'diagnostic', 'subject'];
 
 /** 归一 path-planning 输出的拓扑；非法值返回 null（由调用方回退到定帧 hint / diagnostic）。 */
 export function normalizePathTopology(value: unknown): PathTopology | null {
   return typeof value === 'string' && (PATH_TOPOLOGIES as readonly string[]).includes(value.trim())
     ? value.trim() as PathTopology
     : null;
+}
+
+/**
+ * 教材/多单元路径：删掉 milestone.goal 末尾的**全书级**括注（2026-11-25）。
+ *
+ * 判定不靠关键词清单，而是**对照本次输入里真实的 schoolAnchor.textbook**：
+ * 括注里出现用户给的书名/册次（或去掉版本括注后的主体）才删。这样：
+ * - 单元级括注（「（第 2 章 声现象）」）不会误删；
+ * - 没有 schoolAnchor 的路径不做任何文本手术（交给 prompt 约束，不猜）。
+ */
+export function stripSubjectBookAnchor(goal: string, textbook?: string | null): string {
+  const text = goal.trim();
+  if (!text.endsWith('）')) return goal;
+  const markers = bookMarkers(textbook);
+  if (markers.length === 0) return goal;
+  let depth = 0;
+  let start = -1;
+  for (let i = text.length - 1; i >= 0; i -= 1) {
+    if (text[i] === '）') depth += 1;
+    else if (text[i] === '（') {
+      depth -= 1;
+      if (depth === 0) { start = i; break; }
+    }
+  }
+  if (start < 0) return goal;
+  const inner = text.slice(start + 1, -1);
+  if (!markers.some((marker) => inner.includes(marker))) return goal;
+  const head = text.slice(0, start).replace(/[，,、；;\s]+$/u, '');
+  return head || text;
+}
+
+/** 从 schoolAnchor.textbook 抽出可用于比对的书名标记（全称 / 书名号内标题 / 去版次主体）。 */
+function bookMarkers(textbook?: string | null): string[] {
+  const raw = typeof textbook === 'string' ? textbook.trim() : '';
+  if (!raw) return [];
+  const markers = new Set<string>([raw]);
+  const title = raw.match(/《([^》]+)》/)?.[1]?.trim();
+  if (title && title.length >= 2) markers.add(title);
+  const base = raw.replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '').trim();
+  if (base) markers.add(base);
+  return [...markers].filter((marker) => marker.length >= 3);
 }
 
 /** 学科基准锚归一：只保留非空字符串、各截断到 4 条；全空返回 undefined（不落空壳键）。 */
@@ -400,9 +442,10 @@ export function buildSuggestedMilestoneSnapshot(m: any, idx: number) {
 export function assertClarificationRationalesReadyForPersistence(
   milestones: unknown,
   clarification: unknown,
+  options?: { requireStopping?: boolean },
 ): void {
   if (!clarification || !isClarificationEnforceEnabled()) return;
-  const audit = auditMilestoneRationales(milestones, clarification);
+  const audit = auditMilestoneRationales(milestones, clarification, options);
   if (audit.ok) return;
   const error = new Error(
     `CLARIFICATION_REQUIRED: 里程碑 rationale 审计未通过：${audit.reasons.join('；')}`
@@ -416,6 +459,13 @@ function readPathClarification(data: GeneratePathData): unknown {
   return (data.userProfile?.normalizedInput as { clarification?: unknown } | undefined)?.clarification
     ?? (data.userProfile?.goalFinalPayload as { clarification?: unknown } | undefined)?.clarification
     ?? null;
+}
+
+function readPathSchoolAnchor(data: GeneratePathData): { textbook?: string | null } | null {
+  const anchor = (data.userProfile?.normalizedInput as { schoolAnchor?: unknown } | undefined)?.schoolAnchor
+    ?? (data.userProfile?.goalFinalPayload as { schoolAnchor?: unknown } | undefined)?.schoolAnchor;
+  if (!anchor || typeof anchor !== 'object') return null;
+  return anchor as { textbook?: string | null };
 }
 
 async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
@@ -526,6 +576,11 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
       // AI 生成的路径简短摘要（path-planning 输出），随 aiPromptTemplate 持久化，
       // 供列表接口 parsePathSummary 读取、前端卡片展示
       summary: typeof path.summary === 'string' && path.summary.trim() ? path.summary.trim() : null,
+      // 路径级总成果（2026-11-25）：skill normalizeOutput 已透传，这里再白名单一次；
+      // 漏带 ⇒ aiPromptTemplate 没有该键，前端回退提案期 firstDeliverable（第一阶段成果）。
+      pathDeliverable: typeof (path as any)?.pathDeliverable === 'string' && (path as any).pathDeliverable.trim()
+        ? (path as any).pathDeliverable.trim()
+        : null,
       // 守恒执行层决策留痕（2026-09-29 I6-2）：skill 输出 → analysis → aiPromptTemplate._generation
       budgetConservation: (path as any)?.budgetConservation || null,
       sceneFraming: framedNormalizedInput ? { normalizedInput: framedNormalizedInput } : null,
@@ -563,8 +618,24 @@ export async function analyzePathForReviewExperiment(data: GeneratePathData): Pr
 async function persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
   const cognitiveDesign = buildPathCognitiveDesign(data, analysis);
   const normalizedMilestonesData = clampMilestonesWithLog(normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign), data, runId);
+  const topology = normalizePathTopology((analysis as any)?.topology);
+  const topologyPolicy = resolvePathTopologyPolicy(topology);
   // Phase 3：有澄清契约时，rationale 不闭环不得落库（重试已在 skill 校验层做过一次）。
-  assertClarificationRationalesReadyForPersistence(normalizedMilestonesData, readPathClarification(data));
+  // 拓扑策略决定末阶段是否必须 serves=stopping（教材/多单元无单一收口作品）。
+  assertClarificationRationalesReadyForPersistence(
+    normalizedMilestonesData,
+    readPathClarification(data),
+    { requireStopping: topologyPolicy.requiresStoppingRationale },
+  );
+  if (topologyPolicy.stageGoalUnitAnchorOnly) {
+    // 阶段 goal 只该说本单元学到哪；册次/全书范围留在路径层（名称/summary）。
+    const textbook = readPathSchoolAnchor(data)?.textbook ?? null;
+    for (const milestone of normalizedMilestonesData as any[]) {
+      if (typeof milestone?.goal === 'string') {
+        milestone.goal = stripSubjectBookAnchor(milestone.goal, textbook);
+      }
+    }
+  }
 
   // 资料引用（materialRefs）：里程碑 → 资料条目，**已在 skill 侧逐字核对**过。
   // 落进 aiPromptTemplate（不新增表列），读侧由 path-views 合并进 milestones/subtasks 返回给学习者。

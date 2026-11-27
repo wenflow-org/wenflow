@@ -66,7 +66,9 @@ const DISTRIBUTED_CONSENSUS: ScopeEntry[] = [
 export const SUBJECT_SCOPES: SubjectScope[] = [
   {
     name: '高中物理·力学',
-    match: /(理综|物理|力学|牛顿|受力|动量|机械能)/,
+    // 只认高中力学专属词：裸「物理」会把初中物理（声/光/物态/密度）也绑进高中清单，
+    // 校验再拿牛顿/动量去要求八年级内容，必然 SCOPE_UNBOUND（2026-11-25 教材路径复现）。
+    match: /(理综|高中物理|高考物理|牛顿|受力分析|动量|机械能)/,
     entries: PHYSICS_MECHANICS,
   },
   {

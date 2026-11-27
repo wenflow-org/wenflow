@@ -1765,17 +1765,23 @@ const finalDeliverable = computed(() => {
   // 2026-11-20：顶栏「走完会拿到」要读末阶段 goal，而不是 goal 层最初确认的
   // firstDeliverable——后者是路径级最早可见成果，路径生成后可能与末阶段验收脱节
   // （语法路径：顶部写 5 个句子，末阶段已是 10 个含从句与非谓语的长句）。
+  // 2026-11-25：改由后端拓扑策略下发 deliverableFromLastStage（builder=true，教材/多单元=false），
+  // 前端不再自己判断 topology —— 加拓扑时只改策略表，这里跟随后端。
   const lastStage = stages.value[stages.value.length - 1];
   const lastGoal = typeof lastStage?.goal === 'string' ? lastStage.goal.trim() : '';
-  if (lastGoal) return lastGoal;
-  const value = path.value?.firstDeliverable;
-  return typeof value === 'string' && value.trim() ? value.trim() : '';
+  const pathLevel = path.value?.firstDeliverable;
+  const pathLevelText = typeof pathLevel === 'string' && pathLevel.trim() ? pathLevel.trim() : '';
+  const fromLastStage = path.value?.deliverableFromLastStage;
+  if (typeof fromLastStage === 'boolean') return fromLastStage ? (lastGoal || pathLevelText) : (pathLevelText || lastGoal);
+  // 旧接口没有该字段：回退到既有 builder 语义（兼容存量载荷）。
+  return String(path.value?.pathTopology || '') === 'builder' ? (lastGoal || pathLevelText) : (pathLevelText || lastGoal);
 });
 const TOPOLOGY_LABELS: Record<string, string> = {
   exploratory: '探索起步',
   builder: '工程落地',
   exam: '应试提分',
   diagnostic: '诊断决策',
+  subject: '学科贯通',
 };
 const topologyLabel = computed(() => TOPOLOGY_LABELS[String(path.value?.pathTopology || '')] || '');
 const totalTasks = computed(() => allTasks.value.length);

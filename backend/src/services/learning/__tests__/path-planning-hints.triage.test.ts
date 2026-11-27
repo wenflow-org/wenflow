@@ -184,6 +184,16 @@ describe('hints 硬执行（stage 产出按上界裁剪）', () => {
     const tasks = [{ estimatedMinutes: 10 }];
     expect(clampStageTasksToHints(tasks, { subtasksPerStageRange: [2, 5], subtaskMinutesRange: [30, 90] })).toBe(tasks);
   });
+  it('subject 教材路径 skipCountCap：不按时间上界裁任务（覆盖优先），分钟上界照旧', () => {
+    const tasks = [1, 2, 3, 4, 5, 6].map((i) => ({ title: `t${i}`, estimatedMinutes: 45 }));
+    const out = clampStageTasksToHints(
+      tasks,
+      { subtasksPerStageRange: [2, 4], subtaskMinutesRange: [30, 40] },
+      { skipCountCap: true },
+    );
+    expect(out.length).toBe(6);
+    expect(out[0].estimatedMinutes).toBe(40);
+  });
   it('无 hints 时不动', () => {
     const tasks = [{ estimatedMinutes: 999 }];
     expect(clampStageTasksToHints(tasks, null)).toBe(tasks);
