@@ -64,7 +64,7 @@ describe('useCheckpointFlow：答错重答卡随提交响应回挂', () => {
 
   it('流式：判定窗收旧卡后，final 带回的重答卡在场且输入已清空', async () => {
     const { flow } = mountFlow();
-    apiMock.streamSubmitCheckpoint.mockImplementation(async (_s: string, _c: string, _p: unknown, _r: number, h: any) => {
+    apiMock.streamSubmitCheckpoint.mockImplementation(async (_s: string, _c: string, _p: unknown, _r: number, h: { onJudgement?: (j: { passed: boolean; judgedBy: string; detail: string | null }) => void }) => {
       h?.onJudgement?.({ passed: false, judgedBy: 'code', detail: null });
       return { passed: false, feedback: '这道没对上——header 要写 2。', revision: 1, checkpoint: { ...REARMED } };
     });
@@ -83,7 +83,7 @@ describe('useCheckpointFlow：答错重答卡随提交响应回挂', () => {
 
   it('答对（无 checkpoint 字段）：保持既有行为，判定窗后收卡不回挂', async () => {
     const { flow } = mountFlow();
-    apiMock.streamSubmitCheckpoint.mockImplementation(async (_s: string, _c: string, _p: unknown, _r: number, h: any) => {
+    apiMock.streamSubmitCheckpoint.mockImplementation(async (_s: string, _c: string, _p: unknown, _r: number, h: { onJudgement?: (j: { passed: boolean; judgedBy: string; detail: string | null }) => void }) => {
       h?.onJudgement?.({ passed: true, judgedBy: 'code', detail: null });
       return { passed: true, feedback: '回答正确', revision: 1 };
     });

@@ -17,7 +17,7 @@ const src = readFileSync(join(here, '..', 'VirtualProfile.vue'), 'utf8');
 
 describe('VirtualProfile 评审报告入口模式门', () => {
   it('runs 映射提取 experiment.mode（缺省 assisted），stageResults 只解析一次', () => {
-    expect(src).toContain("mode: (sr as any)?.experiment?.mode ? String((sr as any).experiment.mode) : 'assisted'");
+    expect(src).toContain("mode: srView.experiment?.mode ? String(srView.experiment.mode) : 'assisted'");
     // paused/durationMs/mode 共用同一份 sr：不再各自 JSON.parse
     const parses = src.match(/JSON\.parse\(s\.stageResults/g) || [];
     expect(parses.length, 'runs 映射内 stageResults 只解析一次').toBe(1);

@@ -2046,6 +2046,11 @@ async function loadDetail(id?: string, quiet = false) {
            默认 assisted 运行挂评审入口点了必 502，不如不渲染） */
         let sr: Record<string, unknown> | null = null
         try { sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || null) } catch { sr = null }
+        const srView = (sr || {}) as {
+          autopilot?: { status?: string; heartbeatAt?: string | null } | null
+          teaching?: { paused?: boolean } | null
+          experiment?: { mode?: string } | null
+        }
         return {
           time: runTimeText(String(s.createdAt || s.startedAt || '')),
           createdAt: String(s.createdAt || s.startedAt || ''),
@@ -2060,10 +2065,10 @@ async function loadDetail(id?: string, quiet = false) {
             /* 2026-10-31 四轮评审 R1：自动驾驶停机（进度保留）也算已暂停——与列表页
                pausedSessionIds 同一判据（live.ts stageResults.autopilot.status==='stopped'），
                否则列表灰点「已暂停」、详情满屏绿「进行中」两套状态打架 */
-            if ((sr as any)?.autopilot?.status === 'stopped') return true
-            return !!((sr as any)?.teaching?.paused)
+            if (srView.autopilot?.status === 'stopped') return true
+            return !!srView.teaching?.paused
           })(),
-          mode: (sr as any)?.experiment?.mode ? String((sr as any).experiment.mode) : 'assisted',
+          mode: srView.experiment?.mode ? String(srView.experiment.mode) : 'assisted',
           sessionId: String(s.id || s.sessionId || ''),
           storyId: storyMeta.storyId,
           storyTitle: storyMeta.title,
@@ -2076,7 +2081,7 @@ async function loadDetail(id?: string, quiet = false) {
             /* 2026-10-31 五轮评审 P2：挂机不计时——推进中/停机的会话以自动驾驶最后心跳为
                活动终点（停机后心跳冻结，暂停 3 小时不再被算进运行时长）；终态会话以最后
                一次落库写（updatedAt）收口（总结/收尾写入晚于最后一次心跳） */
-            const ap = ((sr as any)?.autopilot || null) as Record<string, unknown> | null
+            const ap = srView.autopilot || null
             const hb = Date.parse(String(ap?.heartbeatAt || ''))
             const upd = Date.parse(String(s.updatedAt || ''))
             const terminal = ['completed', 'failed', 'abandoned', 'timeout', 'cancelled', 'incomplete'].includes(String(s.status || '').toLowerCase())
