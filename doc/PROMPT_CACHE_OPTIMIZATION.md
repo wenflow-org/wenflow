@@ -1,10 +1,9 @@
 # Prompt 缓存优化设计
 
-> 📌 类型：活规范（缓存优化 SSOT；64k SSOT 回写已完成）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（prompt 缓存架构、标准通道实测缓存率、运维配置与遥测护栏）｜索引见 [doc/README.md](./README.md)。
 
-- 发布：2026-09-28
 - 范围：平台 LLM 调用链的 prompt 缓存架构、标准通道实测缓存率、运维配置
-- 数据来源：标准通道（会话亲和型 key）真机实测，2026-09-28，goal→learn 全链路双账号对照
+- 数据来源：标准通道（会话亲和型 key）真机实测，goal→learn 全链路双账号对照（见 §三）
 - 口径权威：本文缓存率一律采用 `命中 tokens / promptTokens`（下称 hit/pt），见 §3.1
 
 ## 一、背景与机制
@@ -84,7 +83,7 @@ headers[cacheSessionHeader] = resolveCacheSessionKey(context);
 ### 3.1 口径
 
 - 命中率 = `Σ promptCacheHitTokens / Σ promptTokens`（每调用粒度求和后相除）。
-- 不变量 `promptTokens = hit + miss` 已在 09-25~09-28 共 4,157 行遥测上验证零违例，
+- 不变量 `promptTokens = hit + miss` 已在 4,157 行遥测上验证零违例，
   pt 可作为真分母；`hit/(hit+miss)` 形式在 miss 字段未上报时会把分母塌缩成 hit
   （历史上有整段时间如此，表现为恒 100% 假数），**禁止使用**。
 - 判定通道是否如实上报：按天统计「有 hit 的行里 miss>0 占比」，骤降即塌缩期。
@@ -137,7 +136,7 @@ prompt 中 ~44% 是必要新鲜内容（学员最新消息 + 课堂状态变更 
 ### 3.5 各技能预期缓存率（标准通道参考值）
 
 标准运行配置：单 key（会话亲和型）+ 单模型 `deepseek-v4.1-flash`，21 个链路技能统一路由。
-2026-09-28 三账号 × (goal + 2 课) 纯净复测：
+三账号 × (goal + 2 课) 纯净复测：
 
 | 技能 | 实测（3 账号） | 说明 |
 |---|---|---|
@@ -148,8 +147,8 @@ prompt 中 ~44% 是必要新鲜内容（学员最新消息 + 课堂状态变更 
 ### 3.6 输出预算地板（64k）
 
 所有 skill 的 `maxTokens` 统一为 **64000**（`prompts/**/*.yaml` 与 `prompts/skill.*.md` frontmatter，
-2026-11-02 复核：live 声明 62 处全部为 64000，经 prompts:sync 发布）。**例外**：board-designer
-（2026-10-27 新增）的 prompt 文件不声明 maxTokens，运行时由 `generationOverride` 固定为
+live 声明 62 处全部为 64000，经 prompts:sync 发布）。**例外**：board-designer
+的 prompt 文件不声明 maxTokens，运行时由 `generationOverride` 固定为
 **16000**（`backend/src/services/ai-teaching/board-designer.service.ts`：板图 spec 字数不多，
 但该模型会先花数千 reasoning token，4000 预算会被推理吃满、正文为空）。背景：模型变体输出量可达
 旧预算（4000/8000）的 2-4 倍，低预算导致 finishReason=length 截断（path-reviewer@4000 2/2、
@@ -163,7 +162,7 @@ material-collector@4000 等）。maxTokens 是上限不是目标——抬高不�
 
 官方 V4.1-Flash 牌价（每 1M tokens）：输入命中 ¥0.02（高峰 ¥0.04）、输入未命中 ¥1（高峰 ¥2）、
 输出 ¥4（高峰 ¥8）。高峰=北京时间工作日 9:00-12:00、14:00-18:00，其余为空闲时段。
-注：旧模型名 `deepseek-v4-flash` 曾由 V4.1-Flash 按此价服务；该 id 已于 2026-10-18 上游下线，注册表同步移除。
+注：旧模型名 `deepseek-v4-flash` 曾由 V4.1-Flash 按此价服务；该 id 已上游下线，注册表已移除。
 
 按 §三 实测消耗折算（空闲时段）：
 
@@ -175,7 +174,7 @@ material-collector@4000 等）。maxTokens 是上限不是目标——抬高不�
 | 三轮合计（3 用户 6 课） | 1,371K / 739K / 429K | **≈ ¥2.36** |
 
 结构：输出占 ~73% 是成本大头；命中价比未命中价便宜 50 倍，命中率是输入成本的主杠杆
-（本轮 54% 命中将输入成本压掉一半）。高峰时段全部翻倍。
+（54% 命中使输入成本减半）。高峰时段全部翻倍。
 
 ## 四、运维与配置
 
@@ -192,7 +191,7 @@ skill_model_configs 是运行时绑定层：路由（endpoint/key）、模型（
 展示名，PUT 会拒绝写入）。endpoint 必须带 scheme。生效值与来源以管理端 GET 投影为准
 （`generationParams.sources`）。详见 doc/MODEL_GATEWAY_DESIGN.md §4.5/§4.9。
 
-### 4.2 路由配置三个坑（踩过实锤）
+### 4.2 路由配置三个坑
 
 1. skill_model_configs 运行时路由只读**裸 skillId 行**；带 `skill:` 前缀的同名行是
    展示名，写入不生效。

@@ -48,6 +48,8 @@ function makePaths(n: number) {
 function mountExplorer(extra: Record<string, unknown> = {}) {
   return mount(MkGraphExplorer, {
     props: { nodes: NODES, edges: [], paths: makePaths(10), ...extra },
+    // 下拉弹层已 Teleport 到 body；原位渲染才能按 .mk-ge__pathpick 范围断言选项
+    global: { stubs: { teleport: true } },
   });
 }
 
@@ -132,6 +134,7 @@ describe('MkGraphExplorer 路径切换：只有一个下拉（§5）', () => {
           { id: 'lp_c', title: '有标题的路径' },
         ],
       },
+      global: { stubs: { teleport: true } },
     });
     const texts = optionTexts(w);
     expect(texts).toContain('未命名路径 1');
@@ -163,6 +166,7 @@ describe('MkGraphExplorer 路径下拉的键盘与三态', () => {
     const w = mount(MkGraphExplorer, {
       props: { nodes: NODES, edges: [], paths: makePaths(10), pathId: 'lp_1' },
       attachTo: document.body,
+      global: { stubs: { teleport: true } },
     });
     const btn = trigger(w);
     expect(btn.attributes('role')).toBe('combobox');
@@ -192,6 +196,7 @@ describe('MkGraphExplorer 路径下拉的键盘与三态', () => {
     const w = mount(MkGraphExplorer, {
       props: { nodes: NODES, edges: [], paths: makePaths(10), pathId: 'lp_1' },
       attachTo: document.body,
+      global: { stubs: { teleport: true } },
     });
     await trigger(w).trigger('click');
     await w.findAll('.mk-ge__pathpick .mk-listbox-opt')[2].trigger('click');

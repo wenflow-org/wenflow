@@ -1,7 +1,7 @@
 /**
- * 课堂契约卡（2026-11-19 课堂全面改造）：
- * ① 开课/恢复响应带 lessonContract，契约卡展示核心 KC 与独立证据门槛；
- * ② 支线状态（active/remaining/parkingLot）随每回合响应更新；
+ * 课堂契约（2026-11-19 课堂全面改造；2026-11-25 学生端减法）：
+ * ① 开课/恢复响应带 lessonContract，结课浮层展示核心 KC 与独立证据门槛；
+ * ② 学生端课堂主屏不再渲染契约横栏与自由支线遥测（只留管理端/结课浮层）；
  * ③ 结课浮层展示契约达成与停车区，不把契约外探索判成失败。
  *
  * 模板入口字段由后端 engine/startSession 注入；这里锁字段名与渲染入口，改名不锁会静默退化。
@@ -16,24 +16,24 @@ const source = readFileSync(resolve(here, '../V2LearningPage.vue'), 'utf8');
 /* 门禁文案与持久出口文案已收进共享模块（课堂页 + 反馈页同一份） */
 const gateCopySource = readFileSync(resolve(here, '../closureGate.ts'), 'utf8');
 
-describe('V2LearningPage 课堂契约卡与自由支线', () => {
-  it('契约卡渲染核心 KC、独立证据门槛与覆盖度', () => {
-    expect(source).toContain('class="contract"');
-    expect(source).toContain('本节完成要求');
+describe('V2LearningPage 课堂契约：学生端撤卡片、结课浮层保留', () => {
+  it('学生端不再渲染契约横栏（自由支线/已验证/独立答对数）', () => {
+    // 2026-11-25 学生端减法：契约遥测只留管理端与结课浮层，课堂主屏不展示
+    expect(source).not.toContain('class="contract"');
+    expect(source).not.toContain('本节完成要求');
+    expect(source).not.toContain('自由支线');
+    expect(source).not.toContain('branchLabel');
+    expect(source).not.toContain('branchRemaining');
+  });
+
+  it('结课浮层仍消费契约覆盖度与独立证据口径', () => {
     expect(source).toContain('contractCoreKcs');
     // 独立答对口径收口到 independentProgressLabel computed（2026-11-22：超额时改「达标线」
     // 措辞，不再读出 2/1 这类像出错的超额分数）；required/minIndependentEvidence 回退链
-    // 移进 computed，模板两处（契约头 + 结课浮层）统一消费它。
+    // 移进 computed，结课浮层统一消费它。
     expect(source).toContain('independentProgressLabel');
     expect(source).toContain('lessonReport.value?.requiredIndependent ?? lessonContract.value?.minIndependentEvidence');
     expect(source).toContain('contractCoveredCount');
-  });
-
-  it('支线标签显示当前分支与剩余轮次', () => {
-    expect(source).toContain('自由支线');
-    expect(source).toContain('branchLabel');
-    expect(source).toContain('branchRemaining');
-    expect(source).toContain('branchActive');
   });
 
   it('停车区可见，且不会渲染成主线失败', () => {

@@ -31,6 +31,7 @@ import { countEvidencedConfusions, resolveUnderstandingReading } from './checkpo
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { cloneKnowledgePoints } from './teaching-knowledge-state';
 import { parseSessionArtifacts } from './checkpoint-shared';
+import { extractTaskMaterialExcerpt, looksLikeNumericTaskMaterial } from './teaching-material-shape';
 import type { TeachingOpening } from './AITeachingCoordinator';
 import type { TeachingSessionRecord } from './TeachingSessionRepository';
 import type { TeachingScenarioContext } from './TeachingContextBuilder';
@@ -110,24 +111,29 @@ export function computeEffectiveDurationMinutes(session: TeachingSessionRecord) 
 }
 
 export function buildRecoveredOpening(session: TeachingSessionRecord): TeachingOpening {
-  const core = clipOpeningName(session.topic);
   return {
     message: `已为你恢复这节关于 **${session.topic}** 的课程进度，我们从你上次离开的地方继续。`,
     question: '准备好了的话，我们继续刚才的内容。',
     quickReplies: [
-      { text: `回顾上次的「${core}」` },
-      { text: `继续「${core}」的进度` },
+      { text: '回顾上次的内容' },
+      { text: '继续上次的进度' },
       { text: '从上次的地方接着走' },
     ],
     mode: 'self-assess',
   };
 }
 
-/** 开场 chip 里引用的内容名：截短，保证整条 chip 不超 14 字 */
-function clipOpeningName(raw: unknown): string {
+/**
+ * 开场 chip 里引用的内容名：只在**完整名字足够短**时使用，绝不截断。
+ *
+ * 2026-11-25 实机事故：`同一问题下两套回答的分歧根源` 被切成「同一问题下两…」，
+ * 学生点「先讲「同一问题下两…」」后，这句带省略号的残词被当成用户消息发进课堂，
+ * 而屏幕上从来没有出现过这个名字。省略号不是展示小事——它一旦进了发送内容就是串台。
+ * 因此：≤6 字才带名字；更长就用「这一回合」这类指向当前开场的中性动作。
+ */
+function shortGroundedName(raw: unknown): string | null {
   const text = String(raw ?? '').trim();
-  if (!text) return '本课内容';
-  return text.length > 6 ? `${text.slice(0, 6)}…` : text;
+  return text && text.length <= 6 ? text : null;
 }
 
 /**
@@ -137,14 +143,28 @@ function clipOpeningName(raw: unknown): string {
  * （2026-11-02 用户反馈「开场很不舒服」实锤）——学生看到一句话、页面上没有任何可点的东西。
  * 兜底 chip 必须**承载本课内容**（"拿「退款口径」看个例子"），不能用"开始吧/继续往下讲"
  * 这类放到任何一节课都成立的万能词（用户同批反馈「快选没什么意义」）。
+ * 名字过长时不硬塞：改用「这一回合」指代开场里已经出现的那场对话，避免引用屏幕外的概念。
  */
 export function buildOpeningActionChips(
   context: TeachingScenarioContext,
   mode: TeachingOpening['mode'] = 'example-first',
 ): Array<{ text: string }> {
-  const core = clipOpeningName(context.taskProfile?.coreConcept || context.topic || context.taskTitle);
+  const core = shortGroundedName(context.taskKcs?.[0]?.name)
+    ?? shortGroundedName(context.taskProfile?.coreConcept)
+    ?? shortGroundedName(context.taskTitle)
+    ?? shortGroundedName(context.topic);
+  if (!core) {
+    // predict 的立场选项必须来自这一屏的具体候选，不能凭空造「我先判断一下」这类流程词——
+    // 没有候选时宁可不出选项，让 question 单独成一条行动线。
+    if (mode === 'predict') return [];
+    if (mode === 'self-assess') {
+      return [{ text: '先讲这一回合' }, { text: '拿这一回合试一小步' }, { text: '跳过自评，直接练' }];
+    }
+    return [{ text: '先看这一回合' }, { text: '我先试一小步' }, { text: '先讲要点，再拿例子练' }];
+  }
   if (mode === 'predict') {
-    return [{ text: `让我先判断「${core}」` }, { text: '给点提示再判断' }, { text: '我先猜一个，你验证' }];
+    // 同上：这里没有 question/材料可抽，硬造只会得到空转项。
+    return [];
   }
   if (mode === 'self-assess') {
     return [{ text: `先讲「${core}」` }, { text: `拿「${core}」试一小步` }, { text: '跳过自评，直接练' }];
@@ -158,7 +178,9 @@ export function buildOpeningActionChips(
  * 命中即确定性丢弃整句——不做片段手术，避免留下半个残句。
  */
 const OPENING_QUESTION_ACTION_TELL =
-  /(直接(动手|往下|开始|来|试|做)|先(动手|写|做|试|看一遍|练一遍)|现在(就)?(开始|动手)|马上(开始|动手))/;
+  // 「先做/先看」要区分祈使与提问：2026-11-27 真课「第一步先做的是哪件事？」
+  // 被误判成动作指令，question 与 3 个立场选项一起被丢掉，开场只剩一段独白。
+  /(直接(动手|往下|开始|来|试|做)|先(动手|写|做(?!的)|试|看一遍|练一遍)|现在(就)?(开始|动手)|马上(开始|动手))/;
 
 /**
  * 开场 question 的第二类「答不了」形态：**判答式提问**。
@@ -208,13 +230,71 @@ function stripDanglingSelfAssess(text: string): string {
   return next.length >= 2 ? next : text;
 }
 
+/**
+ * 开场选项的流程词/空转项（2026-11-26）：点了不会产生可判内容，只会让老师再回一句
+ * 「那你猜吧」——实测 flash 会把提示词里的示例原句直接抄成选项，必须确定性拦掉。
+ */
+const OPENING_META_CHIP_RE =
+  /^(让我?先判断|我先判断一下|我先猜一个|我先想想|我准备好了|开始吧|给个?提示再判断|给点?线索再判断)/;
+/** 降阶项：允许存在，但至多一个且排在最后（它不是立场，不能和候选混排）。 */
+const OPENING_HINT_CHIP_RE = /(拿不准|不确定|不会|给点?(?:提示|线索)|给个?(?:提示|线索))/;
+
+export function isMetaOpeningChip(text: string): boolean {
+  return OPENING_META_CHIP_RE.test(String(text || '').trim());
+}
+
+export function isOpeningHintChip(text: string): boolean {
+  const t = String(text || '').trim();
+  return OPENING_HINT_CHIP_RE.test(t) && !isMetaOpeningChip(t);
+}
+
+/**
+ * 从开场文本里抽「可以直接点的候选」：引号里的本课句子/术语 + ①②③④ 编号项。
+ * 只用于 predict 兜底——模型没给或给的是流程词时，用这一屏真实出现过的候选补位。
+ */
+export function extractOpeningCandidates(text: string): string[] {
+  const raw = String(text || '');
+  const found: string[] = [];
+  for (const match of raw.matchAll(/[「『“"]([^」』”"]{2,30})[」』”"]/g)) found.push(match[1].trim());
+  for (const match of raw.matchAll(/[①②③④⑤]\s*([\p{L}\p{N}·]{2,20})/gu)) found.push(match[1].trim());
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of found) {
+    const value = item.replace(/[。；;，,]$/, '').trim();
+    if (value.length < 2 || value.length > 24 || seen.has(value)) continue;
+    // 候选必须是「这一屏里真实出现的具体内容」，不要抽到流程词。
+    if (isMetaOpeningChip(value)) continue;
+    seen.add(value);
+    out.push(value);
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+function predictStanceChips(text: string): Array<{ text: string }> {
+  return extractOpeningCandidates(text).map((candidate) => ({ text: `我猜是「${candidate}」` }));
+}
+
+/**
+ * 开场按钮单行纪律（2026-11-27 真课：4 个长句 + 线索被挤到第二行，视觉重心散架）。
+ * 单条优先在自然停顿处收短（不截半句、不留省略号），仍过长才硬截；总数由调用方压到 3。
+ */
+function compactOpeningChip(text: string, max = 18): string {
+  const value = String(text || '').trim();
+  if (value.length <= max) return value;
+  const clause = value.split(/[，,：:；;]/)[0].trim();
+  if (clause.length >= 5 && clause.length <= max) return clause;
+  return value.slice(0, max);
+}
+
 
 /**
  * 开场「一条行动线」契约的确定性兜底（2026-11-02 用户反馈「开场很不舒服」）：
- * - quickReplies 至少 1 个：模型没给就按本课内容补（buildOpeningActionChips）；
- * - question 里不得出现动作指向词，命中即丢；
+ * - predict：选项必须是本题的具体立场/候选；流程词一律丢弃，抽不到候选就让 question 单独成线；
+ * - 其它模式：至少 1 个可执行动作（模型没给就按本课内容补 buildOpeningActionChips）；
+ * - question 里不得出现动作指向词/答不了的判定式提问，命中即丢；
  * - mode 非法时回落到 example-first。
- * 放在 generateOpening 出参口，保证任何调用方拿到的开场第一屏都有可点动作。
+ * 放在 generateOpening 出参口，保证开场第一屏只有一条能推进的行动线。
  */
 export function ensureOpeningActionLine(
   opening: Partial<TeachingOpening> | null | undefined,
@@ -230,7 +310,8 @@ export function ensureOpeningActionLine(
     .map((item) => (typeof item === 'string' ? item : item?.text))
     .map((text) => String(text ?? '').trim())
     .filter((text) => text.length > 0)
-    .slice(0, 3)
+    .filter((text) => !isMetaOpeningChip(text))
+    .slice(0, mode === 'predict' ? 5 : 3)
     .map((text) => ({ text }));
   // question 的可用性：动作指向词（自己许愿点不动的动作）+ 判答式/引未展示材料的提问，都丢。
   const keepQuestion = !!rawQuestion
@@ -240,13 +321,67 @@ export function ensureOpeningActionLine(
      message 与 question 是同一屏上的两句话，任一侧为空时另一侧就是唯一的那句；
      让两者同时承载同一句，会让它在「气泡 + 面板」各出现一次——正是用户看到的「两个问题」。 */
   const messageText = message || (keepQuestion ? rawQuestion : '');
-  const replies = (provided.length > 0 ? provided : buildOpeningActionChips(context, mode))
-    // 没有 question 时，「自评」无从指代（学生没被问到任何东西）→ 剥掉那半句
-    .map((item) => ({ text: keepQuestion ? item.text : stripDanglingSelfAssess(item.text) }));
+  // 2026-11-25 实机事故：模型/兜底都可能把长概念截成「同一问题下两…」；带省略号的
+  // 动作一旦被点，就会作为用户消息原样发进课堂。这里整组丢弃，改用不带名字的兜底动作。
+  const hasTruncatedChip = provided.some((item) => /…|\.{3}/.test(item.text));
+  let replies: Array<{ text: string }>;
+  if (mode === 'predict') {
+    // 预测题：选项必须是**本题的立场/候选**；流程词已在上方滤掉。
+    // 模型没给候选时，从这一屏文本里抽真实出现过的句子/编号项补位；
+    // 连候选都抽不到 → 不出选项，让 question 单独成一条行动线（绝不硬造「我先判断一下」）。
+    if (keepQuestion) {
+      const stances = provided
+        .filter((item) => !isOpeningHintChip(item.text))
+        .map((item) => ({ text: compactOpeningChip(item.text) }));
+      const hint = provided.find((item) => isOpeningHintChip(item.text));
+      replies = stances.length
+        ? stances
+        : predictStanceChips(`${messageText}\n${rawQuestion}`).map((item) => ({ text: compactOpeningChip(item.text) }));
+      // 去重 + 总数硬限 3（含「拿不准」线索）：3 个立场就不要再挂第 4 个孤儿按钮。
+      const seen = new Set<string>();
+      replies = replies.filter((item) => {
+        const key = item.text.replace(/\s+/g, '');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 3);
+      if (replies.length && replies.length < 3) {
+        replies.push({ text: compactOpeningChip((hint ?? { text: '拿不准，给点线索' }).text) });
+      } else if (!replies.length && hint) {
+        // 连候选都没有时不硬造立场；模型自己给了降阶入口才保留。
+        replies = [{ text: compactOpeningChip(hint.text) }];
+      }
+    } else {
+      // question 被丢弃时，立场选项失去指代（学生没被问到任何东西）→ 不出选项。
+      replies = [];
+    }
+  } else {
+    const actions = provided.length > 0 && !hasTruncatedChip ? provided : buildOpeningActionChips(context, mode);
+    replies = actions
+      // 没有 question 时，「自评」无从指代（学生没被问到任何东西）→ 剥掉那半句
+      .map((item) => ({ text: keepQuestion ? item.text : stripDanglingSelfAssess(item.text) }));
+    if (!replies.length) {
+      replies = buildOpeningActionChips(context, mode)
+        .map((item) => ({ text: keepQuestion ? item.text : stripDanglingSelfAssess(item.text) }));
+    }
+  }
+  // 非 predict 模式：有动作选项时 question 让位（两处入口会让学生无从选择）；
+  // predict 模式反过来——question 与立场选项是同一条行动线，允许并存。
+  const questionOut = message && keepQuestion && (mode === 'predict' || replies.length === 0)
+    ? rawQuestion
+    : '';
+  const finalReplies = (questionOut ? replies : replies.map((item) => ({ text: stripDanglingSelfAssess(item.text) })))
+    .filter((item) => !isMetaOpeningChip(item.text));
+  // 动作模式被流程词清空后仍有兜底：按本课内容补动作；predict 不补（选项必须来自本屏候选）。
+  const safeReplies = finalReplies.length || mode === 'predict'
+    ? finalReplies
+    : buildOpeningActionChips(context, mode)
+      .map((item) => ({ text: questionOut ? item.text : stripDanglingSelfAssess(item.text) }))
+      .filter((item) => !isMetaOpeningChip(item.text));
   return {
     message: messageText,
-    question: message && keepQuestion ? rawQuestion : '',
-    quickReplies: replies,
+    question: questionOut,
+    quickReplies: safeReplies,
     mode,
   };
 }
@@ -285,6 +420,153 @@ export function ensureOpeningMaterialGrounding(
     ...opening,
     message: `${message}\n\n本课材料先摆出来（后面都围绕它）：\n${lines.join('')}`,
   };
+}
+
+/**
+ * 开场材料本体护栏（2026-11-24「空气读数课」）：
+ * taskDescription 只是 1-2 句简介，真正的表/数据行/原文在 taskMaterialPayload。
+ * 开场若只说「看材料/按示例/在片段里读数」而不摆本体，学生屏幕上没有任何可读的数，
+ * 第二句就会质问「我这边还没看到具体的数」。
+ *
+ * 与 ensureOpeningMaterialGrounding 的分工：后者从 description 抽「轮N/1.」编号材料；
+ * 本护栏从 taskMaterialPayload 抽 Markdown 表格 / 数据行 / 前 1600 字原文，二者可叠加。
+ * 只在开场确实在指代材料、或材料本身就是数值表时补挂；不把长手册整本灌进开场。
+ *
+ * 形状判定与抽段逻辑在 teaching-material-shape（出图链也复用，避免循环 import）；
+ * 这里 re-export 保持既有 import 路径。
+ */
+export { extractTaskMaterialExcerpt, looksLikeNumericTaskMaterial } from './teaching-material-shape';
+
+/** 材料里的组标题行（A 组 / 第一段 / （B）…）：分段落卡与锚点判定都要跳过它。 */
+function isMaterialGroupHeader(line: string): boolean {
+  return /^[（(]?\s*(?:(?:第\s*[一二三四五六七八九十0-9]+)\s*[段组]|(?:[A-ZＡ-Ｚ]|[一二三四五六七八九十])\s*[)）组段])/.test(line);
+}
+
+/** 开场/贴材料时判断「这段材料是不是已经在正文里」：按内容行（跳过说明括号与组标题）取锚。 */
+function materialExcerptPresent(text: string, excerpt: string): boolean {
+  const compact = String(text || '').replace(/\s+/g, '');
+  if (!compact) return false;
+  const lines = String(excerpt || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const contentLines = lines.filter((line) =>
+    !line.startsWith('（')
+    && !line.startsWith('…')
+    && !isMaterialGroupHeader(line));
+  const anchors = (contentLines.length ? contentLines : lines)
+    .map((line) => line.replace(/\s+/g, '').slice(0, 16))
+    .filter((anchor) => anchor.length >= 8);
+  return anchors.some((anchor) => compact.includes(anchor));
+}
+
+/**
+ * 开场正文对材料的指代。2026-11-27 补「转述/小段/两段/句子/对话/语录」：
+ * 真实课（苏格拉底论证课）开场写「用的是两小段…的示意转述」，一个字都没命中旧词表，
+ * 护栏直接放行——学生第一屏只看到「这段材料」却看不到材料。指代形态本来就多：
+ * 原文课说「原文/选段」，语文课说「这段话/例句」，逻辑课说「转述/小段」。
+ */
+const OPENING_TASK_MATERIAL_REF_RE = /(材料|表格|表里|(?:这|那)张表|对比表|读数|数据|样本|曲线|片段|原文|选段|清单|示例|转述|小段|两段|三段|这段|那段|段话|例句|语录|对话|台词)/;
+
+export function ensureOpeningTaskMaterial(
+  opening: TeachingOpening,
+  context: TeachingScenarioContext,
+  options: { deferToBoard?: boolean } = {},
+): TeachingOpening {
+  const material = String(context.taskMaterialPayload || '').trim();
+  if (!material) return opening;
+  const message = String(opening.message || '');
+  const tableLike = looksLikeNumericTaskMaterial(material);
+  if (!tableLike && !OPENING_TASK_MATERIAL_REF_RE.test(message)) return opening;
+  const excerpt = extractTaskMaterialExcerpt(material);
+  if (!excerpt) return opening;
+  // 已摆出材料（取内容行前 16 字做锚）→ 不重复补挂。
+  if (materialExcerptPresent(message, excerpt)) return opening;
+  // 阶段协议下材料由整课板书逐段展开（2026-11-26）：开场只给表头 + 第一行做定位，
+  // 不把整张表复制进第一条气泡——否则同一份材料在开场与板上各出现一次，
+  // 且整表一次曝光违反分段（segmenting）。板书失败时后续回合仍可用纯文本自足兜底。
+  const shown = options.deferToBoard
+    ? deferMaterialForBoard(excerpt, { firstOnly: opening.mode === 'predict' && !tableLike })
+    : excerpt;
+  if (!shown) return opening;
+  // 2026-11-27：材料不再硬拼进老师 message，改为独立引用卡（前端渲染）。
+  // 硬拼会变成「老师说一段人话 + 系统贴一段文档」两张皮，且容易和正文里的
+  // 「课上摆到板上」打架。卡只放材料本体，免责/来源括注压成卡片标题。
+  const noteMatch = /^（([^）]{4,80})）\s*\n?/.exec(shown);
+  const note = noteMatch
+    ? noteMatch[1].trim()
+    : (/^（([^）]{4,80})）\s*\n?/.exec(excerpt)?.[1].trim() ?? '');
+  const body = (noteMatch ? shown.slice(noteMatch[0].length) : shown).trim();
+  if (!body) return opening;
+  return {
+    ...opening,
+    material: {
+      title: /(示意|转述)/.test(note) ? '本课材料 · 示意转述' : '本课材料',
+      text: body,
+    },
+  };
+}
+
+/** 取 Markdown 表头 + 第一行数据（或前 6 行原文 / 第一组），用于「材料由板书承载」时的开场定位。 */
+function deferMaterialForBoard(excerpt: string, opts: { firstOnly?: boolean } = {}): string {
+  const lines = excerpt.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length <= 2) return excerpt;
+  const tableLines = lines.filter((line) => /^\s*\|/.test(line));
+  if (tableLines.length >= 3) {
+    // 表头 + 分隔行 + 第一条数据行
+    return [...tableLines.slice(0, 3), '| … | | | |（其余行课上继续展开） |'].join('\n');
+  }
+  // 预测题开场只摆「题面」：给出组标题 + 第一条材料（通常就是被指控/待判断的那句），
+  // 不把结论句先贴出来再让学生猜（2026-11-27 真课：材料②直接印着「苏格拉底并不研究…」，
+  // 下面还让他猜第一步做什么）。非预测开场仍给整组。
+  if (opts.firstOnly) {
+    const headerIndex = lines.findIndex((line) => isMaterialGroupHeader(line));
+    const start = headerIndex >= 0 ? headerIndex : 0;
+    const picked = [lines[start], lines[start + 1]].filter((line): line is string => !!line);
+    if (!picked.length) return excerpt.slice(0, 400);
+    const truncated = start + 2 < lines.length;
+    return [...picked, truncated ? '…（其余内容课上继续展开）' : ''].filter(Boolean).join('\n');
+  }
+  // 文本材料（原文/示意转述/对话/清单）：只给第一组，且要给出**能读的整段**。
+  // 2026-11-27 真课：旧实现固定取前 2 行，命中的是「（说明）+ A 组（带连接词）：」
+  // 两行标题，一句材料都没上屏——学生被要求凭直觉判断，屏幕上却没有可判断的句子。
+  const picked: string[] = [];
+  let chars = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (i > 1 && isMaterialGroupHeader(line)) break;
+    if (picked.length >= 6 || (picked.length > 1 && chars + line.length > 400)) break;
+    picked.push(line);
+    chars += line.length;
+  }
+  if (picked.length === 0) return excerpt.slice(0, 400);
+  const truncated = picked.length < lines.length;
+  return [...picked, truncated ? '…（其余内容课上继续展开）' : ''].filter(Boolean).join('\n');
+}
+
+/**
+ * 学生对着材料发懵时的确定性兜底（2026-11-27 苏格拉底论证课）：
+ * 开场只写「用的是两小段…的示意转述」、学生回「我都不知道是什么事情啊」，
+ * 老师接着给背景却仍在问抽象问题。材料其实一直在上下文里（`taskMaterialPayload`），
+ * 只是模型没摆出来。这里在**最后一个问句之前**插入第一组材料的可读文本——
+ * 先有可判断的句子，再有判断问题；材料已在正文里（24 字锚）则不重复插。
+ */
+export function ensureConfusionMaterialOnScreen(
+  reply: string,
+  material: string | null | undefined,
+): string {
+  const text = String(reply || '');
+  const materialText = String(material || '').trim();
+  if (!text.trim() || !materialText) return reply;
+  const excerpt = deferMaterialForBoard(extractTaskMaterialExcerpt(materialText, 1200));
+  if (!excerpt) return reply;
+  if (materialExcerptPresent(text, excerpt)) return reply;
+  const block = `先把材料摆出来（本课要拆的就是这一小段）：\n${excerpt}`;
+  // 插在最后一个问句之前：材料先行，问题在后。
+  const questionAt = Math.max(text.lastIndexOf('？'), text.lastIndexOf('?'));
+  if (questionAt < 0) return `${text}\n\n${block}`;
+  let start = questionAt;
+  while (start > 0 && !/[。！？!?\n]/.test(text[start - 1])) start -= 1;
+  const before = text.slice(0, start).trimEnd();
+  const after = text.slice(start).trimStart();
+  return `${before}${before ? '\n\n' : ''}${block}\n\n${after}`;
 }
 
 /**

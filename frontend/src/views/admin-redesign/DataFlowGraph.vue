@@ -570,6 +570,7 @@ import { adminFieldRoutingsApi, adminRuntimeDefinitionsApi } from '@/api/adminAp
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
+import { resolveVisualScale } from '@/utils/zoom'
 import { ensureLiveTopologyRaw } from './live'
 import {
   buildStageFlow, familyHue, type FlowChip, type FlowStep, type StageFlow, type DefStepLike,
@@ -956,30 +957,38 @@ async function onDfgWheelZoom(e: WheelEvent) {
   dfgZoom.value = Math.min(DFG_ZOOM_MAX, Math.max(DFG_ZOOM_MIN, before * Math.exp(-raw * DFG_ZOOM_WHEEL_K)))
   const next = dfgZoom.value
   if (next === before) return
+  /* clientX / getBoundingClientRect 是**视觉** px，scrollLeft 是**逻辑** px：
+     `.ac` 在 2K/4K 有 zoom 1.15/1.3，不先除页面缩放就会把锚点算大 15%–30%。 */
+  const pageZoom = resolveVisualScale(view) || 1
   const r0 = view.getBoundingClientRect()
-  const px = (e.clientX - r0.left + view.scrollLeft) / before
-  const py = (e.clientY - r0.top + view.scrollTop) / before
+  const px = ((e.clientX - r0.left) / pageZoom + view.scrollLeft) / before
+  const py = ((e.clientY - r0.top) / pageZoom + view.scrollTop) / before
   await nextTick()
   const r1 = view.getBoundingClientRect()
-  view.scrollLeft = px * next - (e.clientX - r1.left)
-  view.scrollTop = py * next - (e.clientY - r1.top)
+  view.scrollLeft = px * next - (e.clientX - r1.left) / pageZoom
+  view.scrollTop = py * next - (e.clientY - r1.top) / pageZoom
 }
 
 /* 抓取式拖动平移：放大后视口两轴都有滚动范围（overflow: auto 由视口给） */
 const dfgPanning = ref(false)
-let dfgPanStart: { x: number; y: number; left: number; top: number; id: number; moved: boolean } | null = null
+let dfgPanStart: { x: number; y: number; left: number; top: number; id: number; moved: boolean; zoom: number } | null = null
 /* 拖动后浏览器仍会补发一次 click（落点可能在某枚字段芯片上）→ 捕获阶段吞掉，避免误开字段抽屉 */
 let dfgSuppressClick = false
 function onDfgPointerDown(e: PointerEvent) {
   const view = viewRef.value
   if (!view || e.button !== 0 || e.pointerType === 'touch') return
-  dfgPanStart = { x: e.clientX, y: e.clientY, left: view.scrollLeft, top: view.scrollTop, id: e.pointerId, moved: false }
+  dfgPanStart = {
+    x: e.clientX, y: e.clientY,
+    left: view.scrollLeft, top: view.scrollTop,
+    id: e.pointerId, moved: false,
+    zoom: resolveVisualScale(view) || 1
+  }
 }
 function onDfgPointerMove(e: PointerEvent) {
   const view = viewRef.value
   if (!view || !dfgPanStart || e.pointerId !== dfgPanStart.id) return
-  const dx = e.clientX - dfgPanStart.x
-  const dy = e.clientY - dfgPanStart.y
+  const dx = (e.clientX - dfgPanStart.x) / dfgPanStart.zoom
+  const dy = (e.clientY - dfgPanStart.y) / dfgPanStart.zoom
   if (!dfgPanStart.moved) {
     if (Math.abs(dx) + Math.abs(dy) < 4) return
     dfgPanStart.moved = true
@@ -1045,12 +1054,15 @@ function measure(attempt = 0) {
   const view = viewRef.value
   if (!root || !view) return
   const z = dfgZoom.value || 1
+  /* 页面 zoom（.ac 的 1.15/1.3）也会进 rect；基准宽 dfgBaseW 是逻辑 px。
+     判据里必须把两层缩放一起除掉，否则缩放页上永远「没吃进 zoom」，每次量测白等 160ms。 */
+  const pageZoom = resolveVisualScale(view) || 1
   const rr = root.getBoundingClientRect()
   /* 先等「布局吃进当前 zoom」再量：写 zoom/宽度之后，布局要等到下一次绘制才刷新
      （离屏渲染实测 ~60ms），其间量到的是中间态，连线与卡片当场错位。
      判据 = 层自有宽（rect ÷ zoom）回到基准宽（两者在同一趟布局里生效）；
      最多等 ~160ms 就照画，绝不死等。 */
-  if (dfgBaseW.value && Math.abs(rr.width / z - dfgBaseW.value) > 1 && attempt < 8) {
+  if (dfgBaseW.value && Math.abs(rr.width / (z * pageZoom) - dfgBaseW.value) > 1 && attempt < 8) {
     window.setTimeout(() => measure(attempt + 1), 20)
     return
   }

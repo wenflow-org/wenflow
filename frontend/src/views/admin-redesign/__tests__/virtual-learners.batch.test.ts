@@ -404,14 +404,14 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     many.unmount();
   });
 
-  it('没有会话数据时完成率/系统失败率显示「—」（0% 会被读成跑过但全没完成）', async () => {
+  it('没有会话数据时完成率/系统失败率显示「暂无」（0% 会被读成跑过但全没完成；破折号在 26px 下像进度条）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     // 按卡片结构断言而非拼接文本（MkKpi 里 label 与数字是相邻元素，text() 无空格）
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
-    expect(kpiNum('完成率（全部会话）')).toBe('—');
-    expect(kpiNum('系统失败率（全部会话）')).toBe('—');
+    expect(kpiNum('完成率（全部会话）')).toBe('暂无');
+    expect(kpiNum('系统失败率（全部会话）')).toBe('暂无');
     // 防回归：这一页的运行指标必须挂在共享 .mk-kpi-grid 下（2026-09-29 归一，原 MkStatStrip 自由条）
     expect(w.find('.vl-kpi .mk-kpi-grid').exists()).toBe(true);
     expect(w.findAll('.mk-kpi')).toHaveLength(4);

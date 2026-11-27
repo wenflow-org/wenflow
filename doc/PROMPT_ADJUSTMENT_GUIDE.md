@@ -1,17 +1,16 @@
 # Prompt 调整指引（PROMPT_ADJUSTMENT_GUIDE）
 
-> 📌 类型：活规范（提示词调整操作指南）｜最后核验：2026-11-02（死链/死命令已修）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（提示词调整的操作动线、字段与模型调整、验证步骤）｜索引见 [doc/README.md](./README.md)。
 
-> 面向拿到项目后需要调整提示词的开发者/运营。2026-09 起 prompt 体系**只有一条编译链**——
-> 原第二级编译（prompt-compiler 服务：routing 重写 + `{{}}` 引用注解）已整体退役（16c3cabd），
-> prompt 内容调整统一走 v4 确定性编译。机制详见 `doc/SKILL_PROTOCOL_V4.md` 与 `prompts/_README.md`。
+> 面向拿到项目后需要调整提示词的开发者/运营。prompt 体系**只有一条编译链**：内容调整统一走 v4
+> 确定性编译，机制详见 `doc/SKILL_PROTOCOL_V4.md` 与 `prompts/_README.md`。
 
 ## 一句话原则
 
 **一切文本调整只能从 `prompts/core/<skillId>.yaml` 进**，经确定性编译变成 `prompts/skill.<skillId>.md`，
 再同步进数据库（`agent_prompts` ACTIVE 行）才对线上生效。运行时读的就是 DB 镜像的 `systemPrompt` 原文。
 
-**定位边界（2026-09 拍板）**：管理台只做**轻运营调整**——改已有 prompt 文案/参数、发布、回滚、试跑、看健康；
+**定位边界**：管理台只做**轻运营调整**——改已有 prompt 文案/参数、发布、回滚、试跑、看健康；
 **从 0 新建 Skill 是代码级动作**（scaffold 只出骨架片段，还需三处手工接线），统一走 CLI/
 开发流（`doc/SKILL_DEVELOPMENT_GUIDE.md`），管理台不再提供新建入口。
 
@@ -33,7 +32,7 @@
 - 发布链自带守门：五块结构检查、字段冻结检查、LLM 语义评审、发布前自动备份、DB 版本化（coreHash/coreVersion 锚点）。
 - 回滚：设计页「版本」页签，或 `POST /api/prompt-lab/core/:skillId/rollback`。
 - 发布响应会提示哪些产物是 git 跟踪文件——**记得提交 git**。
-- **新建 Skill 不在管理台**（2026-09 迁出）：走 CLI
+- **新建 Skill 不在管理台**：走 CLI
   `cd backend && npx ts-node --transpile-only scripts/scaffold-skill.ts --skill-id=... --kind=...`
   然后按 `doc/SKILL_DEVELOPMENT_GUIDE.md` §4 完成三处接线。
 
@@ -93,7 +92,7 @@ npm run prompts:snapshots
 - **手改 `skill.*.md`**：编译产物，手改造成漂移且会被 sync 跳过；
 - **编译产物视图 / 二级编译**：已退役，不存在"编译版 prompt"。
 
-## 已知坑（都交过学费）
+## 已知坑
 
 1. `prompts:sync` 是**全量**对账，会把他人未提交的 md 一并推进共享 system.db——
    单点微调用 `backend/scripts/sync-one-prompt.ts --dry` 先报告再同步；

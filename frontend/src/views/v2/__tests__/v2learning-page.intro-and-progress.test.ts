@@ -1,8 +1,8 @@
 /**
  * 课堂页 2026-11-11 实机走查（1280 浅色，真实账号）：
- *  ① 首屏只有一条开场白，中间 ~450px 全空——用真实知识点补「本节要掌握」并居中；
+ *  ① 首屏只有一条开场白，中间 ~450px 全空——用开场白居中构图，不再堆知识点胶囊；
  *  ② 服务端快选被截成同一前缀（「先讲「同一星期几同…」」「拿「…」试一小步」），
- *     显示层必须能区分讲解与练习，发送仍用原文；
+ *     显示层必须能区分讲解与练习；点击发送不得把截断残词当用户消息（2026-11-25 实机事故）；
  *  ③ 标题副行补「第 N / M 节」，数据取自任务详情自带 subtasks，不新增请求。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   startSession: vi.fn(),
   getSessionDetail: vi.fn(),
   getLatestTaskEvaluation: vi.fn(),
+  streamSendMessage: vi.fn(),
 }));
 
 vi.mock('@/utils/api', () => ({
@@ -27,7 +28,7 @@ vi.mock('@/api/aiTeaching', () => ({
     startReviewSession: vi.fn(),
     getSessionDetail: api.getSessionDetail,
     getLatestTaskEvaluation: api.getLatestTaskEvaluation,
-    streamSendMessage: vi.fn(),
+    streamSendMessage: api.streamSendMessage,
     sendMessage: vi.fn(),
     streamContinueSession: vi.fn(),
     streamSubmitCheckpoint: vi.fn(),
@@ -81,22 +82,29 @@ describe('课堂首屏：目标卡、快选标签与课次进度', () => {
     });
   });
 
-  it('只有开场白时显示「本节要掌握」并居中；快选标签可区分', async () => {
+  it('首屏不再常驻知识点胶囊；快选标签可区分，点击发送不带截断残词', async () => {
     const w = mount(V2LearningPage, { global: { stubs: { 'router-link': true } } });
     await flushPromises();
     await flushPromises();
 
-    expect(w.find('.tutor__intro').exists()).toBe(true);
-    expect(w.find('.tutor__intro').text()).toContain('同一星期几的时段可比');
+    // 2026-11-25 学生端减法：顶部 3 个知识点胶囊撤除，只留页头「知识点 N/M」入口
+    expect(w.find('.tutor__intro').exists()).toBe(false);
     expect(w.find('.tutor__scroll').classes()).toContain('tutor__scroll--intro');
 
-    const labels = w.findAll('.replies .reply__text').map((n) => n.text());
+    const labels = w.findAll('.opening-line .reply__text').map((n) => n.text());
     expect(labels).toContain('先讲这一条');
     expect(labels).toContain('拿它练一小步');
     expect(new Set(labels).size).toBe(labels.length);
-    const buttons = w.findAll('.replies .reply');
+    const buttons = w.findAll('.opening-line .reply');
     expect(buttons[0].attributes('title')).toBe(LABEL_A);
     expect(buttons[1].attributes('title')).toBe(LABEL_B);
+
+    // 旧数据里的截断残词不能原样发进课堂：发送改写成不带隐藏名字的动作
+    await buttons[0].trigger('click');
+    await flushPromises();
+    const sent = api.streamSendMessage.mock.calls[0];
+    expect(sent?.[1]).toBe('先讲这一回合');
+    expect(String(sent?.[1])).not.toMatch(/…|\.{3}/);
     w.unmount();
   });
 

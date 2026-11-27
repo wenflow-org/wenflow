@@ -65,7 +65,7 @@ export interface ClassroomQualityJudgeOutput {
   findings: Array<{
     code: string;
     severity: 'critical' | 'major' | 'minor' | 'info';
-    category: 'opening' | 'criteria' | 'scaffolding' | 'board' | 'notation' | 'closure' | 'assessment' | 'boundary';
+    category: 'opening' | 'criteria' | 'scaffolding' | 'board' | 'notation' | 'closure' | 'assessment' | 'boundary' | 'fact';
     title: string;
     detail: string;
     evidenceIds: string[];
@@ -94,7 +94,7 @@ export interface ClassroomQualityJudgeOutput {
 
 const VERDICTS = ['pass', 'pass_with_concerns', 'fail', 'inconclusive'] as const;
 const SEVERITIES = ['critical', 'major', 'minor', 'info'] as const;
-const CATEGORIES = ['opening', 'criteria', 'scaffolding', 'board', 'notation', 'closure', 'assessment', 'boundary'] as const;
+const CATEGORIES = ['opening', 'criteria', 'scaffolding', 'board', 'notation', 'closure', 'assessment', 'boundary', 'fact'] as const;
 const EVIDENCE_PATHS = ['content', 'board', 'figure', 'checkpoint', 'wrapup'] as const;
 
 function clampScore(value: unknown): number {

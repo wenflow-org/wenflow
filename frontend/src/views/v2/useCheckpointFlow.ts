@@ -5,7 +5,7 @@
  */
 import { nextTick, ref, watch, type Ref } from 'vue';
 import { toast } from '@/utils/toast';
-import { aiTeachingAPI, type LessonContract, type LessonReport, type ExitTicket, type MessageResult } from '@/api/aiTeaching';
+import { aiTeachingAPI, type LessonContract, type LessonReport, type ExitTicket, type LessonPhaseSummary, type MessageResult } from '@/api/aiTeaching';
 import { isCheckpointAlreadyHandled } from '@/utils/checkpoint';
 
 /**
@@ -33,6 +33,8 @@ export function useCheckpointFlow(
     lessonReport?: LessonReport | null;
     exitTicket?: ExitTicket | null;
     branch?: MessageResult['branch'] | null;
+    /** 课堂阶段摘要（课堂阶段协议，2026-11-26）：提交回合也要推进顶部阶段条 */
+    lessonPhase?: LessonPhaseSummary | null;
   }) => void
 ) {
   const checkpoint = ref<Record<string, any> | null>(null);
@@ -308,6 +310,7 @@ export function useCheckpointFlow(
           lessonReport: r.lessonReport ?? null,
           exitTicket: r.exitTicket ?? null,
           branch: r.branch ?? null,
+          lessonPhase: r.lessonPhase ?? null,
         });
       }
       clearDraft();

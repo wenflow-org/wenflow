@@ -6,6 +6,7 @@ import { gatewayErrorHttpStatus } from '../utils/gateway-http-status';
 import requirementOrchestrator from '../coordinators/requirement.coordinator';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { sanitizeMaterialIdsInput } from '../services/learning/goal-conversation.service';
+import { reconcileGoalConversationOutput } from '../skills/goal-conversation/output-consistency';
 import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
@@ -505,11 +506,20 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
         }
       });
     }
+    // 读侧一致性收敛（2026-11-26）：存量快照里模型当年写出的「五站」/默认时间，
+    // 不再原样透出——结构（key_stages）与「来源是 default」才是真值。
+    const restored = reconcileGoalConversationOutput({
+      reply: conversation.userVisible || '',
+      quickReplies: [],
+      understanding: conversation.understanding || {},
+      confirmedProposal: conversation.confirmedProposal || null,
+      stage: 'ready',
+    });
     return res.json({
       success: true,
       data: {
         // 同上：占位串不再进入 data.userVisible（null = 本次快照没有可展示的终局文案）。
-        userVisible: conversation.userVisible,
+        userVisible: conversation.userVisible ? restored.reply : conversation.userVisible,
         internal: {
           core: {
             conversationId,
@@ -525,7 +535,7 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
           },
           ext: {
             goalConversation: {
-              understanding: conversation.understanding || {},
+              understanding: restored.understanding,
               nextQuestions: conversation.nextQuestions || [],
               quickReplies: [],
               structuredData: conversation.structuredData || null,

@@ -21,6 +21,7 @@
 
 import { logger } from '../../utils/logger';
 import { generateImages } from '../image';
+import { looksLikeNumericTaskMaterial } from './teaching-material-shape';
 import { ImageError, type ImageErrorCode, type ImageRatio } from '../image/types';
 import type { TeachingImage, TeachingSessionMessage } from './TeachingSessionRepository';
 
@@ -259,40 +260,9 @@ export function paletteOfSubject(subject?: string | null): 'indigo' | 'earth' | 
 /** 图型选择表 + spec 形状：只在"该出图"的回合随 visualOpportunity 送进 prompt。
  * 不常驻 system prompt（避免每轮都付这段 token）；字段上限与 normalizeFigure 的 SPEC 一致。
  */
-export const FIGURE_KIND_GUIDE = [
-  '（系统提示里若是旧版"v1 唯一图型 position-line"，以本轮为准：下列 kind 代码已支持并会逐字段校验。）',
-  '**出图前先过三关（缺一不出）**：① 实体关——节点/标签必须是学科实体（真实代码、方程各项、数值与单位、时间点/事件、对象/要素），'
-  + '出现「第一步/自查/缺X/重写/评分/口诀/批改」这类元认知或评语，整张作废；② 几何关——关系必须由位置/数值/区间/连线/包含读出来'
-  + '（谁比谁大、谁指向谁、谁在谁里面），两栏文字也能说清就不画；③ 留白关——本轮让学生产出 X（句子/步骤/分类/判断）时，'
-  + '图里不得出现完整的 X，只给 "?" 或空槽。',
-  '若确实该出图，按关系选 kind（最多 8 行/6 列、8 个条目；标签用学科实指，≤18 字）：',
-  '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
-  '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
-  '- concept-map：**概念结构图**（讲概念本身，不是出题）：{"nodes":[{"id":"light","label":"光反应","sub":"类囊体膜","tone":"accent"},{"id":"atp","label":"ATP / NADPH","sub":"能量与还原力"},{"id":"dark","label":"暗反应","sub":"叶绿体基质"}],"edges":[{"from":"light","to":"atp","label":"产生"},{"from":"atp","to":"dark","label":"供给"}],"takeaway":"光反应造能量，暗反应用能量把 CO₂ 变成糖"}——节点是概念要素（概念/过程/量/条件），**每条边必须有关系名**（产生/供给/构成/依赖/导致/对照）；**机制里的子要素要展开成自己的节点**（如「压强差」是独立节点，不要印在父节点的小字里——学生要看的是要素之间的关系，不是注解）；**takeaway 是结构总结不是答案**——本轮要学生自己推导的结论（如「风向就反过来」）不进 takeaway，写结构层面的收束或干脆省略；**非因果/「无关」的边用 tone:"neutral" 并加 "dash":true**（虚线灰线）——「决定」与「无关」同色实线时学生一眼扫过去会看串；讲解概念、机制、流程时优先用它，不要用「问题+答案」的画法；**概念图用在「第一次讲清/整体梳理」这一轮**——如果这一轮是让学生自己复述或推导整张结构，就不要把完整结构图放出来（可以留白或等学生说完再印证）。',
-  '- split-compare：**正误并排对比**（学生做错一步、纠典型误区时优先用）。{"title":"…","left":{"head":"常见错法","tone":"warn","rows":[{"label":"60 ÷ 400","sub":"把秒当分钟除"}]},"right":{"head":"正确做法","tone":"ok","rows":[{"label":"60 × 400 ÷ 1000","sub":"先把米换算成千米"}]},"delta":{"label":"分叉在第二步：先除还是先换算","at":1}}——左右是**同一个动作的两种走法**，第 n 行对第 n 行；delta.at 指出分叉在第几步；正文不复述两栏，只点破分叉步；**左右必须按同样的步骤序列写**（左第 n 步对右第 n 步），**第 1 行放同一个起点**（同一句原句、同一个初始状态或同一个已知条件）——两栏第一行比的东西不同，整张对照就失去意义；一侧没做的那一步就写 "?"（渲染成待填空槽）；**留白按本轮任务分流**：本轮是老师示范对照（学生还没有动手）→ 正确栏写全、至多留一步给学生核验，整栏留白的对照图学生看不到「对的样子」等于没有对照；本轮就要学生**自己改错/说答案**（纠错轮、追问轮）→ 正确栏的**答案行**必须留 "?"（可以多于一格），否则图替学生把错改完了；**受力/方向/位置这类空间关系不要用本图型**——它画不出矢量。**逐句对账不是本图型（2026-11-12 实证 st_1794451502004：订票回复逐句回看被装进对比图，右栏「有没有依据」判定整列可见，老师提问的瞬间答案就印在题干下方；两轮重画口径还当场反转）**——「回复里的句子 vs 上文有没有依据」是制表对账不是正误交锋，代码会整图拒绝；对账用 matrix（判定格留 "?" 让学生填）或直接写正文，且留白判定格是让**学生**填的，不要自己填好答案再问学生。',
-  '- state-strip：**不回头的进程分帧**（三次握手/编译流程/消化过程/生命周期）。帧内 items 每帧 ≤3 条，只写**该时刻的状态快照**（主语+状态，如「客户端 SYN_SENT」「食糜进入小肠」），不写动作指令、操作命令或流程评论——写成了动作清单就退化成装框文字；**帧 label 或帧内含时间/序号时先自查先后自洽**（第②步不许写在第①步之前发生的事）；本轮要学生**自己推导的目标状态**（如推送完成后各区的状态）留空槽 "?"，不要替学生写全；**帧与帧之间发生的动作/命令写在前一帧 items 的最后一条并以「→」开头**（如「→ git commit」），不要塞在帧框内。{"title":"TCP 三次握手","frames":[{"label":"SYN","items":["客户端 SYN_SENT","服务端 LISTEN"]},{"label":"SYN+ACK","items":["服务端 SYN_RCVD"]},{"label":"ACK","items":["双方 ESTABLISHED"]}] ,"note":"…"}——2~8 帧横排、帧间箭头是「下一步」；**要回到起点**的过程（循环/迭代）用 cycle，不要用条带。**只用于真时序过程——并列分类/判别分支禁止线性化（2026-11-08 p-π案例实证）**：p-π 与 π-π 这类**并列的判别分支**（查 A 或查 B 或查 C，谁先谁后都成立）塞进 state-strip 会产出伪逻辑——模型开始追问「为什么第 2 帧要排在第 3 帧之前」这种不存在的原因。判据：**把帧顺序打乱后教学含义是否受损**——不受损就不是时序过程，改用 compare（分支对照）或 concept-map（判别结构）；「判别流程图」里的「流程图」三字**不自动等于** state-strip。',
-  '- cartesian-plot：**二维坐标图**（函数曲线/平抛轨迹/实验数据；**柱状量用 form="bars"**——气温降水图的降水柱、各月销量对比，点和线画柱状量会被读成趋势）。{"x":{"label":"水平位移 / m","min":0,"max":2.6,"ticks":[0,0.6,1.2,1.8,2.4]},"y":{"label":"高度 / m","min":0,"max":0.85,"ticks":[0,0.4,0.8]},"series":[{"name":"3 m/s","form":"parabola","a":-0.5556,"b":0,"c":0.8,"tone":"ok","dotPoints":[[0.3,0.75],[0.6,0.6],[0.9,0.35],[1.2,0]]}],"guides":[{"axis":"y","at":0.75,"label":"t=0.1s · 0.75m"}],"vectors":[{"at":[0,0.8],"dx":0.6,"dy":0,"label":"v₀"}],"marks":[{"at":[1.2,0],"label":"落点 1.2 m"}]}——**同一时刻两个球在不在同一高度**，只能靠这张图看见；form 可用 points/parabola(a,b,c)/linear(k,b)/scatter/bars，dotPoints 是等时间隔的位置点（频闪），属于同一条曲线，**不要另开一条散点系列**；**vectors 的 dx/dy 是坐标域单位**——速度/力这类量纲不同的箭头只在起点示意方向，长度不按数值比例，label 里写清数值与单位；**要表达「面积」时给 `areas`**：{"areas":[{"from":0,"to":4,"series":"速度","label":"位移 = 面积"}]}（v-t 图下面积=位移、供需曲线围出的剩余都靠它）；图例里写到的每条曲线都必须真的画出来；数值必须是真实量纲。**ticks 要覆盖整个轴域的关键位置**（域到 6 就给出 2/4/6，别只给到 1 让起点之后无处可读）；**陡变/突跃类曲线（滴定、相变）的 x 域要围绕突跃给窄区间**（0~40 mL 会把突跃压成一根竖线，学生读不出它横跨多少）。',
-  '- **变量名/引用/拷贝**：用 bipartite，左列变量名、右列内存对象，edges 表示指向；`b = a` 是两条边汇到同一个对象节点，`a[:]` 是外层两个节点、内层同一节点。**同一张图上不要同时画「改之前」和「改之后」两个状态**（外审：学生会以为 b 同时指向两个对象）——只画当前状态，或把前后两组分开并列并各自标头。',
-  '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
-  '- quadrant：2×2（四格顺序：左上、右上、左下、右下）。{"colLabels":["左","右"],"rowLabels":[{"label":"上","sub":"…"},{"label":"下"}],"cells":[{"title":"…","body":["…"],"tone":"ok|warn|neutral"}]}',
-  '- bipartite：左右两列 + 连线（多对多映射）。**本轮要学生连线的对象也要画成节点**，名字写 "?"（如「b?」「c?」）留在列里——别只画已知对象让学生猜「连到哪」。{"left":{"head":"…","nodes":[{"id":"a","label":"…"}]},"right":{"head":"…","nodes":[{"id":"x","label":"…"}]},"edges":[{"from":"a","to":"x"}]}——一条建议挂两个目标就是两条线；**次要/附带的连接加 "dash":"4 3"（虚线）**，渲染器会自动补图例，别把主次写成同一根实线。',
-  '- cycle：**首尾相接的闭环**（一轮结束要回到起点）。{"center":"每一轮都回到同一个问题","nodes":[{"label":"驱动问题","sub":"为什么非做不可"},{"label":"持续探究"},{"label":"公开产出","sub":"?"}]}——3~6 个节点；说不出来的一格写 "?"。',
-  '- tree：**一个上位概念长出哪些下位**（派生/分类体系）。**空间位置只表示层级、不表示方位或先后**——前缀含义（in- 向内 / pro- 向前）写在 items 里，不要指望学生从节点摆位读出方向。{"root":{"label":"五大领域"},"branches":[{"label":"健康","items":["易混：社会"]},{"label":"语言","items":["?"]}]}——2~6 个分支、每支最多两条要点。',
-  '- venn：**两个概念的重叠与独有**（易混/边界）。{"left":{"head":"社会","items":["轮流收玩具"]},"right":{"head":"科学","items":["按属性分类"]},"overlap":{"head":"两边都算","items":["按同一规则排"]}}',
-  '- bullseye：**稳不稳 × 准不准**这类"点落在哪儿"的几何问题（信度/效度、误差分布、命中集中度）。{"colLabels":["高效度","低效度"],"rowLabels":[{"label":"高信度","sub":"每次一致"},{"label":"低信度"}],"cells":[{"title":"稳且准","tone":"ok","dots":[[0.05,0.08],[-0.08,0.02]]},…]}——**四格必须齐**；dots 取 [-1,1]，(0,0)=靶心。',
-  '- board：中国象棋（col 0-8 左→右，rank 0-9 上→下；大写黑方、小写红方：R车 N马 B象 A士 K将 C炮 P卒）。{"pieces":[{"col":4,"rank":9,"key":"K"}],"arrows":[{"a1":{"col":4,"rank":9},"a2":{"col":4,"rank":7},"label":"进一"}]}',
-  '- position-line：只有**一维的先后/远近**才用（顶层 axis/marks/spans/guides/group，不用 spec）。'
-  + '**spans 只表示区间/距离**（「相距 40 米」「从第 1 题到第 3 题」）。若你要说的是「这几道题是同一类」，'
-  + '用 `group`：{"from":1,"to":3,"label":"同一个毛病：方向没跟已知条件对"}——画成花括号（归在一起）；'
-  + '用区间线表达同一性会被读成跨度，把同一句标签在每点下重复一遍又会被读成「重复的题」，两种都别用。',
-  '可选 `focus` 指出本轮该看哪里（只填位置，不要填颜色）：matrix 用 {"row":0} 或 {"col":1}；balance 用 "left"/"right"。',
-  '同一节课同一种图最多 3 张：第 4 次请换一种形状表达，或者干脆用文字——反复摆同一张图，学生会以为老师在重复同一件事。',
-  '纯流程、层级、时序用 diagram（mermaid）。**一格一格判断命中/漏/重复**（对账）时用 matrix：',
-  'mermaid 会把它压成树，丢掉「哪一格」这个信息——学生看不出自己在哪一个格子上判断错了。',
-  '图里不要写出本轮要学生自己产出的答案；reply 脱离图也必须成立。',
-  '**留白槽位**：课上用来让学生自己填的那一格/那一支，label 写 "?"（渲染成虚线待填），不要把答案先填上。**化学式用 Unicode 下标**（H₂O、H₂O₂、CO₂）——文本框画不出真下标，纯文本 H2O 会让「下标 vs 系数」的分辨失去视觉差异。',
-  '**没有专属几何就不要出图**：表格、清单、分栏、步骤这类内容写在正文里（Markdown 表格/列表），做成图只是给句子加边框。',
-].join('\n');
+import { FIGURE_KIND_GUIDE } from './figure-kind-guide';
+
+export { FIGURE_KIND_GUIDE };
 
 /**
  * 学生用文字描述**空间位置关系**的语言特征（位置/方向/距离/先后）。
@@ -765,6 +735,27 @@ export function maskFigureAnswers<T extends { kind?: string; spec?: unknown }>(f
 }
 
 /**
+ * 本任务是否属于「论证/分类课」：判据在 `teaching-argument-task`（独立模块，
+ * 避免引擎测试对视觉服务的 mock 把这个新导出抹成 undefined）。这里 re-export
+ * 保持既有 import 路径。
+ */
+export { isArgumentClassificationTask } from './teaching-argument-task';
+
+/**
+ * 本轮是否在让学生判断「哪一句是前提/结论」（2026-11-27 苏格拉底论证课）。
+ *
+ * 这类题的答案就是**句子归属**本身。`bipartite` 把左边句子连到右边「前提/结论」，
+ * 图一出来，学生不用读论证就知道该选哪句——这不是读图，是抄答案。脱敏也救不了：
+ * 挖掉节点文字，连线还在；挖掉连线，图就没内容。所以确定性闸门是**整张不出**。
+ * 判据只看正文的问句形态，不依赖图型自述。
+ */
+export function detectArgumentClassificationAsk(reply: string | null | undefined): boolean {
+  const text = String(reply || '');
+  if (!/[？?]/.test(text)) return false;
+  return /(哪一?句|哪句|这句话|这一句|那一句)[^。！？\n]{0,30}(前提|结论|理由|支撑|撑着|撑腰|撑别人)|(前提|结论)[^。！？\n]{0,26}(哪一?句|哪句|还是)|还是[^。！？\n]{0,26}(撑着|支撑|撑别人|撑它)/.test(text);
+}
+
+/**
  * 读图/复述/纠错轮才挖空（2026-10-24 外部讨论定案：此时扣图会让学生面对悬空的「看图」）。
  * 触发条件：回复以问句收尾，且问句属于「让学生自己说出/指出/改出」的句式。
  */
@@ -892,6 +883,7 @@ function lastAssistantHasVisual(messages: TeachingSessionMessage[]): boolean {
 export function buildVisualOpportunity(
   messages: TeachingSessionMessage[] | null | undefined,
   taskHint?: string | null,
+  taskMaterial?: string | null,
 ): VisualOpportunity | null {
   if (!isTeachingVisualEnabled() && !isTeachingDiagramOpportunityEnabled()) return null;
   const list = Array.isArray(messages) ? messages : [];
@@ -903,7 +895,13 @@ export function buildVisualOpportunity(
   // 任务标题优先：它决定这节课要处理哪种关系；上一轮讲解只作补充，避免正文里的普通名词（需求/市场）抢先路由。
   const kindHint = chooseFigureKind(taskHint) ?? chooseFigureKind(lastAssistant?.content);
   const kindHintLine = figureKindHintLine(kindHint);
+  // 2026-11-24「空气读数课」：任务材料是一张带逐格数值的数据表时，matrix/无几何线索
+  // 都不该被建议出图——matrix 只画 ✓/—/≡ 的对账判定，喂不进 23/27 这类数字；
+  // 模型挑了 matrix 后又会遵守「图文互锁」拒绝在正文贴数，整节课就成了隔空对暗号。
+  const tableOnly = looksLikeNumericTaskMaterial(taskMaterial)
+    && (!kindHint || kindHint.kind === 'matrix');
   if (detectAsciiStructure(lastAssistant?.content)) {
+    if (tableOnly) return null;
     return {
       suggested: true,
       reason: 'ascii-structure',
@@ -970,7 +968,7 @@ export function buildVisualOpportunity(
   // 任务级时机（2026-10-18）：**当前任务的标题/描述本身就是结构化关系**——
   // 这是最强的信号（任务决定这节课要处理哪种关系）。只在上一轮任何视觉产物都没出、
   // 且总量未到顶时给一次机会：模型可以选择用 diagram，做过选择后本轮就不再追问。
-  if ((detectStructuralCue(taskHint, 1) || chooseFigureKind(taskHint)) && !lastAssistantHasVisual(list) && !figureCapReached) {
+  if (!tableOnly && (detectStructuralCue(taskHint, 1) || chooseFigureKind(taskHint)) && !lastAssistantHasVisual(list) && !figureCapReached) {
     return {
       suggested: true,
       reason: 'task-structure',
@@ -989,7 +987,7 @@ export function buildVisualOpportunity(
   }
   // 结构内容时机（2026-10-18 扩图型）：老师上一轮在讲二维/多对多/象限关系——
   // 这类课型本来就需要图，但模型不会主动请求 figure。只在"上一轮已摆过图"或"总量到顶"时退让。
-  if (detectStructuralCue(lastAssistant?.content) || chooseFigureKind(lastAssistant?.content)) {
+  if (!tableOnly && (detectStructuralCue(lastAssistant?.content) || chooseFigureKind(lastAssistant?.content))) {
     if (lastHasFigure) return null;
     if (figureCapReached) return null;
     return {

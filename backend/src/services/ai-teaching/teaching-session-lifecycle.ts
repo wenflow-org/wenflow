@@ -94,9 +94,8 @@ export function buildSessionOpeningScene(opts: {
   mode: SessionResumeMode;
   review?: boolean;
   context: TeachingScenarioContext;
-  sameTaskAttempt?: number;
 }): SessionOpeningScene {
-  const { mode, review, context, sameTaskAttempt } = opts;
+  const { mode, review, context } = opts;
   const prior = context.priorLearningContext;
   const recap = context.lastLessonRecap;
   if (review) {
@@ -131,24 +130,8 @@ export function buildSessionOpeningScene(opts: {
       mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState, completedTasks: m.completedTasks, totalTasks: m.totalTasks })) || [],
     };
   }
-  // mode === 'new'：区分首课 / 同任务重学 / 第二课接续
-  if (sameTaskAttempt && sameTaskAttempt >= 2) {
-    return {
-      kind: 'relearn',
-      title: '重新学这一课 · 上次没完全掌握的这次补上',
-      recap: recap && recap.relation === 'same-task' ? {
-        topic: recap.sourceTopic,
-        summary: recap.sameTaskHistory?.lastSummary || recap.topicSummary,
-        retrievalCue: recap.retrievalCue,
-        unresolved: recap.unresolvedPoints,
-        relation: recap.relation,
-        sourceStage: recap.sourceStageNumber ?? null,
-        sourceTitle: context.taskTitle,
-      } : null,
-      attempt: sameTaskAttempt,
-      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState, completedTasks: m.completedTasks, totalTasks: m.totalTasks })) || [],
-    };
-  }
+  // mode === 'new'：区分首课 / 接着上一课（2026-11-27：取消「重新学」常驻横幅——
+  // 用户主动点「重新开始」就是要一张白纸，是否二刷由老师在开场白里半句带过）。
   const hasAdjacent = recap && (recap.relation === 'same-milestone-prev-task' || recap.relation === 'prev-milestone');
   if (hasAdjacent) {
     return {
@@ -321,19 +304,6 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
   scene?: SessionOpeningScene;
 }> {
   const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
-  // 当前任务的历史完结次数（判断「同任务重学」，供开场卡 scene.kind = relearn）
-  let sameTaskAttempt = 0;
-  try {
-    sameTaskAttempt = await prisma.teaching_sessions.count({
-      where: {
-        userId: input.userId,
-        taskId: input.taskId,
-        status: { in: ['completed', 'discarded'] },
-        // 延伸课不是「重学本课」：不计入同任务重学次数（否则延伸一次，下次重学的开场卡会误报）
-        NOT: { mode: 'extension' },
-      },
-    });
-  } catch { /* 统计失败不阻断 */ }
   const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
   // 课堂契约（2026-11-19）：建课时冻结「最低必须完成集」，模型之后不能改。
   const lessonContract: LessonContract = buildLessonContract(context);
@@ -491,7 +461,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         revision: previousSession.revision,
         memoryWarmup: (sessionArtifacts.memoryWarmup as ReviewPlan | undefined) ?? null,
         lessonContract: resumedContract,
-        scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
+        scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext }),
       };
     } finally {
       resumeLeaseGuard.stop();
@@ -524,6 +494,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
           openingMode: opening.mode,
           quickReplies: opening.quickReplies,
           ...(opening.question ? { question: opening.question } : {}),
+          ...(opening.material ? { openingMaterial: opening.material } : {}),
         }
       }
     ];
@@ -623,7 +594,6 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
       scene: buildSessionOpeningScene({
         mode: 'new',
         context,
-        sameTaskAttempt,
         ...(input.mode === 'review' ? { review: true } : {}),
       }),
     };

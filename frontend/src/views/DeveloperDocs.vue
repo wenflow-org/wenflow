@@ -362,6 +362,7 @@ import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();
 import { toast } from '../utils/toast'
+import { resolveVisualScale } from '@/utils/zoom'
 
 /* 深链 #api 直达时，目录当前项应与地址一致（此前固定落在「快速开始」，
    滚动事件在首屏不一定触发） */
@@ -385,7 +386,10 @@ async function copy(e: MouseEvent) {
 
 function onScroll() {
   const secs = document.querySelectorAll('.docs-sec')
-  const y = window.scrollY + 120
+  /* scrollY 是视觉 px，offsetTop 是布局 px；.v2-page 在 ≥1600 视口有 zoom，
+     直接比较会让章节高亮越往下越提前。 */
+  const zoom = resolveVisualScale(document.querySelector('.v2-page') as HTMLElement | null) || 1
+  const y = window.scrollY / zoom + 120
   let current = 'quickstart'
   secs.forEach((s) => {
     if (y >= (s as HTMLElement).offsetTop) current = s.id

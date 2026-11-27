@@ -150,6 +150,12 @@ onUnmounted(() => {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
 }
+@media (max-width: 1366px) {
+  /* 与首页/愿景同一档：720p/768p 桌面不要顶到只剩 50px 边距 */
+  .mknav__shell {
+    width: min(1120px, calc(100% - 48px));
+  }
+}
 .mknav__in {
   min-height: 72px;
   /* 三区栅格：品牌居左 · 导航居中 · 操作居右（原型 wf-pnav__in） */
@@ -259,6 +265,23 @@ onUnmounted(() => {
 /* 悬停改用 darker 蓝档（--blue-deep 即 --wf-color-primary-dark），不给投影 */
 .mknav__btn--primary:hover {
   background: var(--blue-deep);
+}
+/* 桌面顶栏降一档：主 CTA 留给英雄区和尾屏，顶栏只做轻提示。
+   抽屉里的移动端 CTA 仍保持实心蓝。 */
+@media (min-width: 1024px) {
+  .mknav__acts .mknav__btn {
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+  .mknav__acts .mknav__btn--primary {
+    color: var(--blue-deep);
+    background: color-mix(in srgb, var(--blue) 9%, transparent);
+    border-color: color-mix(in srgb, var(--blue) 16%, transparent);
+  }
+  .mknav__acts .mknav__btn--primary:hover {
+    background: color-mix(in srgb, var(--blue) 14%, transparent);
+  }
 }
 .mknav__btn--ghost {
   color: var(--ink);
@@ -383,7 +406,7 @@ onUnmounted(() => {
 /* 原型 wf-pub ≤760：容器收窄 + 按钮降档（40/14/14） */
 @media (max-width: 760px) {
   .mknav__shell {
-    width: min(100% - 28px, 1180px);
+    width: min(100% - 48px, 1180px);
   }
   .mknav__acts {
     gap: 8px;
@@ -392,6 +415,13 @@ onUnmounted(() => {
     min-height: 40px;
     padding: 0 14px;
     font-size: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 与首页/愿景 ≤640 的 28px 边距对齐；641–760 仍用 48px，避免导航比页身宽 20px */
+  .mknav__shell {
+    width: min(100% - 28px, 1180px);
   }
 }
 

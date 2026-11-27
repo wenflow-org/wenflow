@@ -234,6 +234,7 @@ import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import DataFlowGraph from './DataFlowGraph.vue'
+import { resolveVisualScale } from '@/utils/zoom'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -637,8 +638,10 @@ async function onOdgWheelZoom(e: WheelEvent) {
   odgZoom.value = next
   await nextTick()
   const r1 = canvas.getBoundingClientRect()
-  el.scrollLeft += ax * (r1.width - r0.width)
-  el.scrollTop += ay * (r1.height - r0.height)
+  /* rect 差值是视觉 px，scrollLeft 是逻辑 px；`.ac` 的 1.15/1.3 必须除掉。 */
+  const pageZoom = resolveVisualScale(el) || 1
+  el.scrollLeft += ax * (r1.width - r0.width) / pageZoom
+  el.scrollTop += ay * (r1.height - r0.height) / pageZoom
 }
 
 /* ===== 总览画布抓取式拖动平移（2026-10-13）=====
@@ -647,21 +650,26 @@ async function onOdgWheelZoom(e: WheelEvent) {
    详情不受影响）；触摸指针交还原生滚动，不抢手势。 */
 const odgScrollEl = ref<HTMLElement | null>(null)
 const odgPanning = ref(false)
-let odgPanStart: { x: number; y: number; left: number; top: number; id: number; moved: boolean } | null = null
+let odgPanStart: { x: number; y: number; left: number; top: number; id: number; moved: boolean; zoom: number } | null = null
 /* 拖动后浏览器仍会补发一次 click（落点可能在节点上）→ 捕获阶段吞掉，避免误进详情 */
 let odgSuppressClick = false
 
 function onOdgPointerDown(e: PointerEvent) {
   const el = odgScrollEl.value
   if (!el || e.button !== 0 || e.pointerType === 'touch') return
-  odgPanStart = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop, id: e.pointerId, moved: false }
+  odgPanStart = {
+    x: e.clientX, y: e.clientY,
+    left: el.scrollLeft, top: el.scrollTop,
+    id: e.pointerId, moved: false,
+    zoom: resolveVisualScale(el) || 1
+  }
 }
 
 function onOdgPointerMove(e: PointerEvent) {
   const el = odgScrollEl.value
   if (!el || !odgPanStart || e.pointerId !== odgPanStart.id) return
-  const dx = e.clientX - odgPanStart.x
-  const dy = e.clientY - odgPanStart.y
+  const dx = (e.clientX - odgPanStart.x) / odgPanStart.zoom
+  const dy = (e.clientY - odgPanStart.y) / odgPanStart.zoom
   if (!odgPanStart.moved) {
     if (Math.abs(dx) + Math.abs(dy) < 4) return
     odgPanStart.moved = true

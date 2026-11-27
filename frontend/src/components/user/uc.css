@@ -451,7 +451,7 @@ table.uc-table {
      色相与 alpha 都不同）→ 改用 --wf-shadow-modal。这是对话框，属模态层。 */
   border-radius: var(--wf-radius-overlay);
   box-shadow: var(--wf-shadow-modal);
-  max-height: 85vh;
+  max-height: calc(85vh / var(--vp-zoom, 1));
   display: flex;
   flex-direction: column;
   animation: uc-dialog-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);

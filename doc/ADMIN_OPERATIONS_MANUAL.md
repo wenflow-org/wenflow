@@ -1,6 +1,6 @@
-# WenFlow 管理端运营操作手册（ADMIN_OPERATIONS_MANUAL）
+# WenFlow 管理端运营操作手册
 
-> 📌 类型：活规范（运营 SOP 单源，随代码核验）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（管理端运营操作手册：页面口径、操作步骤与安全红线）｜索引见 [doc/README.md](./README.md)。
 
 > **适用范围**：WenFlow 教学平台管理后台（`/admin/*`）。
 > **事实源**：本手册所有路由、筛选谓词、指标口径、动作名均抄自前端代码
@@ -35,24 +35,24 @@
 | 组 | 路由 | 场景 label | 一句话职责 | 组件 |
 |---|---|---|---|---|
 | 总览 | `/admin/overview` | 平台总览 | 全站健康一屏：KPI + 教学闭环 + 待办 + 事件流 | `Overview.vue` |
-| 运营 | `/admin/ops-hub` | 运营中心 | 运营待办、反馈、成就、公告、站内通知 + 运维工具/数据导出/会话安全/访问与注册 | `OpsHub.vue` |
+| 运营 | `/admin/ops-hub` | 运营中心 | 运营待办、反馈、成就、公告、站内通知 | `OpsHub.vue` |
 | 学习 | `/admin/goal-conversations` | 目标对话 | 目标澄清会话、路径生成源头、重建/删除 | `GoalConversations.vue` |
 | 学习 | `/admin/learning-paths` | 学习路径 | 路径治理：下线/恢复/删除、状态分布 | `OpsContent.vue` |
 | 学习 | `/admin/teaching-sessions` | 教学会话 | 会话状态实时监视、缺总结/异常/建议定位 | `TeachingSessions.vue` |
 | 学习 | `/admin/learner-state` | 学习状态 | 学习者状态分布、风险与低置信群体排查、重算 | `LearnerCenter.vue` |
 | 学习 | `/admin/memory-review` | 复习积压 | FSRS 到期积压、课内温故计划、概念归并审计 | `MemoryReviewOverview.vue` |
 | 仿真 | `/admin/virtual-learners` | 虚拟学习者 | 合成画像压测教学闭环、运行/批量新建/回收 | `VirtualLearners.vue` |
+| 仿真 | `/admin/session-audit` | 会话评审报告 | 黑盒运行双评估（裁判终局评审 + 角色保真审计）的唯一查看面 | `SessionAudit.vue` |
 | 仿真 | `/admin/virtual-learner-cards` | 学习者卡库 | 角色卡（纯档案+故事池，不建账号）导入导出 | `VirtualLearnerCards.vue` |
 | Skill | `/admin/orchestrator` | 字段流转 | 顶层 Agent 数据流转、字段血缘、治理 | `Orchestrator.vue` |
 | Skill | `/admin/skills` | Skill 目录 | Skill 运行；页头「批量模型配置」弹窗 | `Skills.vue` |
-| Skill | `/admin/prompt-eval` | Prompt 评估 | 提示词质量评测：用例集 + 历史运行 | `PromptEval.vue` |
 | Skill | `/admin/addons` | 插件 | 插件（能力 Skill 与 MCP 服务）登记/测试 | `Addons.vue` |
 | 观测与排查 | `/admin/execution-logs` | 执行日志 | Skill 执行日志 + Trace 链路、失败定位 | `ExecLogs.vue` |
 | 观测与排查 | `/admin/audit-logs` | 审计日志 | 管理操作审计 + 管理员登录审计 | `AuditLogs.vue` |
 | 观测与排查 | `/admin/token-cost` | 成本分析 | 模型/Skill/用户/模型维度 Token 与成本 | `TokenCost.vue` |
 | 观测与排查 | `/admin/health-center` | 健康中心 | 服务可用性、一致性核查、完成度 | `HealthCenter.vue` |
-| 运营 | `/admin/api-config` | 模型与接入 | 模型供应商、连接/调用策略、基础设施模型 | `ApiConfig.vue` |
-| 运营 | `/admin/people` | 用户账号 | 账号管理：角色、登录状态、软删/恢复、批量导出 | `People.vue`（内嵌 `Users.vue`） |
+| 运营 | `/admin/system-settings` | 系统设置 | 模型与接入 / 数据导出 / 会话安全 / 访问与注册（`?tab=api|export|security|access`） | `SystemSettings.vue`（内嵌 `ApiConfig.vue` 等） |
+| 运营 | `/admin/people` | 用户账号 | 账号管理：角色、登录状态、软删/恢复、批量导出、注册设置 | `People.vue`（内嵌 `Users.vue`） |
 
 **二级页**（不占独立侧栏项，经 `?view=&id=` 深链寻址，`AdminConsole.vue:175-190, 276-360`）：
 
@@ -65,19 +65,19 @@
 | `path` | 路径详情 | `PathDetail.vue` |
 | `skill` | Skill 详情 | `SkillDetail.vue` |
 
-**隐藏场景**（不在侧栏但 URL 可达）：`/admin/glossary`（运营术语表，manifest `hidden: true`，顶栏帮助按钮入口，`glossary` 组件）；`/admin/skill-workbench`（Skill 工作台：核心文件清单与编译同步状态；「从 0 新建 Skill」**已迁出管理台、统一走 CLI** —— `PromptWorkbench.vue:172`，注册见 `AdminConsole.vue:167-169`）；`/admin/skills/:agentId+`（Skill 详情旧深链，重定向到 `?view=skill&id=`，`router/index.ts:195`）。
+**隐藏场景**（不在侧栏但 URL 可达）：`/admin/glossary`（运营术语表，manifest `hidden: true`，顶栏帮助按钮入口，`glossary` 组件）；`/admin/skill-workbench`（Skill 工作台：核心文件清单与编译同步状态；「从 0 新建 Skill」统一走 CLI，管理台不提供 —— `PromptWorkbench.vue:172`，注册见 `AdminConsole.vue:167-169`）；`/admin/skills/:agentId+`（Skill 详情旧深链，重定向到 `?view=skill&id=`，`router/index.ts:195`）。
 
-**常见旧书签重定向**（`router/index.ts:187-373`）：`/admin/console/:page`、`/admin/users→people`、`/admin/learner-center|profile-learner-models→learner-state`、`/admin/sessions?tab=`（→ teaching-sessions / goal-conversations / learning-paths）、`/admin/content|ops-content→learning-paths`、`/admin/skills?tab=prompt-eval→prompt-eval`（2026-10-25 拆页反向）、`/admin/health→health-center`、`/admin/traces|trace-waterfall|prompt-call-logs|event-center→execution-logs`、`/admin/batch-experiments→virtual-learners`、`/admin/feedback→ops-hub?tab=feedback`、`/admin/announcements|messages→ops-hub?tab=announce`、`/admin/notifications→ops-hub?tab=inapp`、`/admin/achievements|ops-achievements→ops-hub?tab=achievements`、`/admin/devtools→ops-hub?tab=tools`、`/admin/export-data→ops-hub?tab=export`、`/admin/session-security→ops-hub?tab=security`、`/admin/access-control→ops-hub?tab=access`、`/admin/models→api-config`、`/admin/external-capabilities→addons`。
+**常见旧书签重定向**（`router/index.ts:187-373`）：`/admin/console/:page`、`/admin/users→people`、`/admin/learner-center|profile-learner-models→learner-state`、`/admin/sessions?tab=`（→ teaching-sessions / goal-conversations / learning-paths）、`/admin/content|ops-content→learning-paths`、`/admin/skills?tab=prompt-eval→skills`、`/admin/health→health-center`、`/admin/traces|trace-waterfall|prompt-call-logs|event-center→execution-logs`、`/admin/batch-experiments→virtual-learners`、`/admin/feedback→ops-hub?tab=feedback`、`/admin/announcements|messages→ops-hub?tab=announce`、`/admin/notifications→ops-hub?tab=inapp`、`/admin/achievements|ops-achievements→ops-hub?tab=achievements`、`/admin/devtools→health-center`、`/admin/export-data→system-settings?tab=export`、`/admin/session-security→system-settings?tab=security`、`/admin/access-control→system-settings?tab=access`、`/admin/models|api-config→system-settings?tab=api`、`/admin/prompt-eval→skills`、`/admin/ops-center?tab=tools→health-center`、`/admin/external-capabilities→addons`。
 
 ### 1.3 全局交互方言（写一次，全站适用）
 
 1. **页头 KPI 带（`.mk-kpi-grid` + `MkKpi`）**
-   - 位置：页头之下、内容卡之上。同屏**只允许一条统计带**（撤带拍板），同一数字不在两处重复念。
+   - 位置：页头之下、内容卡之上。同屏**只允许一条统计带**，同一数字不在两处重复念。
    - 口径写法：`hint` = 一短句可见口径；悬停 `title` = 长解释。`tone`（ok/warn/bad）给数字着色；`clickable` 表示可点跳转（`MkKpi.vue:1-23`）。
    - **列表页可能没有 KPI 栅格**（撤带属正常设计），不据此判缺陷。
 
 2. **贴表分布条（`MkDistBand`）**：教学组与多页统一标准件。
-   - 位置：**列表卡上方、页面级**（「分段条在上」拍板）。
+   - 位置：**列表卡上方、页面级**（分段条在上）。
    - 点击分段或图例 = 下钻筛选下方表格，**再点同段取消**（`MkDistBand.vue:20-48, 77-90`）。
    - 图例恒显计数（含 0 值档），非零段才出色块；偏态保护：1 人也露出可点色标（段宽下限 3% + `min-width:14px`，`MkDistBand.vue:95-97, 112`）。
    - 口径提示：分布条若副标标注「窗口 / 非全量」，表示只统计**当前已加载列表**；服务端全量的页面会在副标写明「服务端 group-by」。
@@ -96,9 +96,9 @@
    - 二级页：`?view=<learner|user|virtual|session|session-real|path|skill>&id=<实体ID>`，可带 `includeTest=true`（查看虚拟/测试账号明细，`AdminConsole.vue:283-298`）。
    - 旧 `?skill=<id>` 会被自动翻译成 `?view=skill&id=<id>`（`AdminConsole.vue:405-420`）。
    - 跨页排查意图（`store.ts:230-241`）跳执行日志时写入：`?agent=<SkillID>&status=<err|warn|ok>&cat=<错误类别>&range=<时间窗>`。
-   - 页面内页签/子视图深链：`?tab=`（如 `skills`、`health-center`、`ops-hub`、`audit-logs`、`execution-logs`、`api-config`、`prompt-eval`）；Prompt 评估内层用 `?peTab=`。
+   - 页面内页签/子视图深链：`?tab=`（如 `skills`、`health-center`、`ops-hub`、`audit-logs`、`execution-logs`、`system-settings`）。
 
-9. **数据范围（已退役）**：教学组六页（用户账号 / 学习状态 / 教学会话 / 目标对话 / 学习路径 / 复习积压）曾共享「仅真实 / 含测试」页头开关 `DataScopeToggle`（写 `localStorage: wf_include_virtual`），**2026-10-21 用户拍板「没有测试，测试只是备注」后退役**：组件已删除，`wf_include_virtual` 不再读写；口径只剩一条——虚拟学习者归自己的域（虚拟学习者页），其余账号一律照常计入，测试/审计账号行内加「测试」备注（`live.ts:2384-2386`；`Users.vue:406-409`）。`?includeTest=` 仅作为二级页深链参数保留（查看特定虚拟/测试账号明细用），不再是页级共享开关。成本分析页只有自己的时间窗口径（`tokenCostFilters = { days: 7 }`，`store.ts:352`），不含同类开关。
+9. **数据范围**：教学组六页（用户账号 / 学习状态 / 教学会话 / 目标对话 / 学习路径 / 复习积压）没有「仅真实 / 含测试」页头开关（`DataScopeToggle` 不存在，`wf_include_virtual` 不读写）；口径只有一条——虚拟学习者归自己的域（虚拟学习者页），其余账号一律照常计入，测试/审计账号行内加「测试」备注（`live.ts:2384-2386`；`Users.vue:406-409`）。`?includeTest=` 仅作为二级页深链参数保留（查看特定虚拟/测试账号明细用），不是页级共享开关。成本分析页只有自己的时间窗口径（`tokenCostFilters = { days: 7 }`，`store.ts:352`），不含同类开关。
 
 ---
 
@@ -194,7 +194,7 @@
 | 需关注 | `趋势=下降 ∨ 疲劳=高 ∨ 有风险摘要`（`isRisk`）。**疲劳=中且非需关注**归「观察」KPI，不计入需关注（`LearnerCenter.vue:562-564, 569-570`） |
 | 低置信 | 在「有任务的快照」（`task 非空 且 confidence 非空`）中，置信度 < 50%（`evidenceLowConfidence`，阈值 0.5）。hint 带分母 `n=`（`LearnerCenter.vue:578-581`；`evidence.ts:11`） |
 | 平均置信度 | 同上「有任务的快照」集合的置信度均值；hint 注明其余无任务/无快照不入均值（`LearnerCenter.vue:602-606`） |
-| 数据覆盖率 | 有任务快照 / 总快照；无任务/无快照不计入分子（`LearnerCenter.vue:68-71, 609-611`）。置信度分布贴表条已于 2026-10-17 退役 |
+| 数据覆盖率 | 有任务快照 / 总快照；无任务/无快照不计入分子（`LearnerCenter.vue:68-71, 609-611`）。无置信度分布贴表条 |
 | 风险摘要列 | `「X」等 N 个概念掌握薄弱`（优先）→ 疲劳高风险 → `「X」等 N 个概念待巩固`（`LearnerCenter.vue:528-537`） |
 
 **常见操作**
@@ -229,7 +229,7 @@
 | 需关注 | 加载窗口内 `attention !== 'low'` 的会话数。attention：失败/超时，或「已完成但缺总结」→ 高；有高优建议 → 高；有建议 → 中；否则低（`TeachingSessions.vue:562-568, 852`） |
 | 缺总结 | **仅终态会话**缺总结。终态集合 = `completed / failed / timeout / discarded / finalization_failed`；非终态（initializing/active/paused/finalizing）缺失是正常过程态（`TeachingSessions.vue:400-406, 730-744`） |
 | 有建议 | 加载窗口内含可读建议（`hasAdvisory`，`shouldSuggest !== false` 且 priority 非 none/空）的会话数（`TeachingSessions.vue:591, 849`） |
-| KPI 卡 | 需关注 / 异常（失败·收尾失败·超时）/ 缺总结 / 有建议 / 完结率；完结率 = completed / 窗口行数（**窗口口径，非后端全量**）（`TeachingSessions.vue:12-50, 718-724`）。贴表状态分布带已于 2026-10-17 退役 |
+| KPI 卡 | 需关注 / 异常（失败·收尾失败·超时）/ 缺总结 / 有建议 / 完结率；完结率 = completed / 窗口行数（**窗口口径，非后端全量**）（`TeachingSessions.vue:12-50, 718-724`）。无贴表状态分布带 |
 | 状态下拉「进行中」 | 单状态 `status=active`；「异常」是失败 / 收尾失败 / 超时的组合档，两者同属状态维度（`TeachingSessions.vue:672-704, 738-760`） |
 | 异常堆积 | 失败 + 收尾失败 + 超时合计 ≥ **10** 时「异常」KPI 转红（阈值写进 title）（`TeachingSessions.vue:921-927`） |
 | 互动列 | 时长（后端单位为**分钟**）/ 消息数 / 知识点，默认隐藏；`interactTitle` 合并悬停说明（`TeachingSessions.vue:255-275, 983-1005`） |
@@ -264,7 +264,7 @@
 
 | 指标 | 口径（代码） |
 |---|---|
-| KPI 卡 | 目标对话数 = `stats.total`；完结率 = completed / total；停滞 = 窗口内 `active` 且 `updatedAt` 超 7 天；未生成路径 = 窗口内无 pathId（`GoalConversations.vue:12-56, 368-377, 403-408, 421`）。状态分布贴表条已于 2026-10-17 退役 |
+| KPI 卡 | 目标对话数 = `stats.total`；完结率 = completed / total；停滞 = 窗口内 `active` 且 `updatedAt` 超 7 天；未生成路径 = 窗口内无 pathId（`GoalConversations.vue:12-56, 368-377, 403-408, 421`）。无状态分布贴表条 |
 | 点「已取消」筛选 | `CANCELLED_STATUSES = {cancelled, canceled, abandoned}`；「失败」单独一档（`GoalConversations.vue:519-520, 645-655`） |
 | 停滞信号 | 加载窗口内 `status=active` 且 `updatedAt` 超过 **7 天**未更新；KPI「停滞目标对话」可点即筛（`GoalConversations.vue:28-38, 368-377`） |
 | 澄清进度 | 「N 轮」= 该会话 messages 中**学习者发言条数**（后端库内计数），无目标轮次分母，不造 meter（`GoalConversations.vue:148-153, 219-222`） |
@@ -302,7 +302,7 @@
 | 指标 | 口径（代码） |
 |---|---|
 | 路径总数 / 里程碑 / 任务 | 服务端 `stats`：`total` / `totalMilestones` / `totalTasks`；本页含测试账号（页头口径标注，与总览「仅真实用户」口径不同源）（`OpsContent.vue:20-45, 320-345`） |
-| KPI 状态计数 | **服务端按状态 group-by 全平台计数**，非本页窗口：学习中(active) / 已完成(completed) / 生成失败(failed) / 已下线(archived) + 其它（枚举外聚合）（`OpsContent.vue:20-45, 343-375`）。列表有 45s 页面级 TTL，统计每次进页重取（`live.ts:2355`）。贴表状态分布带已退役 |
+| KPI 状态计数 | **服务端按状态 group-by 全平台计数**，非本页窗口：学习中(active) / 已完成(completed) / 生成失败(failed) / 已下线(archived) + 其它（枚举外聚合）（`OpsContent.vue:20-45, 343-375`）。列表有 45s 页面级 TTL，统计每次进页重取（`live.ts:2355`）。无贴表状态分布带 |
 | 进度 | `completedTasks / totalTasks`（有子任务时）否则 `completedMilestones / totalMilestones`，四舍五入百分；100% 绿、失败红、其余中性蓝（`OpsContent.vue:472-487`） |
 | 难度 | 后端归一为 beginner/intermediate/advanced/unknown；存量约 35% 混入旧短词/自述整句，前端只认三档 + 少量别名，其余一律「未知」并把原文进悬停（`OpsContent.vue:489-505`） |
 | 窗口 | 列表 `limit: 1000`，`pagination.total` 大时提示截断（`OpsContent.vue:534-545`） |
@@ -314,9 +314,9 @@
 4. 详情页动作：治理动作收在右缘 ⋯ 菜单（下线/恢复、重试生成）；阶段全展开、任务行纯展示（`PathJourneyPanel.vue:24-63, 65-118`）。
 
 **关键口径（路径详情）**
-- 总体进度（已完成阶段 / 总阶段）已随 2026-10-12 拍板撤除；各阶段头显示「已完成任务 / 总任务」（`PathJourneyPanel.vue:6-8, 80-84`）。
+- 总体进度（已完成阶段 / 总阶段）不在详情页；各阶段头显示「已完成任务 / 总任务」（`PathJourneyPanel.vue:6-8, 80-84`）。
 - 阶段高亮：里程碑状态为 `active` 的阶段号蓝底；不设「当前阶段」单选（`PathJourneyPanel.vue:266-272`）。
-- 任务行只渲染接口真实返回字段（任务类型/预计用时等，`taskSub`）；原型有而接口没有的（验收点等）不硬造；任务详情弹层已于 2026-10-22 退役（`PathJourneyPanel.vue:95-110, 128`）。
+- 任务行只渲染接口真实返回字段（任务类型/预计用时等，`taskSub`）；原型有而接口没有的（验收点等）不硬造；无任务详情弹层（`PathJourneyPanel.vue:95-110, 128`）。
 
 **空态 / 错误态**
 - 列表失败：错误条 + 重试（`OpsContent.vue:81-88`）。
@@ -408,16 +408,16 @@
 | 页面 | 路由 | 职责 | 关键口径（代码） |
 |---|---|---|---|
 | 虚拟学习者 | `/admin/virtual-learners` | 合成画像运行/批量新建/回收 | KPI：完成率、系统失败率、今日调用、无响应候选；并发/速率已并入「容量与实验环境」（`VirtualLearners.vue:58-110`）。「活动会话」= 进行中 + 创建中（含卡死），全库口径。「回收无响应（N）」先干跑确认清单再把卡死会话批量标失败（写操作）（`VirtualLearners.vue:24-40, 97-110`） |
+| 会话评审报告 | `/admin/session-audit` | 黑盒运行双评估（裁判终局评审 + 角色保真审计）只读查看 | `?session=` 深链；虚拟学习者画像运行记录「评审报告」入口（`SessionAudit.vue`） |
 | 学习者卡库 | `/admin/virtual-learner-cards` | 角色卡导入/导出（纯档案+故事池，不建账号，不经编译链） | 卡库导出接口计数「当前自建卡 N 张」（`VirtualLearnerCards.vue:40-55`）；YAML/JSON 卡片表单在导入二级页（`CardImportPage.vue:5-58`） |
-| 字段流转 | `/admin/orchestrator` | 顶层 Agent 数据流转/字段血缘/治理 | 页签：总览 + 五个阶段；阶段内二级页签 字段旅程 / 字段路由 / 治理（`?tab=` 兼容）。KPI 已撤（阶段/Skill 进总览卡头 meta，治理信号在健康中心）（`Orchestrator.vue:12-32`） |
-| Skill 目录 | `/admin/skills` | Skill 目录 | 单视图，无页签（2026-10-25 Prompt 评估拆为独立页）。旧 `?tab=model-routing` 打开页头「批量模型配置」弹窗并收敛为 `?tab=run`；旧 `?tab=prompt-eval` 改投 `/admin/prompt-eval`。KPI：Skill、已上线、成功率、平均耗时、需关注 Skill（`Skills.vue:20-55`） |
-| Prompt 评估 | `/admin/prompt-eval` | 提示词质量评测：用例集 + 历史运行 | 页签：`cases` / `runs`（`?peTab=`；旧 `?tab=cases|runs` 就地改写为 `?peTab=`）。页头「批量跑评估」经面板 `defineExpose` 驱动。KPI：最近评测通过率、评估用例、启用用例、评估历史（`PromptEval.vue`） |
+| 字段流转 | `/admin/orchestrator` | 顶层 Agent 数据流转/字段血缘/治理 | 页签：总览 + 五个阶段；阶段内二级页签 字段旅程 / 字段路由 / 治理（`?tab=` 兼容）。无页级 KPI（阶段/Skill 进总览卡头 meta，治理信号在健康中心）（`Orchestrator.vue:12-32`） |
+| Skill 目录 | `/admin/skills` | Skill 目录 | 单视图，无页签。旧 `?tab=model-routing` 打开页头「批量模型配置」弹窗并收敛为 `?tab=run`；旧 `?tab=prompt-eval` 与 `/admin/prompt-eval` 一并落回本页。KPI：Skill、已上线、成功率、平均耗时、需关注 Skill（`Skills.vue:20-55`） |
 | 执行日志 | `/admin/execution-logs` | 日志 + Trace 链路排障 | 页签：日志 / Trace 链路。筛选：状态下拉(err/warn/ok)、来源(测试)、时间窗(15m/1h/today/yesterday/week/month/all/自定义)、节点(Skill)、关键词、Trace ID、sessionId、错误类别。URL 参数：`agent/status/cat/range/q/trace/session/test/from/to`（`ExecLogs.vue:66-127, 880-936`） |
 | 成本分析 | `/admin/token-cost` | Token 与成本透视 | 时间窗 7/30/90 天；KPI：调用成本、已定价调用、总 Token、失败。按 Skill / 按用户（支持搜索，单次上限 100，可「查看全部」）/ 按模型排行；CSV 导出（`TokenCost.vue:82-112, 155-260, 361-405, 485-530`） |
 | 审计日志 | `/admin/audit-logs` | 管理操作 + 管理员登录审计 | 页签：操作审计 / 登录审计（`?tab=login`）。时间窗 today/yesterday/week/month/all；「失败 TOP」chip 下钻。登录审计行可跳「会话安全」（`AuditLogs.vue:49-66, 105-115, 325-326, 948-951`） |
-| 模型与接入 | `/admin/api-config` | 供应商/连接/基础设施模型 + 调用策略 | 单页（2026-10-26 一级页签撤除）：供应商面板（平台详情二级页签 = 模型 / 连接 / 基础设施 / 生成参数）+ 调用策略；旧 `?tab=security` 改投 `/admin/access-control`、`?tab=addons` 改投 `/admin/addons`（`ApiConfig.vue:1-100, 225-260`）。页首 KPI 带已撤（2026-10-14）。**基础设施模型**：平台供应商详情二级页签「基础设施」与页内 InfraModelsPanel（`ApiConfig.vue:85`），管 Embedding / Reranker 端点·密钥·模型（默认 `BAAI/bge-m3` / `BAAI/bge-reranker-v2-m3`），管理端配置优先于 `EMBEDDING_*`/`RERANK_*` 环境变量；任一未配置则资料语义层 fail-open 回退关键词（不报错、功能降级） |
+| 系统设置 | `/admin/system-settings` | 模型与接入 / 数据导出 / 会话安全 / 访问与注册 | 页签 `api` / `export` / `security` / `access`（`?tab=`）；旧 `/admin/api-config`、`/admin/models` 落 `tab=api`，旧 `?tab=security` 落 `tab=access`，旧 `?tab=addons` 改投 `/admin/addons`（`SystemSettings.vue`）。模型与接入页签内：供应商面板（平台详情二级页签 = 模型 / 连接 / 基础设施 / 生成参数）+ 调用策略，无页首 KPI 带。**基础设施模型**：平台供应商详情二级页签「基础设施」与页内 InfraModelsPanel（`ApiConfig.vue`），管 Embedding / Reranker 端点·密钥·模型（默认 `BAAI/bge-m3` / `BAAI/bge-reranker-v2-m3`），管理端配置优先于 `EMBEDDING_*`/`RERANK_*` 环境变量；任一未配置则资料语义层 fail-open 回退关键词（不报错、功能降级） |
 | 插件 | `/admin/addons` | 插件（能力 Skill 与 MCP 服务）登记/测试 | 可选能力卡（联网 / 决策 / 生图）+ MCP 工具调用服务列表；启停/测试（写操作）；页头随顶栏刷新广播（`Addons.vue:1-35`） |
-| 运营中心 | `/admin/ops-hub` | 运营待办/反馈/成就/公告/站内通知 + 运维工具/数据导出/会话安全/访问与注册 | 页签：运营待办 / 反馈 / 成就 / 公告 / 站内通知 / 运维工具 / 数据导出 / 会话安全 / 访问与注册（`?tab=`；原独立场景 ops-center 三页签并入 tools/export/security，访问与注册并入 access）；子视图不再向宿主上报计数，无「未访问」占位（`OpsHub.vue:219-226`） |
+| 运营中心 | `/admin/ops-hub` | 运营待办 / 反馈 / 成就 / 公告 / 站内通知 | 页签：`todo` / `feedback` / `achievements` / `announce` / `inapp`（`?tab=`）；子视图不向宿主上报计数，无「未访问」占位（`OpsHub.vue`） |
 | 学习者详情（二级页） | `?view=learner` 或 `?view=user` | 单学习者概览/画像/证据/图谱/会话/记忆与复习/记忆调度/账号 | 会话窗口「该学习者最近 20 条教学会话」；记忆页签空态「完成教学回合后自动生成」（`LearnerDetail.vue:757-758, 873-878, 943`） |
 | 会话座舱（二级页） | `?view=session` / `session-real` | 虚拟会话控制台 / 真实会话只读监控 | 虚拟侧动作：自动驾驶启停、推进一步、自动推进目标、生成路径、启动教学、重开本课、生成终局总结、评审/接受/按意见重规划、终止实验、按原输入重跑（`SessionCockpit.vue:165-216`）。真实会话为只读监控（`TeachingSessions.vue:969-977`） |
 | 虚拟学习者画像（二级页） | `?view=virtual` | 单虚拟人故事池/运行记录/会话控制 | 故事池可按样本类型生成/批量运行/批量启停/批量删除（写操作）；运行记录含正确率、教学闭环定位（`VirtualProfile.vue:95-100, 184-215, 526-570`） |
@@ -511,7 +511,7 @@ entry:
 subpage_query:
   view_values: [learner, user, virtual, session, session-real, path, skill]
   id_param: id
-  scope_param: includeTest   # 二级页深链参数（true = 查看虚拟/测试账号明细）；页级共享开关已退役
+  scope_param: includeTest   # 二级页深链参数（true = 查看虚拟/测试账号明细）；无页级共享开关
 legacy_alias:
   skill_param: "?skill=<id> -> ?view=skill&id=<id>"
 pages:
@@ -551,7 +551,7 @@ pages:
     scene: learner-state
     purpose: 学习者状态分布/风险/低置信排查/重算
     kpis: [用户账号, 需关注, 观察, 低置信用户, 平均置信度, 数据覆盖率]
-    dist_band: 已退役（2026-10-17）；低置信由 KPI「低置信用户」与可排序「置信度」列承载
+    dist_band: none   # 低置信由 KPI「低置信用户」与可排序「置信度」列承载
     filters: {search: [名称, 邮箱, ID], pills: [all, risk, watch, stale]}
     predicates:
       risk: "trend == down || fatigue == 高 || has_risk_summary"
@@ -568,7 +568,7 @@ pages:
     scene: teaching-sessions
     purpose: 会话状态监视；缺总结/异常/建议定位
     kpis: [需关注, 异常, 缺总结, 有建议, 完结率]
-    dist_band: 已退役（2026-10-17）；异常/完结率由 KPI 与状态/总结/课型/开始时间下拉承载
+    dist_band: none   # 异常/完结率由 KPI 与状态/总结/课型/开始时间下拉承载
     filters:
       pills: [all, active, attention, missing]
       chips: [有建议 (server onlyWithAdvisory), 异常]
@@ -586,7 +586,7 @@ pages:
     scene: goal-conversations
     purpose: 目标澄清会话与路径生成源头
     kpis: [目标对话数, 完结率, 停滞目标对话, 未生成路径]
-    dist_band: 已退役（2026-10-17）；状态筛选回到卡头状态下拉
+    dist_band: none   # 状态筛选回到卡头状态下拉
     cancelled_predicate: "status ∈ {cancelled, canceled, abandoned}"
     filters: {search: [用户, 邮箱, 目标摘要]}
     predicates: {stalled: "status == active && updatedAt older than 7d"}
@@ -602,7 +602,7 @@ pages:
     scene: learning-paths
     purpose: 路径治理（状态分布/下线/恢复/删除）
     kpis: [路径总数, 里程碑, 任务, 生成失败]
-    dist_band: 已退役；状态计数由 KPI 与卡头状态下拉承载（服务端 group-by 全平台）
+    dist_band: none   # 状态计数由 KPI 与卡头状态下拉承载（服务端 group-by 全平台）
     filters: {search: [标题, 用户, ID]}
     window_limit: 1000
     actions:
@@ -630,7 +630,7 @@ pages:
       limit: 50
       sort: due desc
       columns: [用户, 记忆痕迹, 待复习, 需关注, 归并候选, 散键, 记忆强度, 最近复习, 操作]
-    note: 到期时间轴分布带已退役（2026-10-17）；明细/归并/回滚在学习者详情「记忆与复习 / 记忆调度」页签
+    note: 无到期时间轴分布带；明细/归并/回滚在学习者详情「记忆与复习 / 记忆调度」页签
     detail_query: "?userId=<id>"   # 旧深链转发到学习者详情
     actions:
       - {name: openDetail, view: learner, tab: memoryReview}
@@ -646,6 +646,7 @@ pages:
     refresh: {interval_ms: 60000}
     actions:
       - {name: fix, write: true, api: "POST /admin/health-center/fix", fixable: [w4-corehash, field-routing, field-routing-contract, snapshots]}
+      - {name: requeueOutboxDead, write: true, api: "POST /admin/devtools/outbox/requeue-dead", kind: by-event-type}
       - {name: jump, targets: [orchestrator?tab=routing, orchestrator?tab=journey, skills?view=skill&skdTab=protocol, execution-logs]}
   - id: virtual-learners
     route: /admin/virtual-learners
@@ -656,6 +657,11 @@ pages:
       - {name: openCreate, write: true}
       - {name: openBatchCreate, write: true}
       - {name: openReclaimModal, write: true, kind: mark-stalled-failed, dry_run: true}
+  - id: session-audit
+    route: /admin/session-audit
+    scene: session-audit
+    purpose: 黑盒运行双评估（裁判终局评审 + 角色保真审计）只读报告
+    deep_link: "?session="
   - id: virtual-learner-cards
     route: /admin/virtual-learner-cards
     scene: virtual-learner-cards
@@ -666,7 +672,7 @@ pages:
     scene: orchestrator
     purpose: 顶层 Agent 数据流转/字段血缘/治理
     panes: [overview, <5 stages>, journey, routing, governance]   # 总览 + 五阶段；阶段内二级页签 字段旅程/字段路由/治理
-    note: 页级 KPI/告警条已撤（阶段/Skill 进总览卡头 meta，治理信号在健康中心）
+    note: 无页级 KPI/告警条（阶段/Skill 进总览卡头 meta，治理信号在健康中心）
     deep_links: {compat_tab: "?tab=topology"}
   - id: skills
     route: /admin/skills
@@ -675,13 +681,6 @@ pages:
     kpis: [Skill, 已上线, 成功率, 平均耗时, 需关注 Skill]
     deep_links: {compat_tab: "?tab=run|model-routing|prompt-eval"}
     subpage: {view: skill}
-  - id: prompt-eval
-    route: /admin/prompt-eval
-    scene: prompt-eval
-    purpose: 提示词质量评测（用例集 + 历史运行）
-    kpis: [最近评测通过率, 评估用例, 启用用例, 评估历史]
-    tabs: [cases, runs]
-    deep_links: {pe_tab: "?peTab=", compat_tab: "?tab=cases|runs"}
   - id: execution-logs
     route: /admin/execution-logs
     scene: execution-logs
@@ -711,13 +710,18 @@ pages:
     tabs: [operation, login]
     filters: {time_range: [today, yesterday, week, month, all], action_quick: 失败 TOP}
     deep_link: "?tab=login"
-  - id: api-config
-    route: /admin/api-config
-    scene: api-config
-    purpose: 模型供应商/路由/安全/基础设施模型
-    kpis: []   # 页首 KPI 带已撤（2026-10-14）
-    tabs: [model, connection, infra, generation]   # 供应商详情二级页签
-    note: 单页；旧 ?tab=security 改投 /admin/access-control，?tab=addons 改投 /admin/addons
+  - id: system-settings
+    route: /admin/system-settings
+    scene: system-settings
+    purpose: 模型与接入/数据导出/会话安全/访问与注册
+    kpis: []   # 无页首 KPI 带
+    tabs: [api, export, security, access]
+    sub_tabs: [model, connection, infra, generation]   # 模型与接入 → 供应商详情二级页签
+    note: 旧 /admin/api-config、/admin/models 落 tab=api；旧 ?tab=security 落 tab=access；?tab=addons 改投 /admin/addons
+    actions:
+      - {name: revokeAdminSession, destructive: true, api: "DELETE /admin/sessions/:id"}
+      - {name: revokeAllAdminSessions, destructive: true, api: "POST /admin/sessions/revoke-all"}
+    export_ranges: [users, teaching-sessions, feedback, goal-conversations, agent-logs, audit-logs]
   - id: addons
     route: /admin/addons
     scene: addons
@@ -725,16 +729,9 @@ pages:
   - id: ops-hub
     route: /admin/ops-hub
     scene: ops-hub
-    purpose: 运营待办/反馈/成就/公告/站内通知 + 运维工具/数据导出/会话安全/访问与注册
-    tabs: [todo, feedback, achievements, announce, inapp, tools, export, security, access]
-    note: 原独立场景 ops-center（tools/export/security）与 access-control（access）并入为本页 tab；旧 URL 由 router 重定向
-    actions:
-      - {name: advanceTime, write: true, api: "POST /admin/devtools/advance-time", effect: preview-no-db-write}
-      - {name: requeueOutboxDead, write: true, api: "POST /admin/devtools/outbox/requeue-dead", kind: by-event-type}
-      - {name: export, destructive: false}
-      - {name: revokeAdminSession, destructive: true, api: "DELETE /admin/sessions/:id"}
-      - {name: revokeAllAdminSessions, destructive: true, api: "POST /admin/sessions/revoke-all"}
-    export_ranges: [users, teaching-sessions, feedback, goal-conversations, agent-logs, audit-logs]
+    purpose: 运营待办/反馈/成就/公告/站内通知
+    tabs: [todo, feedback, achievements, announce, inapp]
+    note: 数据导出/会话安全/访问与注册在「系统设置」；事件投递失败在健康中心；旧 URL 由 router 重定向
   - id: learner-detail
     subpage: [learner, user]
     purpose: 单学习者详情
@@ -773,12 +770,12 @@ pages:
 | 执行概念归并 | 记忆与复习 明细 | 删除该用户重复记忆痕迹 | 留快照可回滚（页面内） |
 | 回滚归并 | 记忆与复习 明细 | 还原合并前状态 | 已回滚不再重复回滚 |
 | 回收卡死会话 | 虚拟学习者 页头「回收卡死」 | 把卡死会话标记为失败 | 不可逆（先干跑清单） |
-| 强制下线管理员会话 / 批量吊销 | 运营中心 · 会话安全 | 被下线者立即失去后台访问 | 需重新登录；**不能下线自己当前会话**（后端 409） |
-| outbox 死信重放 | 运营中心 · 运维工具 | 按事件类型**整批**重新入队处理 | 视事件而定 |
+| 强制下线管理员会话 / 批量吊销 | 系统设置 · 会话安全 | 被下线者立即失去后台访问 | 需重新登录；**不能下线自己当前会话**（后端 409） |
+| outbox 死信重放 | 健康中心 · 事件投递失败 | 按事件类型**整批**重新入队处理 | 视事件而定 |
 | 健康中心一键修复 | 健康中心 | 备份后改配置/编译产物/DB 对账 | 结果写审计日志；有备份目录 |
-| 编辑并发布 Prompt / 保存运行时配置 | Skill 设计页（`/admin/skills/:id`；`SkillDetail` 二级页的 Prompt 弹层仅查看/起草） / 模型与接入 | 直接改线上生效的提示词或路由 | 需按既有发布链回滚 |
+| 编辑并发布 Prompt / 保存运行时配置 | Skill 设计页（`/admin/skills/:id`；`SkillDetail` 二级页的 Prompt 弹层仅查看/起草） / 系统设置 · 模型与接入 | 直接改线上生效的提示词或路由 | 需按既有发布链回滚 |
 
-> 数据导出（运营中心 · 数据导出、用户批量 CSV）为**只读**操作，不产生审计记录、不含敏感字段（密码哈希、API Key）。
+> 数据导出（系统设置 · 数据导出、用户批量 CSV）为**只读**操作，不产生审计记录、不含敏感字段（密码哈希、API Key）。
 
 ### 5.2 确认分级
 
@@ -816,7 +813,7 @@ INIT_ADMIN_PASSWORD=<set-a-unique-strong-password>
 
 ### 6.2 访问策略
 
-管理员来源策略通过管理端「模型与接入 → 连接与安全」持久化到 System DB，并支持热生效；环境变量只作为数据库未配置时的默认值：
+管理员来源策略通过管理端「系统设置 → 访问与注册」持久化到 System DB，并支持热生效；环境变量只作为数据库未配置时的默认值：
 
 ```env
 # loopback: 仅服务器本机（localhost / 127.0.0.1 / ::1）
@@ -853,6 +850,3 @@ npm run security:scan
 npm run check
 ```
 
----
-
-*本手册为运营口径单源；页面改版后请按「三件套」门禁同步更新本文件与 `doc/README.md` 登记。*

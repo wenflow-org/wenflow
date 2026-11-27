@@ -121,3 +121,44 @@ describe('愿景页窄屏孤字行（#26）', () => {
     expect(decl(bodyOf(narrow, '.vn-end p'), 'text-wrap'), '尾屏副文案缺 text-wrap: balance，末行仍只剩「事。」').toBe('balance');
   });
 });
+
+describe('愿景页两栏轴（2026-11-26）', () => {
+  it('首屏、问题、三个判断、现状共用 320px 左栏 + 右正文栏', () => {
+    for (const selector of ['.vn-hero', '.vn-problem', '.vn-cap', '.vn-status']) {
+      expect(
+        decl(bodyOf(css, selector), 'grid-template-columns'),
+        `${selector} 的左右栏又各自改比例，四块正文不再共用一条轴线`
+      ).toBe('320px minmax(0, 1fr)');
+    }
+    expect(
+      decl(bodyOf(css, '.vn-hero__body'), 'grid-column'),
+      '首屏说明又缩进到右栏，悬在标题中段下方'
+    ).toBe('1 / -1');
+  });
+
+  it('问题/判断/现状正文同宽 600px，行高 1.8', () => {
+    for (const selector of ['.vn-problem__note', '.vn-cap__list p', '.vn-status__body p']) {
+      expect(decl(bodyOf(css, selector), 'max-width'), `${selector} 的阅读宽度不在 600px 轴线上`).toBe('600px');
+      expect(decl(bodyOf(css, selector), 'line-height'), `${selector} 的行高又压扁了`).toBe('1.8');
+    }
+    expect(decl(bodyOf(css, '.vn-hero__body > p'), 'line-height'), '首屏说明行高又压扁了').toBe('1.8');
+  });
+
+  it('984px 内容块在页面里居中，不被 1180/1560 外框推左', () => {
+    expect(
+      css,
+      '内容块缺 984px 居中（1920 下会整块偏左）'
+    ).toMatch(/\.vn-hero,\s*\.vn-problem,\s*\.vn-cap,\s*\.vn-status\s*\{[^}]*max-width:\s*984px;[^}]*margin-right:\s*auto;[^}]*margin-left:\s*auto;/);
+  });
+});
+
+describe('愿景页首屏动效（2026-11-27）', () => {
+  it('只在 no-preference 下播放，首屏与引用卡片有入场', () => {
+    const at = css.indexOf('@media (prefers-reduced-motion: no-preference)');
+    expect(at, '首屏动效的 no-preference 媒体块不见了').toBeGreaterThan(-1);
+    const motion = blockAt(css, at);
+    expect(motion, '首屏标题没有入场动画').toContain('.vn-hero h1');
+    expect(motion, '首屏标题的动画没接 vn-rise').toContain('animation: vn-rise');
+    expect(motion, '引用卡片没有入场动画').toContain('.vn-quote');
+  });
+});

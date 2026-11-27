@@ -1,12 +1,8 @@
 # 统一 Skill 协议 v4（规则文档）
 
-> 📌 类型：活规范（Skill 协议 SSOT；二级编译已退役 16c3cabd）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（Skill 协议 SSOT）｜索引见 [doc/README.md](./README.md)。
 
-> 版本：v4.1（现行规范，生效）
-> 变更：在 v4.0 基础上新增数据面配置章节（§2.6 编排文件）
-> 性质：规范性协议。本文件定义"什么是合法的"，不含迁移计划。实施顺序见附录 C。
-> 取代关系：取代旧的 Prompt 协议 v2 中 LLM skill 部分；v2 继续约束 code-only skill 直至退役。
-> 配套（历史过程材料，已归档、不在仓库）：PROMPT_PROTOCOL_V4_DESIGN.md（设计推导）、PROMPT_PROTOCOL_V4_PREWORK_SURVEY.md（现状盘点）
+> 版本：v4.1（现行规范）。性质：规范性协议——本文件定义"什么是合法的"，不含迁移计划。
 
 ## 1. 总则
 
@@ -19,9 +15,9 @@
 
 ### 1.2 范围
 
-- 本协议约束 **`prompts/core/` 下的全部 core skill**（清单见附录 A）。**以 `prompts/core/` 实际文件数为准**（2026-10-06 复核：31 个 yaml 文件，triage-judge 退役后；2026-09-28 口径 32、2026-09-14 口径 30 = 20 mainline + 10 aux、更早 26/25/24 等均已过期）。
+- 本协议约束 **`prompts/core/` 下的全部 core skill**（分类清单见附录 A）。**以 `prompts/core/` 实际文件数为准。**
 - code-only skill（acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector）豁免，不进入核心文件体系（handler-only 确定性组件，无 LLM prompt）。
-- 无生产调用点的注册 skill 维持现状，接入生产时必须先满足本协议（label-generator 已退役并进入 `backend/src/skills/retired-skills.ts` 的 `PURGED_SKILLS`，不属此类，见附录 A 退役注记）。
+- 无生产调用点的注册 skill 维持现状，接入生产时必须先满足本协议（已退役的 skill 登记在 `backend/src/skills/retired-skills.ts`，见附录 A）。
 
 ## 2. 核心文件（core.yaml）
 
@@ -54,17 +50,16 @@ constraints: [string, ...]   # 必填，业务边界约束，可为空数组
 params:                      # 必填，执行参数
   temperature: number        #   必填
   maxTokens: integer         #   必填
-  failurePolicy: enum        #   必填，retry | fallback | propagate；2026-08-11 起 fallback 已退役（纯重试+明确失败），存量 core 已收敛为 retry/propagate
+  failurePolicy: enum        #   必填，retry | propagate（fallback 已退役：纯重试 + 明确失败）
 examples: [string, ...]      # 可选，编译参考用例，不进字段表
 outputMedia: enum            # 可选，json（默认）| markdown | text；决定 §4.3 注入条款分支
 deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5.4（仅 outputMedia=json 时生效）
 ```
 
-> **`params.maxTokens` 的运行时口径（2026-09-28 更正）**：它是**下限请求**；运行时按模型上限做 clamp（旧「无条件抬顶」描述已废，实现见 services/resolve-llm-call-params.ts）。
-> `services/resolve-llm-call-params.ts` 解析出最终模型后，会把低于该模型输出上限的 `maxTokens`
-> 低于模型上限时抬到上限、超过则压回（clamp）。2026-11-02 复核：31 个 core 文件的 `maxTokens` 全部为 64000；代码侧输出地板为 `MIN_OUTPUT_TOKENS = 256`（`services/resolve-llm-call-params.ts`，低于地板的请求抬到 256），仓库无 32000 地板常量。
-> 唯一例外是"运行时显式覆盖"（`runtime-override`，调试/低耗时才可调小）。
-> 因此 core 文件里的 `maxTokens`（现全部为 64000）只表达"至少给这么多预算"，**实际有效上限由模型决定**。
+> **`params.maxTokens` 的运行时口径**：它是**下限请求**。`services/resolve-llm-call-params.ts` 解析出最终模型后，
+> 把 `maxTokens` 按该模型的输出上限做 clamp（低于上限时抬到上限、超过则压回）；代码侧输出地板为
+> `MIN_OUTPUT_TOKENS = 256`（低于地板的请求抬到 256）。唯一例外是"运行时显式覆盖"（`runtime-override`，调试 / 低耗时才可调小）。
+> 因此 core 文件里的 `maxTokens` 只表达"至少给这么多预算"，**实际有效上限由模型决定**。
 
 ### 2.3 字段类型受控词表
 
@@ -80,7 +75,7 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 1. **平铺命名**：字段名在 prompt 内部平铺使用（如 `surface_goal`）；组装成嵌套结构（如 `state.understanding.surface_goal`）是平台数据面的事，核心文件不声明嵌套。
 2. **turn 标记**：`turn: true` 字段当轮消费后丢弃（reply/questions/quickReplies 类）；未标记字段默认由平台取走（累积进 state 或持久化）。
 3. **平台字段禁出**：`success`、`quality`、`stage`、`raw` 等与 SkillResult/meta 碰撞的平台包装字段禁止出现在 fields 表（stage 推进以规则文字描述，由平台状态机仲裁）。注意：`debug` 不在禁出名单——部分 skill（如 virtual-learner 模拟器）的 debug 对象本身就是模型产出的业务字段，由字段表正常声明。
-4. **残留输入注记**：skill 特有输入（放不进六池的配置物料——原 prompt-compiler 的 yaml 配置即属此类；该 LLM 编译器已于 2026-09-26 退役删除，16c3cabd）在 rules 首条以"输入："前缀注记，不开输入侧字段表。
+4. **残留输入注记**：skill 特有输入（放不进六池的配置物料）在 rules 首条以"输入："前缀注记，不开输入侧字段表。
 
 ### 2.5 输入契约声明（inputs）
 
@@ -96,11 +91,11 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 - **对账（advisory→strict）**：保存/编译预览/发布时按 kind 分叉核对——`skill:` 与字段路由表（`agent_field_routings`）核对（上游路由行 fieldId 前缀匹配且 handoff 包含本 skill）；`sandbox:` 与沙盘路径注册表核对（`sandbox-path-unregistered`）；`user:` 直接通过。`prompts:check-handoff --strict` 提供 fail-fast 模式。
 - **血缘**：`/core/:skillId/lineage` 返回静态注册表 ∪ 全仓 inputs 声明推导；血缘只推导 `skill:` 引用（sandbox/user 不参与 skill 血缘）。
 - **沙盘说明书**：`prompts/agent-snapshots.md`（`npm run prompts:snapshots` 生成，纳入版本控制，CI 校验漂移）——写 Prompt 的人据此查阅各 Agent 的输入通道与合法沙盘键。
-- **边界**：声明目前是文档化与对账用途，不改变运行时装配（orchestrator 仍按代码装配输入）；运行时装配声明化是后续 L2 议题。
+- **边界**：声明目前是文档化与对账用途，不改变运行时装配（orchestrator 仍按代码装配输入）。
 
-**L2 落地注记（2026-08，配置式值流转）**：运行时装配声明化已开始落地——
-- `field_definitions.pathInRawOutput`：字段值在产出方原始输出的物理抽取路径（goal 阶段 28 字段已登记）。
-- `assembleGoalHandoff`（field-dispatcher）：按 routings 表 goal-agent 交付行 + pathInRawOutput 从 skill 输出抽取 goal→path 字段；`buildNormalizedInputV1`（path.coordinator）已正式切换为"handoff 字段优先 + visibleSummary 回退"（golden 等价验证）。
+**配置式值流转（现行）**：运行时装配按声明装配——
+- `field_definitions.pathInRawOutput`：字段值在产出方原始输出的物理抽取路径。
+- `assembleGoalHandoff`（field-dispatcher）：按 routings 表 goal-agent 交付行 + pathInRawOutput 从 skill 输出抽取 goal→path 字段；`buildNormalizedInputV1`（path.coordinator）按"handoff 字段优先 + visibleSummary 回退"装配（有 golden 等价验证）。
 - 输入通道：teaching 回合 4 条「配置式」通道（learner.learnerProjection/knowledge.state/controls.teachingControlContext/classroomContext）已登记（teaching-agent 注入行，可按 pathInRawOutput 装配）；另有「编排层整块组装」通道 scenario（承载 taskKcs/cognitiveFrame/materials/taskProfile/pathProgress 等）——由 buildTeachingTurnInput 组装成单个顶层对象注入、无单点抽取路径，故不设 routings 行，在编排文件 `prompts/orchestration/teaching.yaml` 以 fields 行声明，并在 core inputs（`sandbox:teaching.scenario`）+ 沙盘键注册表（`SANDBOX_EXTRA_KEYS`）登记；classroomEventContext / interactionProfile 属同类（不设 routings 行）。path-task-design 的 milestones/previousMilestone/normalizedInput 通道已有等价验证。
 - 治理：`prompts:check-handoff --strict`（inputs↔routings 双向对账）、`detectFieldRoutingDrift`（声明 vs DB 漂移启动 warn）、`validateFieldRoutingSeedSemantics`（handoff 白名单/组合语义 fail-fast）。
 
@@ -108,7 +103,7 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 
 字段路由域（字段定义、agent 契约、路由矩阵）的**声明源**为 `prompts/orchestration/<stage>.yaml`（goal/path/teaching/profile/simulation 各一份，进 git，File-as-Truth）。本域属于 §1.1 原则 3 的**数据面**（运行时管线配置），与控制面（`prompts/core/*.yaml`，prompt 内容）经 bootstrap 编译链连接；编排文件**不修改 core.yaml 任何条款**，也不承载 prompt 文本。
 
-> 概念模型与设计动机见 [`AGENT_IO_DESIGN_V3.md`](./AGENT_IO_DESIGN_V3.md)（`agent-output-v1` 外壳、`internal.ext.*` 命名空间、字段路由与调度）；本节承接其「字段路由声明源」，为现行规范（原 seed TS 已退役）。
+> 概念模型（Field / Skill / Agent 三层、路由四属性、输出信封）见 [`AGENT_IO_DESIGN_V3.md`](./AGENT_IO_DESIGN_V3.md)；本节是其声明源的规范性定义。
 
 #### Schema（规范性定义）
 
@@ -182,8 +177,8 @@ prompts/orchestration/<stage>.yaml
   → DB 三表 field_definitions / agent_contracts / agent_field_routings
 ```
 
-- **单源化**：seed-*-field-routings.ts 已退役（2026-08 单源化收尾），编排文件成为字段路由唯一声明源与唯一编辑入口；原 orchestration-parity 守护测试随 seed 一并退役。
-- **变更流程**：改字段/路由 = 改编排文件 + 跑 bootstrap（`npm run prompts:bootstrap`，或等启动灌入）；admin 在线编辑后续收敛为同一链路。
+- **单源化**：编排文件是字段路由唯一声明源；字段定义只走编排文件。
+- **变更流程**：改字段/路由 = 改编排文件 + 跑 bootstrap（`npm run prompts:bootstrap`，或等启动灌入）；路由行的行级编辑也回写编排文件，走同一链路。
 
 ## 3. 输入材料池（channels）
 
@@ -204,7 +199,7 @@ state 与 evidence 的分界：**当前值归 state，历史轨迹归 evidence**
 
 1. 核心文件 `channels` 声明哪个池，平台按标准 Schema 注入哪个；未声明不注入。
 2. 嵌套输入对象按**子键**拆分入池（如 teaching-turn 的 `scenario.subject`→task、`scenario.pathTitle`→path），禁止整体挂入单一池。
-3. 上游 skill 的 artifact 可作为下游 skill 的 evidence 材料（如 wrapup.progress → session-knowledge-distiller），evidence Schema 显式支持该形态。
+3. 上游 skill 的 artifact 可作为下游 skill 的 evidence 材料（如 wrapup.progress → profile-lesson-enrich），evidence Schema 显式支持该形态。
 4. 以下三类**不属于材料池**，由执行信封（options/context）承载：principal（userId/sessionId）、运行时控制（maxFormatRetries/frictionBudget/confirmProposal）、prompt 调试覆盖（systemPromptOverride）。
 5. stage 的枚举、推进条件、terminal 判定由平台状态机（runtimeContract.businessState 的后继者）统一定义；核心文件 rules 只描述"何时该推进"的时机判断。
 
@@ -245,9 +240,7 @@ frontmatter 只含执行参数与溯源锚点（agentId/coreHash/coreVersion/温
 2. **字段冻结（Field Freeze）**：产物字段表与核心文件 fields 名/型逐一相等，编译器无权增删改。
 3. **含义冻结（Semantic Freeze）**：功能描述与执行规则的业务语义与核心文件等价——规则检查 + LLM judge 双查。judge 判"等价"自动通过；判"不确定"转人工复核；判"不等价"拒绝发布。
 
-LLM 编译器的权限被压至最低：只允许改写 prose 表达与排版，字段集合和字段含义只读。
-
-> ⚠️ **2026-09-26 退役**：二级编译（prompt-compiler 服务）已整体删除（16c3cabd）——v4 产物为确定性渲染，不经 LLM 编译改写（见 `routes/prompt-lab.ts` publish-core 注释）。本条为历史设计。
+> 编译链是**确定性渲染**：没有 LLM 编译改写环节，产物由核心文件直译（见 `routes/prompt-lab.ts` 的 publish-core）。
 
 ### 4.3 编译器全局注入条款（写入产物的边界约束块）
 
@@ -281,7 +274,7 @@ executeSkill(definition, {
 })
 ```
 
-历史三种并存约定（扁平传参、`{input, context}` 包装、goal-conversation 以 `input` 键当用户输入字符串）在链路改造期统一收敛到本信封；skill 全部收敛回 executeSkill 入口，禁止绕过（profile-adaptive-copy 的直连 handler 存量已整改：生产调用点经 `executeSkillWithResult`，仅离线探针脚本 `scripts/probe-guidance-e2e.ts` 仍直调 handler）。
+所有 skill 调用收敛到 `executeSkill` 入口，禁止绕过（仅离线探针脚本 `backend/src/scripts/probe-guidance-e2e.ts` 直调 handler）。
 
 ### 5.3 标准输出包裹（SkillResult）
 
@@ -304,7 +297,7 @@ type SkillResult = {
 ### 5.4 状态合并与 Delta 试验条款
 
 - **默认（全量写）**：模型每轮产出字段表声明的全部非 turn 字段，平台以产出整体覆盖旧 state 对应键。
-- **试验（Delta 写，`deltaOutput: true`）**：模型仅产出变动字段；平台语义为"缺席=不变，null=清空，输出=覆盖（对象深合并、数组替换）"。该条款为**逐 skill 开启的试验性能力**。试点状态：goal-conversation 已开启并通过两轮真实模型验证（增量生效、合并正确、无格式重试）；当轮字段义务已在注入条款中显式豁免（"标注（当轮）的字段每轮必须输出"）。推广前须继续量测漏报变更率；数组当前一律替换（append 语义待证据后再议），因此注入条款要求**数组字段输出完整数组**（不要只给新增项，清空用 `[]`），避免增量输出把旧元素冲掉。
+- **试验（Delta 写，`deltaOutput: true`）**：模型仅产出变动字段；平台语义为"缺席=不变，null=清空，输出=覆盖（对象深合并、数组替换）"。该条款为**逐 skill 开启的试验性能力**（试点：goal-conversation，`deltaOutput: true`）；当轮字段义务在注入条款中显式豁免（"标注（当轮）的字段每轮必须输出"）。数组当前一律替换（append 语义待证据后再议），因此注入条款要求**数组字段输出完整数组**（不要只给新增项，清空用 `[]`），避免增量输出把旧元素冲掉。
 
 ### 5.5 校验分级
 
@@ -312,32 +305,32 @@ type SkillResult = {
 - 非 turn 字段（全量写模式）：按 `?` 标记校验必出性。
 - 非 turn 字段（Delta 模式）：缺席合法，不驱动重试；类型错误仍失败。
 
-**落地注记（2026-08，P3）**：字段声明契约校验已默认全量启用（`services/skill-output-validator.ts`，经 callPrompt 在 skill 领域校验后追加）：
+**字段声明契约校验默认全量启用**（`services/skill-output-validator.ts`，经 callPrompt 在 skill 领域校验后追加）：
 - 规则：按核心文件 fields 声明校验——必填缺失（`missing-required`）/类型不匹配（`type-mismatch`，受控词表）/enum 越界（`enum-out-of-range`）；`?` 可缺省；delta 模式仅验类型（缺席合法）。
-- 排除名单（10 个，与 `services/skill-output-validator.ts` 实际名单一致）：非 JSON 输出（skill-author；prompt-compiler 已退役不在名单）、平台守门（semantic-freeze-judge）、模拟器家族（virtual-learner-*，fallback/旁路特殊）、已退役仅 manifest 残留（concept-priority）。
+- 排除名单（以 `services/skill-output-validator.ts` 实际名单为准）：非 JSON 输出（skill-author）、平台守门（semantic-freeze-judge）、模拟器家族（virtual-learner-*，旁路特殊）、仅 manifest 残留的退役项。
 - fields 声明即运行时校验契约：新增字段须标 `?` 或保证模型必出，否则会驱动重试（编辑分级 §7.1 的"新增字段受限级"同步生效）。
 
 ### 5.6 辅助 Skill（v4-aux-skills）调用约定与失败策略执行语义
 
-遗留插件/旁路能力迁入的 9 个辅助 LLM Skill（`backend/src/skills/v4-aux-skills/index.ts`，AuxSkillId 枚举，2026-08-11 复核：session-evaluation-fallback 已于当日退役）与主 Skill 共用同一链路：`调用点 → executeSkill / executeSkillWithResult → aux handler → callPrompt → APIGateway`。handler 必须 `requireActivePrompt: true`。
+辅助 LLM Skill（`backend/src/skills/v4-aux-skills/index.ts`，`AuxSkillId` 枚举）与主 Skill 共用同一链路：`调用点 → executeSkill / executeSkillWithResult → aux handler → callPrompt → APIGateway`。handler 必须 `requireActivePrompt: true`。
 
 1. **入口选择**：只要输出用 `executeSkill`；需要 `quality`/`debug`/`runtimeEnvelope`（区分 model/fallback、取 tokenUsage/model）用 `executeSkillWithResult`。
 2. **保留字段**（handler 从输入对象剥离，不进入 user payload）：
    - `__prompt`：PromptCallContext 透传（`requestPath`/`userId`/`retryBudget`/`assistantMessages`/...），另支持 `callerAgentId`/`callerAction` 写入 gateway caller。
-   - `__fallback`：调用方显式注入的确定性兜底值（属调用方决策，非系统降级；2026-08-11 起 runAux 不再按 core 策略自动降级）。
+   - `__fallback`：调用方显式注入的确定性兜底值（属调用方决策，非系统降级；runAux 不按 core 策略自动降级）。
    - `__onFailure`：`'throw' | 'fallback'`，覆盖 core 声明的默认策略（仅用于必须保持既有抛出契约的调用点，如 path-planning 的 goal-analysis）。
 3. **失败策略执行语义**（handler 行为必须与 core `params.failurePolicy` 一致）：
    - `propagate`：失败抛错（经 executor 记录 failed span 后重抛），由调用方 try/catch 决定降级。
-   - `fallback`：**已退役**（2026-08-11 纯重试+明确失败改造后 core 无 fallback 值）；存量数据带该值时 runAux 防御性按 propagate 处理并 warn，不产出降级产物。
+   - `fallback`：**已退役**——core 无 fallback 值；存量数据带该值时 runAux 防御性按 propagate 处理并 warn，不产出降级产物。
    - `retry`：由 callPrompt 的 retryStrategy 与逻辑重试预算承载，handler 不重复实现。
-4. **failurePolicy 双词表映射**（历史存量，唯一合法映射）：core 词表 → manifest 词表为 `propagate → blocking`、`fallback → deterministic`、`retry → retry`；两边一一对应，lint/parity 检查已硬约束。新文件不得创造第四种取值；中期收敛目标：词表收缩为 `retry | propagate`。
+4. **failurePolicy 双词表映射**（唯一合法映射）：core 词表 → manifest 词表为 `propagate → blocking`、`fallback → deterministic`、`retry → retry`；两边一一对应，lint/parity 检查已硬约束。新文件不得创造第四种取值。
 5. **平台层例外**：`semantic-freeze-judge` 是发布流水线的 Gate #3，由 `services/prompt-lab/semantic-freeze-judge.ts` 直调 `callPrompt`，不注册进 `skillHandlers`；这是唯一合法的业务外直调例外，新增例外须先修改本节。
 
 ## 6. 版本、发布与漂移检测
 
 ### 6.1 版本模型
 
-- 现行 31 个核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
+- 全部核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
 - 每次编译发布产生新版本（agent_prompts 同 agentId 多行，version 递增，单 ACTIVE）。
 - 编译产物行必须携带 `coreHash` 与 `coreVersion`（新增列）。
 - **回滚 = 目标历史版本置 ACTIVE、其余置 ARCHIVED**，不需要重新编译。
@@ -380,89 +373,52 @@ coreHash 写入侧 = 编译发布流程（与 sourceHash 同批落库）；判�
 | Delta 写 | 缺席=不变、null=清空、输出=覆盖 的增量输出模式（试验） |
 | 基准 v1 | 现行 prompt 在版本体系中的登记身份 |
 
-## 附录 A. 受约束 skill 清单（31 core；3 个 code-only 组件已退役）
+## 附录 A. 受约束 skill 清单与退役登记
 
-> 2026-10-06 复核：以 `prompts/core/` 实际文件数为准（现 31 个 yaml，triage-judge 退役后；2026-09-28 口径 32、2026-09-14 口径 30、更早 26/25/24 均已过期）。
+以 `prompts/core/` 实际文件与 `prompts/skills.yaml` 注册面为准；本清单只说明分类。
 
-首批（15）：
-conversational：goal-conversation、teaching-turn、simulation-goal-dialogue、simulation-learn-turn
-generator：path-planning、path-task-design、simulation-persona-designer、simulation-scenario-designer
-extractor：simulation-actor-audit、simulation-path-evaluate、simulation-referee
-distiller：profile-lesson-enrich、teaching-wrapup
-copywriter：profile-adaptive-copy、teaching-peer-reinforcement
+**主线 core**
 
-后续新增（core，未列入首批）：path-reviewer、path-kc-mapping、simulation-epistemic-grounding、path-material-brief、path-material-collect
+- conversational：goal-conversation、teaching-turn、simulation-goal-dialogue、simulation-learn-turn
+- generator：path-planning、path-task-design、simulation-persona-designer、simulation-scenario-designer
+- extractor：simulation-actor-audit、simulation-path-evaluate、simulation-referee
+- distiller：profile-lesson-enrich、teaching-wrapup、profile-learning-predict（预测校准闭环：`learning_metrics` 预测 vs 实际，`prediction_records` 表）
+- copywriter：profile-adaptive-copy、teaching-peer-reinforcement
+- 规划与资料：path-reviewer、path-kc-mapping、path-material-brief、path-material-collect
+- 仿真内部：simulation-epistemic-grounding、simulation-memory-curate（虚拟学习者记忆策展）
 
-辅助 Skill（8，2026-10-06 复核 = v4-aux-skills 注册面 handler 数（~~9~~ 2026-09-28 口径，triage-judge 退役后）；generic-chat 于 **2026-09-15 正式退役**；course-design / basic-evaluator / goal-alignment-checker 同日退役（四同步，详见附录 A 退役注记）；triage-judge 于 **2026-10-06 退役**（摘注册 + 名单 RESIDUE 位，handler 保留供 eval/replay 脚本直调，详见退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
-generator：teaching-opening（~~course-design~~ 2026-09-15 退役）
-extractor：skill-compiler、profile-state-review（~~basic-evaluator~~、~~goal-alignment-checker~~ 2026-09-15 退役）
-copywriter：profile-progress-report、skill-author
-distiller：profile-concept-consolidate、profile-concept-load、teaching-replan-attribution
+**辅助（aux，`v4-aux-skills`）**
 
-平台守门（1）：semantic-freeze-judge（extractor，thinkingMode=disabled；调用方式见 §5.6 平台层例外）
+- generator：teaching-opening
+- extractor：skill-compiler、profile-state-review
+- copywriter：profile-progress-report、skill-author
+- distiller：profile-concept-consolidate、profile-concept-load、teaching-replan-attribution
 
-平台直调（`registrationPoint: platform-direct`，service 直调、不进业务编排链，共 3）：semantic-freeze-judge（守门）+ **skill-author / skill-compiler（Prompt-AI 预留能力**：起草 system prompt + 单轮验收必填字段。底层能力保留；入口 `/api/admin/skill-author/*` 于 2026-09-11 因未挂载死路由下线（`0c8105e`），恢复只需加回 admin 路由）
+**平台直调（`registrationPoint: platform-direct`，service 直调、不进业务编排链）**
 
-新增（2，2026-08-11 纯重试改造后加入核心文件体系）：
-- profile-learning-predict（distiller，预测校准闭环：`learning_metrics` 预测 vs 实际，`prediction_records` 表）
-- simulation-memory-curate（虚拟学习者记忆策展；manifest 已于 2026-09-02 补齐，`failurePolicy: blocking`，与 core propagate 对齐。此前「缺 manifest / failurePolicy=fallback，待补」的记录已解决）
+- semantic-freeze-judge：发布流水线守门（extractor，`thinkingMode: disabled`；调用方式见 §5.6 平台层例外）。
+- skill-author / skill-compiler：Prompt-AI 预留能力（起草 system prompt、单轮验收必填字段）。底层能力保留，管理端入口未挂载。
 
-code-only（3，无 LLM prompt，handler-only 确定性组件；**已注销 skill 身份、仅保留纯函数模块**，见 `backend/src/skills/retired-skills.ts` 的 `RESIDUE_ONLY_SKILLS`）：
-acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector
+**code-only（无 LLM prompt 的确定性组件）**
 
-> 退役注记（2026-07 调用调查）：label-generator、state-assessment、confidence-handler 因生产零调用/事件无发射者退役；text-structure-analyzer、retrieval、web-extractor、image-analyzer、memory-search、smart-search 六个无调用点组件一并退役。
-> 退役注记（2026-07 调用碎片化治理）：session-knowledge-distiller 与 dialogue-concept-extractor 合并为 profile-lesson-enrich（同一事件消费者、输入高度重叠，单次 LLM 调用产出全部 5 个字段）。
-> 退役注记（2026-08 清单收敛）：goal-profile-inference、learning-pattern-distiller、path-scene-framing、prompt-compiler、goal-analysis、basic-generator、generic-planner、basic-extractor、data-mapping、structured-output-parser 随 RETIRED_SKILLS 退役，附录 A 同步移除。
-> 退役注记（2026-08-09 复核）：concept-priority、path-adjustment-generator 无 core.yaml、无 handler，仅 manifest 残留，一并退役。
-> 退役注记（2026-08-10 名单单源化）：退役名单收敛至 `backend/src/skills/retired-skills.ts`（`PURGED_SKILLS` 35 项 = 启动 purge 语义；`ALL_RETIRED_SKILLS` 40 项 = 追加仅残留清理项 5 项），index.ts 与 `scripts/cleanup-retired-field-data.ts` 均自此派生，`retired:check` 门禁（`scripts/check-retired-skill-lists.ts`，已挂入 `prompts:check:all`）守卫"PURGED ⊆ ALL、名单 ∩ 注册集 = ∅、无 core/manifest 残留"三项不变量；basic-evaluator / goal-alignment-checker 为注册中零调用项（§5.6 aux），保留注册并移出清理名单（其 skill_model_configs 不可自愈），由门禁活跃守卫保护；goal-analysis 的 manifest 残留随本次单源化删除。
-> 退役注记（2026-08-11 Phase A 完整退役）：session-evaluation-fallback 失去全部调用语义（43a01fb 改造后 teaching-wrapup 缺 evaluation 直接 evaluation=null + 'unavailable'），自 v4-aux-skills 注册/户口簿/core/manifest/md 产物四同步注销（`PURGED_SKILLS` → 36 项，`ALL_RETIRED_SKILLS` → 41 项），存量 DB 行由启动 purge 清理；附录 A 同步移除，aux 计数 9→8，core 文件 25→24。
-> 退役注记（2026-09-15 完整退役）：course-design / basic-evaluator / goal-alignment-checker 自 v4-aux-skills 注册 / 户口簿 / core+manifest+编译产物 / 文档**四同步注销**（`PURGED_SKILLS` → 39，`ALL_RETIRED_SKILLS` → 44），存量 DB 行由启动 purge 清理；附录 A 同步移除，aux 计数 9→6，core 文件 27→24。**业务依据**：① course-design 的"周计划"模型被 path→milestone→path-task-design 取代（唯一入口 `designWeekCourses` 与孪生 `generateTasksForExistingPath` 均无调用者，一并删除）；② goal-alignment-checker 被现役 path-reviewer（CIDDP 五维，含 Pertinence，且能触发重规划）完全覆盖；③ basic-evaluator 无"评分/等级"产品面（如未来做作业评分/等级/证书可复用其 prompt 设计）。此前 2026-08-10 的"保留注册"决定随之覆盖。
+acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector：已注销 skill 身份，仅保留纯函数模块（`backend/src/skills/retired-skills.ts` 的 `RESIDUE_ONLY_SKILLS`）。
 
-> 退役注记（2026-09-15 generic-chat 退役）：generic-chat（无专用 skill 时的通用文本兜底）自 v4-aux 注册 / 户口簿 / core+manifest+编译产物 / 文档四同步注销（`PURGED_SKILLS` → 40，`ALL_RETIRED_SKILLS` → 45），aux 计数 6→5，core 文件 24→23。依据：唯一入口 `aiService.chat()` 与全部内部调用方（evaluatePromptBatch/judgeResult/analyzeLearningGoal/generateTasksForTopic/diagnoseGoal）均无调用方，正式业务均有专用 skill；连带清理底座 `services/ai/ai.service.ts`（含测试）、死链 `learning.service.generateTasksForExistingPath`、两处死 import 与三处 jest.mock。
+**退役登记**
 
-> 退役注记（2026-10-06 僵尸位退役，R1 REVIEW 2026-10-05 finding A15）：triage-judge（需求分流判官）自 v4-aux-skills 注册 / 户口簿 / core+manifest+编译产物 / 文档**四同步注销**。依据：判据 v1 经 60 例评测未达标（弃权率 32%、once 召回≈0，`backend/src/scripts/eval-triage-judge.ts`），manifest 自注「尚未接入生产调用方」，生产链路零发射器，goal 链分流已改确定性 `triageGoalResponse`（`services/learning/response-triage`）。**偏离 course-design 波先例：入 `RESIDUE_ONLY_SKILLS` 位而非 `PURGED_SKILLS`**（`PURGED_SKILLS` 保持 40 项，`ALL_RETIRED_SKILLS` 45→46）——本批口径为最小可逆 + 不动历史数据：启动 purge 不清其 `skill_model_configs` / `agent_prompts` ACTIVE v12 存量行（v1-v11 ARCHIVED，2026-10-06 DB 只读实查）（可逆），物理清理走 `cleanup-retired-field-data.ts` 手动脚本（摘注册后活跃守卫已放行）；`eval-triage-judge` / `replay-path-planning` 经 `auxSkillDefinitionMap` + `executableSkillHandlers`（skills/index.ts 注册面∪退役面）直调保留。aux 注册计数 9→8（handler 函数 9 个保留），core 文件 32→31。
+退役名单的单源是 `backend/src/skills/retired-skills.ts`：`PURGED_SKILLS`（启动即清理存量数据）、`ALL_RETIRED_SKILLS`（在其上追加仅做残留清理的项）、`RESIDUE_ONLY_SKILLS`（从未注册、仅 manifest 残留）。`retired:check` 门禁（`backend/src/scripts/check-retired-skill-lists.ts`，已挂入 `prompts:check:all`）守卫「PURGED ⊆ ALL、名单 ∩ 注册集 = ∅、无 core/manifest 残留」三项不变量。新退役一个 skill，同步更新本表。
 
-## 附录 B. goal-conversation 核心文件（参照样例）
+| 退役的 skill | 承接 / 依据 |
+|---|---|
+| label-generator、state-assessment、confidence-handler | 生产零调用 / 事件无发射者 |
+| text-structure-analyzer、retrieval、web-extractor、image-analyzer、memory-search、smart-search | 无调用点 |
+| session-knowledge-distiller、dialogue-concept-extractor | 合并为 profile-lesson-enrich（同一事件消费者、输入高度重叠，单次调用产出全部字段） |
+| goal-profile-inference、learning-pattern-distiller、path-scene-framing、prompt-compiler、goal-analysis、basic-generator、generic-planner、basic-extractor、data-mapping、structured-output-parser | 随退役名单一并退场 |
+| concept-priority、path-adjustment-generator | 无 core.yaml、无 handler，仅 manifest 残留 |
+| session-evaluation-fallback | teaching-wrapup 缺 evaluation 时直接 `evaluation=null` + `unavailable`，不需要兜底 skill |
+| course-design | "周计划"模型被 path → milestone → path-task-design 取代 |
+| goal-alignment-checker | 被现役 path-reviewer（CIDDP 五维，含 Pertinence，且能触发重规划）完全覆盖 |
+| basic-evaluator | 无"评分/等级"产品面；其 prompt 设计可用于作业评分 / 等级 / 证书 |
+| generic-chat | 无专用 skill 时的通用文本兜底；正式业务均有专用 skill，唯一入口 `aiService.chat()` 无调用方 |
+| triage-judge（需求分流判官） | 判据评测未达标（60 例：弃权率 32%、once 召回≈0）；goal 链分流改为确定性 `triageGoalResponse`。入 `RESIDUE_ONLY_SKILLS`：handler 保留供 eval / replay 脚本直调，启动 purge 不清其存量行，物理清理走 `backend/src/scripts/cleanup-retired-field-data.ts` |
 
-```yaml
-skillId: goal-conversation
-baseVersion: 1
-identity: |
-  学习目标澄清助手。通过对话澄清学习目标，信息足够时收敛到第一版学习方向。
-  不讲课，不展开路径正文。
-channels: [dialogue, state]
-stateAdvance: true
-rules:
-  - 依据 state 找缺口，每轮只补最必要的一条信息
-  - userInput 与 state 冲突时以 userInput 为准
-  - 用户连续补充同类细节时优先收敛，不细分追问
-  - 真实问题、动机、背景、约束四类信息基本齐备 → 推进 proposing；用户确认方案 → ready
-fields:
-  - { name: reply, type: string, desc: 本轮回复，口语化，一次只问一个问题, turn: true }
-  - { name: nextQuestions, type: "string[]", desc: 追问候选，不超过 3 条, turn: true }
-  - { name: quickReplies, type: "object[]", desc: 快捷选项 {text, icon?}，不超过 4 个, turn: true }
-  - { name: surface_goal, type: string, desc: 用户声称的目标，保留原话 }
-  - { name: real_problem, type: string, desc: 穿透后的真实问题：为什么卡住、什么在阻塞进展 }
-  - { name: motivation, type: string, desc: 为什么学、压力与具体痛点，联系真实场景，禁空话 }
-  - { name: background_experience, type: "string[]", desc: 做过/试过/卡住的实际经历，禁抽象标签 }
-  - { name: available_time, type: string, desc: 可投入时间，如"每周5小时" }
-  - { name: current_level, type: string, desc: 自述水平与能力边界，禁"基础较弱"式标签 }
-  - { name: thinking_style, type: enum, desc: holistic | detail | balanced }
-  - { name: theory_vs_practice, type: enum, desc: theory-first | practice-first | balanced }
-  - { name: confusion_pattern, type: string, desc: 易混淆的模式，无证据留空 }
-  - { name: motivation_trigger, type: string, desc: 什么能维持其投入 }
-  - { name: confirmedProposal, type: object?, desc: 确认后的方向 {learningDirection, firstDeliverable, keyStages[], outOfScope[]}；未确认不出现 }
-constraints:
-  - 无证据的字段留空，不编造、不夸大
-params: { temperature: 0.7, maxTokens: 64000, failurePolicy: retry }
-deltaOutput: true   # 试点
-```
-
-## 附录 C. 实施顺序（非规范性说明）
-
-先数据链路，后逐 skill 跑通：
-
-1. **链路改造（skill 无关）**：core 文件 loader、五块 lint、统一调用信封（§5.2）、SkillResult 包装收敛、coreHash/coreVersion 列与漂移检测、编译链（确定性模板渲染先行，LLM 润色后置）、字段血缘注册表。
-2. **逐 skill 接入**（每个 skill 走同一流程：反向提取核心文件 → 编译 → 守门三查 → 影子运行对比 → 切流 → 验证消费者）：
-    试点 goal-conversation（含 Delta 试验）→ teaching-turn → teaching-wrapup / teaching-peer-reinforcement → extractor/distiller/copywriter 家族 → virtual-learner 家族 → prompt-compiler 最后（它自身即编译器）。
-
+参照样例：`prompts/core/goal-conversation.yaml`。

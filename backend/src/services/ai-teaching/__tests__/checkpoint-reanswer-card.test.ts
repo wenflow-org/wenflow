@@ -153,6 +153,26 @@ describe('buildCheckpointSubmitResult：重答卡随提交响应带回', () => {
     expect(settled).toEqual(buildCheckpointSubmitResult(turn as any))
     expect(settled.checkpoint?.id).toBe('cp-1')
   })
+
+  // 2026-11-26 真课实录：作答后的响应不带 lessonPhase，前端阶段条从「整合/迁移」
+  // 直接回落到「协议未生效」——阶段机在跑，读数却断了。
+  it('提交回合必须带回阶段摘要（缺了阶段条会回落「协议未生效」）', () => {
+    const lessonPhase = {
+      phase: 'transfer', profile: 'full', label: '迁移', segment: 3, segmentCount: 3,
+      emitCheckpoint: true, checkKind: 'transfer', revealLevel: 3, boardReveal: 'full',
+      passedPhases: [], challengesUpheld: 0,
+    }
+    const result = buildCheckpointSubmitResult({
+      aiResponse: '这块还没对上。',
+      revision: 9,
+      checkpointResolution: { passed: false },
+      checkpoint: null,
+      lessonPhase,
+    })
+    expect(result.lessonPhase).toEqual(lessonPhase)
+    // 协议未生效（旧课堂/杀开关）→ 键缺席，前端保持原读数不动
+    expect('lessonPhase' in buildCheckpointSubmitResult({ aiResponse: '好。', revision: 2 })).toBe(false)
+  })
 })
 
 describe('submitCheckpoint 答错链路：响应带回重答卡', () => {

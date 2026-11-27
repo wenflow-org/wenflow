@@ -10,7 +10,7 @@
           <h1>先说清你想解决的事，<br />再开始学习。</h1>
           <!-- 2026-11-04 去「帮你」代劳预设，改陈述动作 -->
           <p>
-            不用整理成完美目标。说清你想解决的事，问流理出方向、生成路径——学习台直接给出今天能动手的一步。
+            不用整理成完美目标。说清你想解决的事，问流理出方向、生成路径——学习台直接给出今天能动手的一步。没有预置课程和题库，路径和课都按你的问题现场生成。
           </p>
           <div class="hn-hero__cta">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
@@ -24,15 +24,17 @@
               <span>目标规划</span>
               <span class="hn-chip">澄清问题</span>
             </div>
-            <div class="hn-bubble hn-bubble--user" :class="{ 'hn-demo--off': phase < 1 }">每周 Excel 周报太花时间，想用 Python 自动化</div>
+            <div class="hn-bubble hn-bubble--user" :class="{ 'hn-demo--off': phase < 1 }">孩子不愿写作业，一催就吵，想搞清楚原因</div>
             <div class="hn-bubble hn-bubble--ai" :class="{ 'hn-demo--off': phase < 2 }">
               <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" />
-              <div v-if="phase < 3" class="hn-typing__dots" aria-label="正在输入"><i /><i /><i /></div>
-              <div v-else>
-                <p>好，我们先把问题说小一点。你更想先节省哪一段时间？</p>
-                <div class="hn-tags">
-                  <span class="hn-tag" :class="{ 'hn-tag--on': phase >= 4 }">清洗与合并数据</span>
-                  <span class="hn-tag">出图与汇报</span>
+              <div>
+                <!-- 回复常驻布局，只把可见性交给相位：打字态若换成矮一截的 dots，
+                     卡片会从 317 长到 378，首屏下面的 band 整段下移（2026-11-26 用户反馈）。 -->
+                <div v-if="phase < 3" class="hn-typing__dots" aria-label="正在输入"><i /><i /><i /></div>
+                <p :class="{ 'hn-demo--hidden': phase < 3 }">先不急着管。他磨蹭的那半小时，具体在做什么？</p>
+                <div class="hn-tags" :class="{ 'hn-demo--hidden': phase < 3 }">
+                  <span class="hn-tag" :class="{ 'hn-tag--on': phase >= 4 }">卡在第一题</span>
+                  <span class="hn-tag">一催就顶嘴</span>
                 </div>
               </div>
             </div>
@@ -47,13 +49,13 @@
               <span>学习台</span>
               <span class="hn-chip hn-chip--green">今日行动</span>
             </div>
-            <p class="hn-stage__from">来自「Excel 周报自动化」</p>
-            <h3>跑通第一版数据读取</h3>
+            <p class="hn-stage__from">来自「孩子不愿写作业」</p>
+            <h3>把「就是懒」拆成能看到的信号</h3>
             <div class="hn-stage__meta">
-              <span>阶段 2 / 3</span>
+              <span>阶段 1 / 3</span>
               <span>约 25 分钟</span>
             </div>
-            <div class="hn-stage__prog"><i style="--w: 42%" /></div>
+            <div class="hn-stage__prog"><i style="--w: 11%" /></div>
             <span class="hn-stage__go">开始学习</span>
           </div>
         </aside>
@@ -76,63 +78,32 @@
         </div>
       </section>
 
-      <!-- 怎么走：曲线 + 五步（旧版 product-flow 气质） -->
+      <!-- 怎么走：四步闭环（对应 目标规划 / 学习路径 / 学习台 / 学习状态 四个面） -->
       <section id="how" class="hn-flow hn-shell">
-          <div class="hn-section" v-reveal>
+        <div class="hn-section" v-reveal>
           <span class="hn-pill">怎么开始</span>
-          <h2>从一句话，到今天能做的一步。</h2>
-          <p>不用先写完整计划。先说清楚，再生成路径，再开始学。</p>
+          <h2>从一句话，到一次完整的学习闭环。</h2>
+          <p>不用先写完整计划。先聊清目标，再生成<span class="hn-keep">路径</span>，然后按回合学，学完看状态、排复习。</p>
         </div>
-        <div class="hn-flow__canvas">
-          <svg class="hn-flow__svg" viewBox="0 0 1200 160" fill="none" preserveAspectRatio="none" aria-hidden="true" v-reveal>
-            <path
-              class="hn-flow__path"
-              pathLength="1"
-              d="M 40 90 C 180 30, 320 140, 480 90 C 640 40, 780 140, 940 90 C 1040 55, 1120 90, 1160 90"
-            />
-          </svg>
-          <ol class="hn-flow__grid">
-            <li v-for="(s, i) in steps" :key="s.t" v-reveal="{ delay: i * 70 }">
-              <span>{{ i + 1 }}</span>
-              <strong>{{ s.t }}</strong>
-              <p>{{ s.d }}</p>
-              <!-- 2026-11-04 相邻步骤属同一产品面时只在首张挂标签，去整列同名冗余 -->
-              <em v-if="i === 0 || s.where !== steps[i - 1].where">{{ s.where }}</em>
-            </li>
-          </ol>
-        </div>
-      </section>
-
-      <!-- 独特理念：一大块说明 + 四条要点（非对称） -->
-      <section class="hn-idea">
-        <div class="hn-shell hn-idea__in">
-          <div class="hn-idea__lead" v-reveal>
-            <span class="hn-pill">和常见开始方式不同</span>
-            <h2>先把问题说小，再开始学。</h2>
-            <!-- 2026-11-04 去「帮你」代劳预设，改陈述动作 -->
-            <p>
-              目标太大、资料太多时，问流先把范围收到能落地的程度，再边学边调。
-            </p>
-          </div>
-          <div class="hn-idea__list">
-            <article v-for="(item, i) in modes" :key="item.t" v-reveal="{ delay: i * 70 }">
-              <strong>{{ item.t }}</strong>
-              <p>{{ item.d }}</p>
-            </article>
-          </div>
-        </div>
+        <ol class="hn-flow__grid">
+          <li v-for="(s, i) in steps" :key="s.t" v-reveal="{ delay: i * 70 }">
+            <span>{{ i + 1 }}</span>
+            <strong>{{ s.t }}</strong>
+            <p>{{ s.d }}</p>
+            <em>{{ s.where }}</em>
+          </li>
+        </ol>
       </section>
 
       <!-- 学习台：错位分栏 -->
       <section class="hn-desk hn-shell">
         <div class="hn-desk__copy" v-reveal>
-          <h2>每天打开学习台，只盯今天这一步。</h2>
-          <!-- 2026-11-04 删「也可以随时」心理预设，只留状态与动作 -->
-          <p>路径生成后，「今日行动」直接给出今天学什么、学多久。有新目标可另起一条路径。</p>
+          <h2>边学边管住节奏与复习。</h2>
+          <p>学完之后，掌握会写回路径。薄弱点下节课<span class="hn-keep">接着练</span>，复习按遗忘曲线排。训练负荷和疲劳度<span class="hn-keep">一起看</span>，状态低就把节奏放慢。</p>
           <ul>
-            <li>今日行动 · 清楚今天学什么</li>
-            <li>学习路径 · 阶段与任务可继续</li>
-            <li>学习状态 · 看节奏再决定推进或放缓</li>
+            <li><strong>训练负荷</strong>这周一共学了多少</li>
+            <li><strong>疲劳程度</strong>现在还能不能继续</li>
+            <li><strong>复习安排</strong>薄弱点按遗忘曲线回来</li>
           </ul>
         </div>
         <div class="hn-desk__card" v-reveal="{ delay: 140 }">
@@ -142,14 +113,14 @@
               <span class="hn-chip hn-chip--green">近 7 天</span>
             </div>
             <div class="hn-state__metrics">
-              <div><span>健康度</span><b>14</b></div>
-              <div><span>疲劳度</span><b>33</b></div>
-              <div><span>状态</span><b class="hn-state__form">最优训练区</b></div>
+              <div><span>训练负荷</span><b>29.5</b></div>
+              <div><span>疲劳程度</span><b>29.5</b></div>
+              <div><span>整体状态</span><b class="hn-state__form">需要休息</b></div>
             </div>
-            <div class="hn-stage__prog"><i style="--w: 62%" /></div>
+            <div class="hn-stage__prog"><i style="--w: 30%" /></div>
             <!-- 2026-11-04 删「按…即可」教用法尾巴，只留状态陈述 -->
             <div class="hn-state__hint">
-              本周节奏稳定，状态正处最优训练区。
+              整体状态偏低，今天以复习或轻量任务为主。
             </div>
           </div>
         </div>
@@ -158,7 +129,7 @@
       <!-- 全宽收尾 -->
       <section class="hn-end">
         <div class="hn-end__in" v-reveal>
-          <h2>用 2 分钟，理出一条能执行的路径。</h2>
+          <h2>用 2 分钟，理出<span class="hn-keep">一条</span>能执行的路径。</h2>
           <div class="hn-end__acts">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
             <!-- 原型 wf-pend：主 CTA「从一个问题开始」→ 注册；次 CTA「已有账号，登录」→ 登录 -->
@@ -179,6 +150,7 @@
           <router-link to="/">首页</router-link>
           <router-link to="/vision">愿景</router-link>
           <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://wenflow.org/" target="_blank" rel="noreferrer">Demo</a>
         </div>
       </div>
     </footer>
@@ -196,18 +168,10 @@ import MarketingNav from '@/components/MarketingNav.vue'
 const loggedIn = ref(false)
 
 const steps = [
-  { t: '说出问题', d: '从最近真正卡住的事开始，不用说得很完整。', where: '目标规划' },
-  { t: '澄清方向', d: '一起把目标收到今天能开始的范围。', where: '目标规划' },
-  { t: '生成路径', d: '得到阶段与任务，后面还能随学习调整。', where: '目标规划' },
-  { t: '今日行动', d: '打开学习台，今天该做的一步已经排好。', where: '学习台' },
-  { t: '边学边调', d: '根据反馈和节奏，决定下一步怎么走。', where: '学习状态' }
-]
-
-const modes = [
-  { t: '从真实场景开始', d: '先说卡住的事，而不是先选一门课。' },
-  { t: '路径可执行', d: '拆成阶段与任务，今天就能动手。' },
-  { t: '对话里学', d: '讲、问、练，听不懂就换一种讲法。' },
-  { t: '节奏可调', d: '看状态再决定推进或放缓，路径可以改。' }
+  { t: '澄清目标', d: '从最近卡住的事开始。\n把范围收到今天能动手。', where: '目标规划' },
+  { t: '生成路径', d: '先得到阶段与任务。\n之后按学习情况重排。', where: '学习路径' },
+  { t: '回合学习', d: '讲、问、检查，白板随讲解更新\n答偏了当场指出。', where: '学习台' },
+  { t: '复习与状态', d: '掌握会写回路径。\n薄弱点接着练，状态低就放缓。', where: '学习状态' }
 ]
 
 const primaryPath = computed(() => (loggedIn.value ? '/goal-conversation' : '/register'))
@@ -337,6 +301,12 @@ onUnmounted(() => {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
 }
+@media (max-width: 1366px) {
+  /* 与顶栏/愿景同一条 1120 边界：720p/768p 桌面整页不再贴边 */
+  .hn-shell {
+    width: min(1120px, calc(100% - 48px));
+  }
+}
 
 /* Nav 由 MarketingNav 组件提供（首页/愿景共用同一份导航） */
 
@@ -461,7 +431,7 @@ main {
 }
 @keyframes hn-settle-desk {
   from { opacity: 0; transform: rotate(4.4deg) translateY(38px); }
-  to { opacity: 1; transform: rotate(1.2deg) translateX(18px); }
+  to { opacity: 1; transform: rotate(1.2deg) translateX(var(--hn-desk-dx)); }
 }
 @media (max-width: 1023px) and (prefers-reduced-motion: no-preference) {
   .hn-stage__chat,
@@ -504,9 +474,16 @@ main {
   transform: rotate(-1deg);
 }
 .hn-stage__desk {
-  transform: rotate(1.2deg) translateX(18px);
+  /* 桌面装饰位移；1024–1279 两栏档没有右侧留白，见下方档位覆写 */
+  --hn-desk-dx: 18px;
+  transform: rotate(1.2deg) translateX(var(--hn-desk-dx));
   background: color-mix(in srgb, var(--blue) 4%, var(--surface));
   border-color: color-mix(in srgb, var(--blue) 16%, transparent);
+}
+/* 1024–1279 仍是两栏，但 shell 只剩 24px 边距：18px 右移会把卡片推到距视口 ~4px。
+   这一档只保留 1.2° 旋转，不再右移；≥1280 才恢复错位。 */
+@media (max-width: 1279px) {
+  .hn-stage__desk { --hn-desk-dx: 0px; }
 }
 .hn-stage__bar {
   display: flex;
@@ -536,7 +513,9 @@ main {
 }
 .hn-bubble--user {
   margin-left: auto;
-  max-width: 92%;
+  /* 单列断点下卡片会拉到 ~975px，92% 的气泡跟着变成一条横幅；
+     420px 上限只在宽卡时生效，桌面 420 卡和手机 362 卡都保持原宽度。 */
+  max-width: min(92%, 420px);
   padding: 10px 13px;
   border-radius: 16px 16px 4px 16px;
   color: var(--text-on-primary);
@@ -556,6 +535,7 @@ main {
   flex: 0 0 auto;
 }
 .hn-bubble--ai > div {
+  position: relative;
   background: var(--soft);
   border: 1px solid var(--line);
   border-radius: 4px 16px 16px 16px;
@@ -565,6 +545,7 @@ main {
 .hn-bubble--ai p {
   margin: 0;
   color: var(--ink);
+  text-wrap: balance;
 }
 .hn-bubble--ai strong {
   color: var(--ink);
@@ -625,7 +606,16 @@ main {
   transform: translateY(10px);
   pointer-events: none;
 }
+/* 只隐藏可见性、不撤出布局：回复的高度从第一帧就占住，打字态不会把卡片撑开 */
+.hn-demo--hidden {
+  visibility: hidden;
+}
 .hn-typing__dots {
+  /* 覆盖在常驻回复的中心，不参与高度计算 */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: inline-flex;
   gap: 4px;
   align-items: center;
@@ -802,9 +792,9 @@ main {
   50% { transform: translateX(7px); }
 }
 
-/* Flow：对照原型 .wf-pflow / .wf-psection / .wf-psteps（1025-1034） */
+/* Flow：四步闭环，卡片左对齐；不再用波浪线把五列串起来 */
 .hn-flow {
-  padding: 28px 0 64px;
+  padding: 32px 0 64px;
   scroll-margin-top: 84px;
 }
 .hn-section {
@@ -820,57 +810,36 @@ main {
   line-height: 1.1;
   text-wrap: balance;
 }
+/* 词组不拆行：balance 只均分行长，仍会把「今天」「一条」拆到两行 */
+.hn-keep {
+  white-space: nowrap;
+}
 .hn-section p {
   margin: 0;
   font-size: 16px;
   line-height: 1.75;
   max-width: 34em;
   color: var(--muted);
-}
-.hn-flow__canvas {
-  position: relative;
-}
-.hn-flow__svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  margin-bottom: -18px;
-}
-.hn-flow__path {
-  stroke: var(--blue);
-  stroke-width: 3;
-  stroke-linecap: round;
-  opacity: 0.35;
-  fill: none;
-  stroke-dasharray: 1;
-  /* 默认保持画完状态：v-reveal 揭示后会移除 .rv/.rv-in，若默认值是未画状态会反向缩回 */
-  stroke-dashoffset: 0;
-  transition: stroke-dashoffset 1.6s var(--ease) 0.25s;
-}
-.hn-flow__svg.rv .hn-flow__path {
-  stroke-dashoffset: 1;
-}
-.hn-flow__svg.rv-in .hn-flow__path {
-  stroke-dashoffset: 0;
+  text-wrap: balance;
 }
 .hn-flow__grid {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  position: relative;
-  z-index: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
-/* 步骤卡：对照 .wf-psteps li —— 静态卡，无 hover 位移 */
+/* 步骤卡：四列左对齐，内容吃满卡宽，不再把中文挤成居中的窄行 */
 .hn-flow__grid li {
   display: grid;
   gap: 9px;
-  justify-items: center;
-  text-align: center;
+  justify-items: start;
+  text-align: left;
+  /* 默认 align-content:stretch 会把余量按行数摊开，序号/标题不在一条线上 */
+  align-content: start;
   min-height: 196px;
-  padding: 20px 14px;
+  padding: 20px 18px;
   /* 批次 D：22px 圆角（档外）→ --mk-radius-xl；第四档投影 ink@6% 删除。
      步骤卡是静态卡，靠 border 分层即可。 */
   border-radius: var(--mk-radius-xl);
@@ -897,7 +866,9 @@ main {
   font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
-  max-width: 18ch;
+  max-width: 100%;
+  /* 卡描述按两句手动分两行，四张卡的行数和标签位置保持一致 */
+  white-space: pre-line;
 }
 .hn-flow__grid em {
   font-style: normal;
@@ -909,71 +880,20 @@ main {
   border-radius: var(--mk-radius-pill);
 }
 
-/* Idea asymmetric */
-.hn-idea {
-  padding: 40px 0 72px;
-}
-.hn-idea__in {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
-  gap: 40px;
-  align-items: start;
-}
-.hn-idea__lead {
-  display: grid;
-  gap: 14px;
-  position: sticky;
-  top: 100px;
-}
-.hn-idea__lead h2 {
-  margin: 0;
-  font-size: clamp(32px, 4vw, 48px);
-  letter-spacing: -0.045em;
-  line-height: 1.08;
-}
-.hn-idea__lead p {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.8;
-  color: var(--muted);
-  max-width: 34ch;
-}
-.hn-idea__list {
-  display: grid;
-  gap: 12px;
-}
-.hn-idea__list article {
-  padding: 22px 24px;
-  /* 批次 D：18px 圆角（档外）→ --mk-radius-xl；第四档投影 ink@8% 删除。 */
-  border-radius: var(--mk-radius-xl);
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.hn-idea__list strong {
-  display: block;
-  font-size: 17px;
-  margin-bottom: 6px;
-}
-.hn-idea__list p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--muted);
-}
-
 /* Desk */
 .hn-desk {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   gap: 48px;
   align-items: center;
-  padding: 40px 0 90px;
+  padding: 64px 0 88px;
 }
 .hn-desk__copy h2 {
   margin: 0 0 14px;
   font-size: clamp(30px, 4vw, 44px);
   letter-spacing: -0.04em;
   line-height: 1.12;
+  text-wrap: balance;
 }
 .hn-desk__copy > p {
   margin: 0 0 18px;
@@ -985,17 +905,21 @@ main {
 .hn-desk__copy ul {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 2px 0 2px 18px;
   display: grid;
-  gap: 10px;
+  gap: 14px;
+  /* 一条细左竖线代替三张白卡：层次靠线，不靠再叠三层白底 */
+  border-left: 2px solid color-mix(in srgb, var(--blue) 22%, var(--line));
 }
 .hn-desk__copy li {
-  padding: 14px 16px;
-  border-radius: var(--mk-radius-modal);
-  background: var(--surface);
-  border: 1px solid var(--line);
   font-size: 14px;
-  font-weight: 700;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.hn-desk__copy li strong {
+  margin-right: 6px;
+  color: var(--ink);
+  font-weight: 800;
 }
 .hn-desk__card {
   margin-top: 12px;
@@ -1062,6 +986,7 @@ main {
   letter-spacing: -0.035em;
   line-height: 1.12;
   max-width: 18ch;
+  text-wrap: balance;
   color: var(--ink);
 }
 .hn-end p {
@@ -1154,16 +1079,12 @@ main {
   }
   .hn-band__in,
   .hn-flow__grid,
-  .hn-idea__in,
   .hn-desk {
     grid-template-columns: 1fr;
   }
   .hn-band__arrow {
     justify-self: center;
     transform: rotate(90deg);
-  }
-  .hn-flow__svg {
-    display: none;
   }
   .hn-flow__grid li {
     min-height: 0;
@@ -1179,9 +1100,6 @@ main {
   .hn-flow__grid p {
     font-size: 13px;
     max-width: 100%;
-  }
-  .hn-idea__lead {
-    position: static;
   }
   .hn-hero h1 br {
     display: none;
@@ -1249,7 +1167,7 @@ main {
     padding: 24px;
   }
   /* 以下文本档选择器（.hn-stage__bar / .hn-bubble / .hn-stage__result strong /
-     .hn-flow__grid p / .hn-idea__list p / .hn-desk__copy li 等）原先在本档
+     .hn-flow__grid p / .hn-desk__copy li 等）原先在本档
      各写一个字面量（15/16/16.5/18/19/20px）。现已删除：它们继承基础档的
      --mk-fs-* 引用，由本档顶部的三个角色 token 统一放大。
      基础档 → 本档的实际倍率随之从「各写各的」收敛为 ×1.15 一档：
@@ -1259,9 +1177,6 @@ main {
        .hn-band__side p      14 → 16.10（原 18）
        .hn-flow__grid strong 15 → 17.25（原 19）
        .hn-flow__grid p      13 → 14.95（原 15.5）
-       .hn-idea__lead p      16 → 18.40（原 19）
-       .hn-idea__list strong 17 → 19.55（原 20）
-       .hn-idea__list p      14 → 16.10（原 16.5）
        .hn-desk__copy li     14 → 16.10（原 16）
        .hn-desk__copy > p    16 → 18.40（原 19）
        .hn-end p             16 → 18.40（原 19）
@@ -1292,22 +1207,10 @@ main {
     font-size: 20px;
   }
   .hn-flow__grid li {
-    min-height: 260px;
+    min-height: 220px;
     padding: 26px 20px;
   }
   /* .hn-flow__grid strong / p 同样继承基础档 token（17.25 / 14.95） */
-  .hn-idea__lead h2 {
-    font-size: clamp(44px, 3vw, 64px);
-    max-width: 14ch;
-  }
-  /* .hn-idea__lead p 继承基础档 --mk-fs-emphasis（17.25） */
-  .hn-idea__lead p {
-    max-width: 30ch;
-  }
-  .hn-idea__list article {
-    padding: 26px 30px;
-  }
-  /* .hn-idea__list strong / p 继承基础档 token（19.55 / 16.10） */
   .hn-desk {
     gap: 64px;
   }
@@ -1341,7 +1244,7 @@ main {
 /* ===== 移动端密度（2026-09-24；2026-09-30 随原型公开层口径更新）=====
    判据与用户侧一致：卡片内边距 12–18px、按钮 44–46px 档、微标签 ≥12px。
    对齐原型 .wf-pcard2 / .wf-pband__side / .wf-psteps 后：舞台卡 18×14、band 卡 22×18、
-   流程卡 22×16（×5）、idea 卡 18×16（×4）；hero CTA 是 .hn-btn--lg
+   流程卡 22×16（×4）；hero CTA 是 .hn-btn--lg
    （基础档 52px 高 / 26px 横向内边距 / 16px 字 → 移动端 46 / 22 / 15）。
    展示型字号（hero 的 clamp）与 18/22px 圆角是这一页的视觉语言，不动。 */
 @media (max-width: 1023px) {
@@ -1350,7 +1253,6 @@ main {
   .hn-panel { padding: 14px; }
   .hn-band__side { padding: 18px; }
   .hn-flow__grid li { padding: 16px 14px; }
-  .hn-idea__list article { padding: 16px 18px; }
   .hn-btn--lg { min-height: 46px; padding: 0 22px; font-size: 15px; }
   .hn-chip,
   .hn-tag,

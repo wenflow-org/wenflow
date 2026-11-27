@@ -71,6 +71,8 @@
         <thead>
           <tr>
             <th scope="col">公告</th>
+            <!-- 受众（2026-11-26）：运维巡检公告此前与用户公告同列，学习者横幅里会看到「夜间体检」 -->
+            <th scope="col">受众</th>
             <th
               scope="col"
               class="mk-th--sortable"
@@ -107,6 +109,7 @@
                 <span class="mk-cell-sub an-body" :title="r.body">{{ r.body }}</span>
               </div>
             </td>
+            <td><span class="mk-badge" :class="audienceBadge(r.audience)">{{ audienceText(r.audience) }}</span></td>
             <td><span class="mk-badge" :class="severityBadge(r.severity)">{{ severityText(r.severity) }}</span></td>
             <td>
               <span class="mk-badge" :class="statusBadge(r)">{{ statusText(r) }}</span>
@@ -195,6 +198,23 @@
               </button>
             </div>
           </label>
+          <label class="mk-field">
+            <span class="mk-field__label">受众</span>
+            <div class="an-severity" role="group" aria-label="公告受众">
+              <button
+                v-for="a in audiences"
+                :key="a.id"
+                type="button"
+                class="an-sev an-sev--audience"
+                :class="{ 'an-sev--on': form.audience === a.id }"
+                :aria-pressed="form.audience === a.id"
+                @click="form.audience = a.id"
+              >
+                {{ a.label }}
+              </button>
+            </div>
+            <span class="mk-field__hint">运维、巡检、内部变更选「仅管理员」：学习者端横幅不会展示这条。</span>
+          </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.body }">
             <span class="mk-field__label">正文 <em class="mk-field__req">*</em></span>
             <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000"></textarea>
@@ -262,6 +282,7 @@ import {
   timeAgo,
   errMsg
 } from './live'
+import type { AnnouncementAudience } from './live'
 import { adminAnnouncementsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -288,6 +309,7 @@ interface Row {
   body: string
   severity: 'info' | 'warning' | 'critical'
   status: 'draft' | 'published' | 'archived'
+  audience: AnnouncementAudience
   publishedAt: string | null
   expiresAt: string | null
   createdBy: string | null
@@ -413,6 +435,7 @@ async function retryLive() {
       body: String(a.body || ''),
       severity: (a.severity as Row['severity']) || 'info',
       status: (a.status as Row['status']) || 'draft',
+      audience: (a.audience as AnnouncementAudience) || 'all',
       publishedAt: (a.publishedAt as string) || null,
       expiresAt: (a.expiresAt as string) || null,
       createdBy: (a.createdBy as string) || null,
@@ -553,7 +576,14 @@ watch(
   { immediate: true }
 )
 const editingId = ref('')
-const form = ref({ title: '', body: '', severity: 'info' as 'info' | 'warning' | 'critical', expiresAt: '', publishNow: true })
+const form = ref({
+  title: '',
+  body: '',
+  severity: 'info' as 'info' | 'warning' | 'critical',
+  audience: 'all' as AnnouncementAudience,
+  expiresAt: '',
+  publishNow: true
+})
 /** 打开时的表单快照：关闭前据此判断有没有未保存改动（2026-11-11 可用性） */
 const initialForm = ref({ ...form.value })
 const formDirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(initialForm.value))
@@ -568,9 +598,16 @@ const severities = [
   { id: 'critical' as const, label: '紧急' }
 ]
 
+/** 受众（2026-11-26）：运维巡检类公告不该出现在学习者顶部横幅 */
+const audiences: Array<{ id: AnnouncementAudience; label: string }> = [
+  { id: 'all', label: '全部用户' },
+  { id: 'learner', label: '仅学习者' },
+  { id: 'admin', label: '仅管理员' }
+]
+
 function openCreate() {
   editingId.value = ''
-  form.value = { title: '', body: '', severity: 'info', expiresAt: '', publishNow: true }
+  form.value = { title: '', body: '', severity: 'info', audience: 'all', expiresAt: '', publishNow: true }
   initialForm.value = { ...form.value }
   errors.value = {}
   createOpen.value = true
@@ -586,6 +623,7 @@ function openEdit(r: Row) {
     title: r.title,
     body: r.body,
     severity: r.severity,
+    audience: r.audience,
     expiresAt: r.expiresAt ? toLocalInput(r.expiresAt) : '',
     publishNow: false
   }
@@ -633,6 +671,7 @@ async function saveEdit() {
       title: form.value.title.trim(),
       body: form.value.body.trim(),
       severity: form.value.severity,
+      audience: form.value.audience,
       expiresAt: toIso(form.value.expiresAt)
     })
     createOpen.value = false
@@ -661,6 +700,7 @@ async function create(publishNow: boolean) {
       title: form.value.title.trim(),
       body: form.value.body.trim(),
       severity: form.value.severity,
+      audience: form.value.audience,
       expiresAt: toIso(form.value.expiresAt),
       publishNow
     })
@@ -675,6 +715,9 @@ async function create(publishNow: boolean) {
 
 const severityText = (s: string) => ({ info: '通知', warning: '提醒', critical: '紧急' }[s] || s)
 const severityBadge = (s: string) => (s === 'critical' ? 'mk-badge--bad' : s === 'warning' ? 'mk-badge--warn' : 'mk-badge--info')
+/** 受众标签（2026-11-26）：仅管理员=运维内部公告，学习者端看不到 */
+const audienceText = (a: AnnouncementAudience) => ({ all: '全部', learner: '学习者', admin: '仅管理员' }[a] || '全部')
+const audienceBadge = (a: AnnouncementAudience) => (a === 'admin' ? 'mk-badge--warn' : a === 'learner' ? 'mk-badge--info' : 'mk-badge--muted')
 const statusText = (r: Row) => (r.status === 'published' ? (r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now() ? '已过期' : '生效中') : r.status === 'draft' ? '草稿' : '已下线')
 const statusBadge = (r: Row) => (statusText(r) === '生效中' ? 'mk-badge--ok' : statusText(r) === '已过期' ? 'mk-badge--muted' : r.status === 'draft' ? 'mk-badge--info' : 'mk-badge--muted')
 /** 绝对日期：2026-08-06 14:30（公告管理需要精确时间，相对时间入 tooltip） */
@@ -751,6 +794,8 @@ function expiresLabel(iso: string): string {
 .an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue-text); background: var(--mk-blue-bg, #eef5ff); }
 .an-sev--on.an-sev--warning { border-color: var(--mk-amber); color: var(--mk-amber); background: var(--mk-amber-bg); }
 .an-sev--on.an-sev--critical { border-color: var(--mk-red); color: var(--mk-red); background: var(--mk-red-bg); }
+/* 受众三选一（2026-11-26）：与级别同一颗药丸，但选中态统一走蓝——受众不是严重度，不该用红/琥珀 */
+.an-sev--on.an-sev--audience { border-color: var(--mk-blue); color: var(--mk-blue-text); background: var(--mk-blue-bg, #eef5ff); }
 /* 破坏性动作统一走全局 .mk-link--danger（红字）：2026-11-02 评审指出「下线」
    在此是琥珀色，而同一后台的「撤回」「删除」是红色，危险动作在同屏有两种颜色。 */
 /* 过期时间快捷档：与字段同宽左对齐，一颗颗小链接，不抢主操作 */

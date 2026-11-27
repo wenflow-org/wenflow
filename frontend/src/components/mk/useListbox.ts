@@ -1,4 +1,5 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { resolveZoomScale, visualViewportHeight } from '@/utils/zoom'
 
 let seq = 0
 
@@ -48,18 +49,32 @@ export function useListbox<O>(
   function estimateMenuHeight(): number {
     return Math.min(options().length * 32 + 8, 440)
   }
+  /**
+   * 累计算祖先的缩放系数（CSS `zoom` + transform scale）；实现收敛在 utils/zoom。
+   */
+  const resolveScale = resolveZoomScale
+
   function placeMenu() {
     const el = triggerEl.value
     if (!el) return
     const rect = el.getBoundingClientRect()
-    /* 坐标系换算（2026-11-06 走查）：v2 页在 ≥1600 视口给 .v2-page 加 zoom（1.08~1.3，
-       admin 壳的 .ac 在 4K 也有同机制）。getBoundingClientRect 返回的是**缩放后的视觉坐标**，
-       而弹层虽是 fixed，其数值写在缩放子树里——直接用视觉坐标会向右下漂移
-       （视觉 500px 的触发框漂 ~40px，与视觉距离成正比，知识图谱页的路径下拉即此病）。
-       视觉宽 / 布局宽 = 祖先累计缩放系数（zoom 与 transform 都算在内），
-       视觉坐标 ÷ 系数 = 弹层局部坐标系的数值。offsetWidth 取不到 0 时兜底按 1 算。 */
-    const scale = rect.width / (el.offsetWidth || rect.width) || 1
-    const below = window.innerHeight / scale - rect.bottom / scale
+    /* 触发器被隐藏（display:none / 容器折叠）时 rect 全 0：此时写坐标会把弹层
+       拖到视口左上角，保持原位等它重新出现。 */
+    if (!rect.width && !rect.height) return
+    /* 坐标系换算（2026-11-06 走查，2026-11-25 改为精确取缩放）：v2 页在 ≥1600
+       视口给 .v2-page 加 zoom（1.08~1.3，admin 壳的 .ac 在 4K 也有同机制）。
+       getBoundingClientRect 返回的是**缩放后的视觉坐标**，而弹层虽是 fixed，
+       其数值写在缩放子树里——直接用视觉坐标会向右下漂移。
+       视觉坐标 ÷ 累计缩放 = 弹层局部坐标系的数值。 */
+    const walked = resolveScale(el)
+    const ratio = rect.width / (el.offsetWidth || rect.width) || 1
+    /* 走 computedStyle 拿到的缩放是精确值；若它没识别出来（例如宿主环境用别的
+       机制缩放），再退回「视觉宽 ÷ 布局宽」的估算，保证弹层至少朝正确方向修正。 */
+    const scale = walked !== 1 || Math.abs(ratio - 1) < 0.02 ? walked : ratio
+    /* 向上/向下展开用**可见视口**高度：iOS 键盘与双指缩放只改 visualViewport，
+       window.innerHeight 不变，按它算会把弹层展进键盘区。 */
+    const viewportH = visualViewportHeight()
+    const below = viewportH / scale - rect.bottom / scale
     const measured = (menuEl.value?.scrollHeight || estimateMenuHeight()) / scale
     const up = below < measured + 8 && rect.top / scale > below
     openUp.value = up
@@ -71,14 +86,51 @@ export function useListbox<O>(
       top: up ? 'auto' : `${Math.round(rect.bottom / scale + 4)}px`,
       bottom: up ? `${Math.round(below + 4)}px` : 'auto',
       minWidth: `${Math.round(rect.width / scale)}px`,
+      /* 弹层已 Teleport 到 body（脱离缩放子树），用自身 zoom 还原页面视觉比例：
+         left 先按 scale 换算，再由 zoom 放大回触发框的视觉坐标。 */
+      zoom: String(scale),
       zIndex: inOverlay ? 'calc(var(--mk-z-modal) + 10)' : 'var(--mk-z-menu)'
     }
+  }
+
+  /* 位置跟随（2026-11-25 反馈「排序菜单位移」）：弹层只在 open / scroll / resize
+     时重算，但页面上还有一批「不发事件的重排」——数据加载后工具栏换行、抽屉/侧栏
+     挤占宽度、路由过渡里的 transform 建立新的 fixed 包含块、从后台标签页回来时
+     zoom 断点已变。触发框一旦移动，fixed 弹层就留在旧坐标上（实测可漂出半屏）。
+     开销可控：只在展开态每帧读一次触发框，位置没变就不写样式。 */
+  let followHandle = 0
+  let lastTriggerKey = ''
+  function followTrigger() {
+    if (!open.value) {
+      followHandle = 0
+      return
+    }
+    const el = triggerEl.value
+    if (el) {
+      const r = el.getBoundingClientRect()
+      const key = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`
+      if (key !== lastTriggerKey) {
+        lastTriggerKey = key
+        placeMenu()
+      }
+    }
+    followHandle = requestAnimationFrame(followTrigger)
+  }
+  function startFollow() {
+    if (followHandle) return
+    lastTriggerKey = ''
+    followHandle = requestAnimationFrame(followTrigger)
+  }
+  function stopFollow() {
+    if (followHandle) cancelAnimationFrame(followHandle)
+    followHandle = 0
   }
 
   function openMenu() {
     if (open.value) return
     placeMenu()
     open.value = true
+    startFollow()
     const i = options().findIndex(isSelected)
     activeIndex.value = i >= 0 ? i : 0
     void nextTick(() => {
@@ -89,6 +141,7 @@ export function useListbox<O>(
   }
   function closeMenu() {
     open.value = false
+    stopFollow()
   }
   function toggleMenu() {
     if (open.value) closeMenu()
@@ -187,12 +240,17 @@ export function useListbox<O>(
     document.addEventListener('mousedown', onDocMousedown, true)
     document.addEventListener('scroll', onDocScroll, true)
     window.addEventListener('resize', onWindowResize)
+    /* 移动端双指缩放只改 visualViewport，不触发 window.resize——弹层会留在
+       放大前的坐标上。桌面无 visualViewport 时跳过。 */
+    window.visualViewport?.addEventListener('resize', onWindowResize)
   })
   onBeforeUnmount(() => {
     document.removeEventListener('mousedown', onDocMousedown, true)
     document.removeEventListener('scroll', onDocScroll, true)
     window.removeEventListener('resize', onWindowResize)
+    window.visualViewport?.removeEventListener('resize', onWindowResize)
     if (raf) cancelAnimationFrame(raf)
+    stopFollow()
   })
 
   return {

@@ -61,7 +61,7 @@ let mounted: ReturnType<typeof mount> | null = null;
 async function mountDetail() {
   getPathDetail.mockResolvedValue(payload);
   mounted = mount(V2LearningPathDetail, {
-    global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    global: { stubs: { RouterLink: { template: '<a><slot /></a>' }, teleport: true } },
   });
   await flushPromises();
   return mounted;
@@ -105,11 +105,11 @@ describe('路径详情 · 设计意图收起态给内容摘要（走查 #6）', 
     listPathReplanSnapshots.mockClear();
   });
 
-  it('收起时显示设计依据字段名，展开后由正文接管、不再复述', async () => {
+  it('收起时显示目标标题，展开后由正文接管、不再复述', async () => {
     const w = await mountDetail();
     const preview = w.find('.sidecard__preview');
     expect(preview.exists(), '收起态又只剩「设计意图 + 箭头」').toBe(true);
-    expect(preview.text()).toBe('设计依据：预计产出、目标状态');
+    expect(preview.text()).toBe('把客流排班这件事拆开');
 
     const body = w.find('.sidecard__body');
     expect(body.attributes('style') || '').toContain('display: none');

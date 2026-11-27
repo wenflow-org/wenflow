@@ -275,21 +275,10 @@ const proposal = computed(() => {
     .slice(0, plannedMilestones ?? 5);
   const stageCount = plannedMilestones ?? stages.length;
   const probes = toProbes(cp.prerequisiteDiagnostics ?? cp.prerequisite_diagnostics ?? cp.prerequisite_diagnostics_list);
-  // 单次时长（2026-11-18 用户走查）：确认弹窗要给出轻量耗时预估，数据源与左栏
-  // 「可用时间」同一个字段。只展示单次节奏，不把 objectiveScopeHours 当成用户可感知
-  // 的总学时（那是平台内部用于排课的内容体量，容易和 25 分钟通勤打架）。
-  const rawSessionMinutes = understanding.value.time_dimensions?.sessionsLengthMin;
-  const sessionMinutes = typeof rawSessionMinutes === 'number' && rawSessionMinutes > 0
-    ? rawSessionMinutes
-    : null;
-  // 总时长用于弹窗消歧（3 阶段 · 单次 45 分钟 ≠ 总共 2 小时）：只展示内容体量估算，
-  // 不在聊天里报总账。没有 objectiveScopeHours 时保持不显示，不用阶段数硬乘。
-  const rawTotalHours = understanding.value.time_dimensions?.objectiveScopeHours;
-  const totalHours = typeof rawTotalHours === 'number' && rawTotalHours > 0
-    ? rawTotalHours
-    : null;
+  // 2026-11-25 去时间化：确认弹窗只给方向与阶段结构，不再展示平台默认的单次分钟/
+  // 内容体量估算——默认 25 分钟不是用户给的约束，写成「单次约 25 分钟」会变成假承诺。
   if (!problem && !outcome && stages.length === 0) return null;
-  return { outcome, stages, stageCount, probes, sessionMinutes, totalHours };
+  return { outcome, stages, stageCount, probes };
 });
 
 /** 前置探测题（goal-conversation prerequisiteDiagnostics）→ 展示结构 */

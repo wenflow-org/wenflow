@@ -1228,6 +1228,9 @@ model announcements {
   body        String
   severity    String    @default("info")
   status      String    @default("draft")
+  // 受众（2026-11-26 全站走查）：all=全部 / learner=只给学习者 / admin=只给管理员。
+  // 与 status 正交；运维巡检类公告必须落 admin，否则会出现在学习者顶部横幅。
+  audience    String    @default("all")
   publishedAt DateTime?
   expiresAt   DateTime?
   createdBy   String?

@@ -1,196 +1,136 @@
-# WenFlow
+<div align="center">
 
-![WenFlow 品牌横幅](doc/logo/品牌横幅.png)
+<img src="doc/logo/横版logo.png" alt="WenFlow 问流" width="480" />
 
-> ⚠️ **当前主要开发版本**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) 分支 | main 分支为稳定版
+**先说清你想解决的事，再开始学习。**
 
-**一款从真实问题出发的 AI 学习支持服务平台**
+**问流 WenFlow** 是开源、可自托管的 AI 原生学习平台：先把模糊的目标聊清楚，再生成学习路径，用带白板的回合制课堂带你学，并按遗忘曲线安排复习、按训练负荷管住节奏。
 
-> 核心理念：学习始于对真实问题的澄清，而非对课程的选择。
-
-[English Version](README_EN.md) | 中文版
-
-🌐 **Demo 站点**: https://wenflow.org
-
-> 仅作 Demo 演示，不提供正式服务，会定期清理账号与数据，请勿用于存放重要信息。
-
+[![Demo](https://img.shields.io/badge/demo-wenflow.org-2563eb.svg)](https://wenflow.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml/badge.svg?branch=main)](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
-[![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
-📋 **[更新日志](CHANGELOG.md)** · 按月记录主要功能更新
+[English](README_EN.md) · 中文 · [快速开始](#快速开始)
 
----
+</div>
 
-## 为什么存在？
+在线体验：[wenflow.org](https://wenflow.org)。Demo 站仅作演示，账号与数据会定期清理，请勿存放重要信息。
 
-许多学习困境并非源于努力不足，而是目标过于宏大、资料过载、第一步不够清晰。
+## 为什么说是「AI 原生」
 
-传统学习产品大多以“内容供给”为起点：课程、资料、题库与预设路径。WenFlow 则从另一端切入——先帮助学习者澄清真正要解决的问题，再由此生成可执行的学习路径，并通过对话、输出与反馈持续调整。
+WenFlow 没有预置课程和题库。你直接提出一个想解决的问题，系统先通过对话把目标聊清楚，再动态生成路径和每一节课。
 
-在 AI 能够快速生成大量答案的背景下，更值得训练的能力不再局限于内容记忆，而是：
+## 和直接问 AI 有什么区别？
 
-- **问题定义**：将模糊目标转化为可探索的问题
-- **系统思维**：理解知识、场景与行动之间的结构关系
-- **判断力**：在信息过载中辨别值得采信的内容
-- **AI 协作**：将 AI 作为追问、反馈与推演的伙伴
-- **创造力**：在既有知识之间建立新的联结
+直接问 ChatGPT 或 DeepSeek 也能拿到答案，但定目标、拆计划、检查自己有没有真懂、过几天复习，这些事全得靠你自己记着做。
 
-**答案将日益廉价，问题本身将愈发重要。**
+| | 直接问通用 AI 助手 | 用 WenFlow |
+|---|---|---|
+| **定目标** | 得自己想清楚要学什么、学到哪一步 | 多轮追问，把模糊目标聊清楚，定出怎样算做到，再由你确认 |
+| **排计划** | 计划靠自己记、自己推动 | 生成一条分阶段的学习路径，今天该学什么直接摆出来 |
+| **上课** | 一问一答，默认不检查你是否真的学会 | 回合制课堂：讲一段、问一段；卡住了换讲法、补前置 |
+| **记住你** | 默认不追踪你的学习进度 | 记住薄弱点，下节课接着讲，并按遗忘曲线安排复习 |
+| **管节奏** | 不关心你累不累 | 追踪训练负荷与疲劳，冲太猛时提醒减速 |
 
----
+背后的想法写在[愿景页](https://wenflow.org/vision)。
 
-## 核心体验预览
+## 它适合什么场景
 
-这 7 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
+如果只是想学「某个软件怎么操作」，或者写段脚本批量处理文件，现在直接让 AI 代做就行，没必要专门花时间学。WenFlow 更适合要自己做判断、把底层逻辑想明白的问题——比如带娃遇到作业冲突、做业务决策，或者系统吃透一个新领域。
 
-| ① 从一个问题开始 |
-|:---:|
-| ![从一个问题开始](doc/images/home-start-from-problem.png) |
-| 学习者先陈述问题，而非直接选课 |
+## 以一个真实问题为例
 
-| ② 澄清真实目标 | ③ 生成学习路径 |
-|:---:|:---:|
-| ![澄清真实目标](doc/images/goal-clarification.png) | ![生成学习路径](doc/images/learning-path.png) |
-| AI 通过多轮追问澄清真实目标 | 将模糊目标拆解为阶段、任务与可立即执行的第一步 |
+比如：「孩子不愿写作业，一催就吵，想搞清楚原因，以后自己知道该不该管、怎么管。」
 
-| ④ 进入回合式学习（带课堂白板） |
-|:---:|
-| ![进入回合式学习](doc/images/round-based-learning.png) |
-| AI 讲解时把结构性内容画在白板上（映射表、流程回路、对照表），随教学推进更新；学习者作答并即时获得反馈 |
+从一句话到上完第一节课：
 
-| ⑤ 课后评估 | ⑥ 学习状态追踪 |
-|:---:|:---:|
-| ![学习闭环总览](doc/images/learning-loop-overview.png) | ![学习状态追踪](doc/images/learning-state.png) |
-| 课后生成主题总结、知识点证据与掌握/压力/疲劳读数，并给出后续建议 | LSS / KTL / LF / LSB 持续追踪学习状态，并在疲劳时予以提醒 |
+| ![目标澄清：AI 连续追问，左侧实时收集目标信息](doc/images/goal-clarification.png) | ![学习路径：阶段、任务与进度](doc/images/learning-path.png) |
+|---|---|
+| ![课堂白板：随讲解更新的归因对照表](doc/images/round-based-learning.png) | ![学习状态：训练负荷、疲劳度与今天的安排](doc/images/learning-state.png) |
 
-| ⑦ 运营管理后台 |
-|:---:|
-| ![运营管理后台](doc/images/admin-overview.png) |
-| 18 个场景页的运营与可观测后台：健康度、教学会话、执行日志、模型接入、虚拟学习者实验室 |
+- **① 聊清目标**（左上）：AI 先问孩子的年级、磨蹭时具体是什么样、你现在怎么处理。左侧 7 个字段边聊边收集，其中 3 个由平台先按你的描述填上，标成「平台暂定」，可以直接改。
+- **② 生成路径**（右上）：方案确认后才排课：3 个阶段，两三周，每次 25 分钟。第一阶段的 3 节课已经备好，后两个阶段根据你的实际表现再生成。
+- **③ 带白板的课堂**（左下）：白板上并排列出「就是懒」和三条具体表现，每轮问答后逐格更新归因判断；答偏时直接指出哪里对不上。
+- **④ 学习状态**（右下）：这节课一共 43 分钟，训练负荷和疲劳度都是 29.5，整体状态偏低，页面建议今天以复习或轻量任务为主；同时记下这节课还没站稳的一点，放到下节课开头再练。
 
----
+另外：
 
-## 核心亮点
+- 支持上传课程讲义或书籍，讲到相关处检索并引用原文段落。
+- 兼容任意 OpenAI 接口的供应商，学习者也可以自带 API Key。
+- SQLite 本地文件存储，零外部数据库依赖；MIT 协议，可完全自托管。
 
-### 1. 真正在“上课”的多 Agent 课堂
+## 快速开始
 
-多数 AI 教学工具本质是一个套了提示词的聊天框，聊着聊着就跑偏。WenFlow 背后是一套明确的分工与回合协议：
+只需要一个 OpenAI 兼容接口的 API Key。默认按 [DeepSeek](https://platform.deepseek.com/) 配置，也可以在管理后台换成任意兼容供应商。
 
-```mermaid
-flowchart TD
-    U[学习者提出问题] --> G1[目标澄清：多轮追问到能确认]
-    G1 -- 明确确认 --> P1[路径规划：阶段骨架与每日任务]
-    P1 --> T0[回合式课堂]
-
-    T0 --> T1[讲解 · 提问 · 随堂测验]
-    T1 --> C1{答对 / 能自己讲清?}
-    C1 -- 没掌握 --> T1
-    T1 --> D{连续卡壳或求助?}
-    D -- 是 --> PEER[伴学补强：放慢节奏、换个讲法]
-    D -- 否 --> NEXT{本节学完?}
-    PEER --> NEXT
-    C1 --> NEXT
-
-    NEXT -- 下课 --> W1[课后总结与掌握度评估]
-    W1 --> R1[后续路径调整建议]
-    W1 -. 记住薄弱点 .-> T0
-    R1 -. 你确认后 .-> P1
-```
-
-- **不会自作主张**：生成路径、调整计划都要经过学习者的明确确认，系统不会偷偷改你的路线。
-- **卡壳有兜底**：连续答错或明确求助时，课堂会切进“伴学补强”，先补齐前置概念再往下走，而不是硬念下一段。
-- **跨课有记忆**：每节课的掌握情况会沉淀进学习画像，下一节课从你上次的薄弱点自然接上，并按记忆规律安排复习。
-- **白板随讲随画**：老师讲到结构性内容时，课堂白板会同步上墙图示（脚本行↔手工动作映射、流程回路、对照表等），把纯文字造成的认知压力搬到板上；学生盯着的板随教学推进更新，可放大细看。
-- **你的资料接得上话**：上传“学某课 / 学某书”的资料后，Embedding/Rerank 语义检索把对的段落带进课堂引用，而不是整本塞给模型；未配置语义模型时自动回退关键词检索。
-
-### 2. 像管理体能一样管理脑力负荷
-
-很多人学三天就放弃，不是因为懒，而是开始时冲太猛。WenFlow 借鉴耐力运动科学的负荷与恢复模型，给学习强度也装上“仪表盘”：
-
-| 指标 | 全称 | 用大白话讲 |
-|------|------|------|
-| **LSS** | 学习压力评分 | 今天这一顿学得有多猛：由任务难度、时长、认知负荷与完成率综合算出 |
-| **KTL** | 知识训练负荷 | 你的长期底子：累计学习量按日衰减保留（半衰期约 13.5 天） |
-| **LF** | 学习疲劳度 | 最近累不累：短期累计疲劳（半衰期约 1.9 天），连轴转就会飙升 |
-| **LSB** | 学习状态平衡 | 还能不能继续加量：KTL − LF，偏低时提示过度学习，建议休息或复习 |
-
-### 3. 把教育学理论落进代码
-
-WenFlow 的教学行为不是提示词拍脑袋，每条设计都有对应的理论来源（11 条与产品行为直接对应，完整 16 条含文献链接见 [`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)）：
-
-- **认知负荷理论**：限制单轮知识量与篇幅，长对话自动压缩，拒绝刷屏式讲解
-- **最近发展区 + 支架**：难度随理解度自动升降，受阻时回补前置基础
-- **费曼技巧 + 检索练习**：能独立讲清、并通过随堂检查才算掌握，相信自己“看懂了”不算数
-- **有效失败**：先独立试错，再由 AI 带着对比复盘，把答错变成理解的切口
-- **间隔效应与复习闭环**：按 FSRS-6 记忆模型安排跨天复习（替代早期 SM-2 式固定倍增），学完的知识有安排、不是一次性消耗
-
-### 4. 虚拟学习者实验室
-
-为了在没有大规模真人样本时也能验证教学效果，项目内置 Virtual Learner Lab：内置 200 张默认金标角色卡（不同基础与性格的**纯档案**，首次启动自动载入卡库），从卡库派生学习者后才创建对应账号；虚拟学习者以真实用户的方式完整跑完“澄清目标 → 生成路径 → 上课答题”，再由独立的裁判与角色保真审计给教学质量打分。
-
-- **黑盒模拟**：只用产品界面能看到的动作，不改数据、不读内部状态
-
-### 5. 自带 18 个场景页的管理后台
-
-学习端之外还有一套完整的运营与可观测后台（`/admin`），数据全部来自真实 API：
-
-- **Prompt 设计台（File-as-Truth）**：在线编辑提示词、编译守门、发布与一键回滚，本地 YAML 源码与数据库运行镜像自动同步
-- **全链路可观测**：每次调用的 Token 成本、模型耗时、Agent 执行链路与重试时间线
-- **模型路由**：兼容所有 OpenAI 接口的供应商，默认 `deepseek-v4.1-flash`，可按 Agent 分配快模型或推理模型，也支持用户自带 API Key
-
----
-
-## 3 分钟快速开始
-
-前置条件：**Node.js >= 22.23.4**（`node -v` 确认）；Windows（PowerShell 5.1+）、Linux、macOS 均可；Linux/macOS 也可直接 `./docker-start.sh` 走 Docker。
+### Docker（Linux / macOS）
 
 ```bash
-# 1) 克隆
 git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
+./docker-start.sh
+```
 
-# 2) 安装依赖（新机先按 lockfile 装好，避免启动脚本回退到 npm install 改写 lockfile）
-npm ci
-npm --prefix backend ci
-npm --prefix frontend ci
+首次运行会引导补齐 `backend/.env`：填一个 `AI_API_KEY`，其余密钥自动生成。启动后访问 [http://localhost](http://localhost)。
 
-# 3) 初始化 backend/.env
-#    Windows：交互式向导，自动生成 JWT_SECRET / SECRET_ENCRYPTION_KEYS
+### 本地开发（Windows / Linux / macOS）
+
+前置条件：**Node.js >= 22.23.4**（`node -v` 确认）。
+
+```bash
+# 1) 克隆并安装依赖（务必用 npm ci，原因见下方「常见坑」）
+git clone https://github.com/wenflow-org/wenflow.git
+cd wenflow
+npm ci && npm --prefix backend ci && npm --prefix frontend ci
+
+# 2) 配置 backend/.env（Windows 交互式向导；Linux / macOS 见下方折叠）
 npm run env:setup
-#    Linux / macOS：该向导是 PowerShell 脚本，改用手工配置：
-#    cp backend/.env.example backend/.env
-#    至少填写：
-#      JWT_SECRET=<至少 32 位随机串>
-#      SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
-#      SECRET_ENCRYPTION_KEYS=v1:<32 字节 Base64>
-#      AI_API_KEY=<真实 key>
-#      INIT_ADMIN_PASSWORD=<至少 12 位，含大小写和数字>
-#    生成随机值：
-#      node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
-#      node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
 
-# 4) 一键启动（双库迁移、同步内置 Prompt，再拉起前后端）
+# 3) 一键启动（双库迁移、同步内置 Prompt，再拉起前后端）
 npm run dev
 ```
+
+<details>
+<summary><b>Linux / macOS 手工配置 backend/.env</b></summary>
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+至少填写四项（`JWT_SECRET` ≥32 位随机串，加密键为 32 字节 Base64）：
+
+```dotenv
+JWT_SECRET=<至少 32 位随机串>
+SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
+SECRET_ENCRYPTION_KEYS=v1:<32 字节 Base64>
+AI_API_KEY=<真实 key>
+```
+
+生成随机值：
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
+```
+
+</details>
 
 启动后：
 
 - 学习端：http://localhost:5173
-- 管理后台：http://localhost:5173/admin（用第 3 步设置的管理员账号登录）
+- 管理后台：http://localhost:5173/admin（用上一步设置的管理员账号登录）
 - 后端接口：http://localhost:3001
 
 > 起不来或行为异常时，先跑 `npm run doctor`：只读、秒级，逐项体检 Node / 依赖 / `.env` / 双库 / CORS / 端口并给出修复建议。
 > 从 0 部署到可用需要配哪些（必需 / 按需增强 / 访问拓扑三档），见 [`DEPLOYMENT.md`](DEPLOYMENT.md) 的「从 0 到可用：必需与可选配置」。
 
 <details>
-<summary><b>新机启动清单（2026-11-11 实测：空 AI Key + 无插件密钥）</b></summary>
+<summary><b>新机启动清单（实测：空 AI Key + 无插件密钥）</b></summary>
 
 | 项 | 是否必需 | 实测说明 |
 |---|---|---|
 | Node.js >= 22.23.4 + npm | 必需 | 版本不足会在 Prisma / Vite 阶段失败 |
-| `backend/.env` | 必需 | 缺失时启动脚本退出；Linux/macOS 需按上面第 3 步手工创建 |
+| `backend/.env` | 必需 | 缺失时启动脚本退出；Linux/macOS 需按上面第 2 步手工创建 |
 | `JWT_SECRET`（≥32 位） | 必需 | 缺失或弱值 fail-fast |
 | `SECRET_ENCRYPTION_CURRENT_KEY_ID` + `SECRET_ENCRYPTION_KEYS` | 必需 | `prisma:prepare` 的 `runtime:validate` 会校验；缺了直接退出 |
 | `DATABASE_URL` / `SYSTEM_DATABASE_URL` | 必需 | 默认 `file:./dev.db` / `file:../system.db`，SQLite 零外部依赖 |
@@ -212,12 +152,12 @@ npm --prefix frontend run dev         # 5173
 </details>
 
 <details>
-<summary><b>首次使用与常见坑（点开）</b></summary>
+<summary><b>首次使用与常见坑</b></summary>
 
 - **依赖一律用 `npm ci`，不要用 `npm install`。** 本项目 lockfile 里带镜像来源的 optional / peer 条目（如 `@parcel/watcher`、`@bufbuild/protobuf`），`npm install` 会按当前解析结果重写 lockfile 并整批删掉这些行，实测一次就是数百行纯删除，不是代码改动。需要手动装依赖时：`npm ci && npm --prefix backend ci && npm --prefix frontend ci`。
 - `npm run dev` 已内置 `prisma:prepare`（生成双 Prisma Client + 双库迁移部署）。只有在手动分步、或显式跳过（PowerShell `./start-dev.ps1 -SkipPrisma`，bash `./start-dev.sh --skip-prisma`）时，才需要自己先跑 `npm --prefix backend run prisma:prepare`。
 - 跳过 Prisma 的选项同时会跳过启动前的 core prompts 同步，仅适用于数据库与 prompts 都已就绪的环境。
-- Windows 下 `backend/.env` 缺失或 `JWT_SECRET` 不合格时，`start-dev.ps1` 会自动拉起初始化向导；Linux/macOS 的 `start-dev.sh` 不会生成密钥，需按第 3 步手工填写。
+- Windows 下 `backend/.env` 缺失或 `JWT_SECRET` 不合格时，`start-dev.ps1` 会自动拉起初始化向导；Linux/macOS 的 `start-dev.sh` 不会生成密钥，需按上面第 2 步手工填写。
 - **空 AI Key 的边界**：后端进程能启动，但 `npm run dev`（Windows）会在启动前拦下；纯 UI/后台验收按上面的分步命令启动。不要用占位 key 冒充已配置——`sk-your-api-key` 会被当作未配置。
 - **端口**：默认占用 3001（后端）与 5173（前端）；被占用时一键启动会退出，先停掉旧进程。
 - npm 11.16+ 若在安装时提示 `allow-scripts ... not yet covered`，说明 Prisma / esbuild 等包的安装脚本未执行；按提示运行 `npm approve-scripts --allow-scripts-pending` 后重跑 `npm ci`。本机实测即使跳过这些脚本，Prisma 生成、Vite 开发与前端构建仍可用，但排障时先按提示批准更稳。
@@ -225,35 +165,105 @@ npm --prefix frontend run dev         # 5173
 
 </details>
 
----
-
 ## 项目状态
 
-WenFlow 由个人独立研发，自 2026 年 4 月首个版本起持续迭代；功能验证以内置的 AI 虚拟学习者实验室为主，公开演示站（[wenflow.org](https://wenflow.org)）可在线体验完整闭环。
+WenFlow 由个人独立研发，自 2026 年 4 月首个版本起持续迭代，目前仍是用于验证教学概念的早期实验项目，接口、数据表结构与提示词协议都可能调整。
 
-项目并非对既有学习流程的简单加速，而是试图验证另一条路径：以真实问题为起点，由 AI 协助澄清目标、生成路径并组织反馈，是否更契合 AI 时代的学习方式。
+功能验证以内置的 AI 虚拟学习者实验室为主，公开演示站 [wenflow.org](https://wenflow.org) 可在线体验完整闭环。
 
-项目将持续探索 5 类能力的训练方式：**问题定义能力、系统思维、判断力、AI 协作力、创造力**。
+- `main`：稳定分支，默认克隆到这里
+- `develop`：主开发分支，最新功能与日常提交在这里
 
 ---
+
+## 工程实现
+
+支撑上面这些体验的工程决定（细节在对应文档）：
+
+| 主题 | 一句话 | 深入 |
+|---|---|---|
+| 课堂回合协议 | 讲解、提问、随堂检查按回合推进；连续卡壳时切到「伴学补强」，课后的掌握证据写回学习者画像 | [Agent / Skill 全景](doc/AGENT_SKILL_MANUAL.md) |
+| 学习者模型 | 把长期画像、近期状态、路径级记忆（FSRS-6 复习调度）聚合成一份学习者快照，供教学与路径重排消费 | [学习者模型架构](doc/LEARNER_MODEL_ARCHITECTURE.md) |
+| 学习负荷模型 | 借鉴耐力训练的负荷 / 疲劳 / 状态思路，按天推进，用相对量判断「还能不能加量」 | [学习者中心与状态融合](doc/LEARNER_CENTER_AND_STATE_FUSION.md) |
+| 教育理论映射 | 每条教学设计登记理论来源、文献与代码落点 | [教育理论地图](doc/EDUCATIONAL_THEORY_MAP.md) |
+| 路径生产与重排 | 路径怎么生成、何时触发重排的契约 | [契约](doc/PATH_PRODUCTION_REPLAN_CONTRACT.md) |
+| 提示词与 Skill | File-as-Truth：YAML 真源 → 编译产物 → 数据库镜像，带守门检查与一键回滚 | [Skill 协议 v4](doc/SKILL_PROTOCOL_V4.md) · [开发指南](doc/SKILL_DEVELOPMENT_GUIDE.md) |
+| 模型网关 | OpenAI 兼容接入，按 Agent / Skill 路由模型，SSE 流式、重试预算、思考模式 | [网关设计](doc/MODEL_GATEWAY_DESIGN.md) |
+| 课堂白板 | 结构化教学图按回合随讲随画、逐格更新，把因果与对照画出来，降低纯文字认知负荷 | [教学图研究](doc/DIAGRAM_PEDAGOGY_RESEARCH.md) |
+| 管理后台 | 学习端之外的运营与可观测后台（`/admin`），数据全部来自真实 API | [页面清单](frontend/src/views/admin-redesign/manifest.ts) |
+
+<details>
+<summary><b>课堂的一个回合是怎么跑的</b></summary>
+
+每一节课按回合推进：讲解 → 提问 → 随堂检查。
+
+```mermaid
+flowchart TD
+    Q["从一个问题开始"] --> G["目标澄清<br/>多轮追问"]
+    G -->|你明确确认| P["路径规划<br/>阶段与每日任务"]
+    P --> T["回合式课堂<br/>讲解 · 提问<br/>随堂检查"]
+    T -->|没掌握| T
+    T -->|连续卡壳或求助| H["伴学补强<br/>换讲法·补前置"]
+    H --> T
+    T -->|本节学完| W["课后总结与<br/>掌握度评估"]
+    W --> R["路径调整建议"]
+    R -->|你确认后| P
+    W -.->|薄弱点写入画像| T
+```
+
+- **不会自作主张**：生成路径、调整计划都要经过学习者的明确确认，系统不会偷偷改路线。
+- **卡壳有兜底**：连续答错或明确求助时，课堂会切进「伴学补强」，先补齐前置概念再往下走，而不是硬念下一段。
+- **跨课有记忆**：每节课的掌握情况会沉淀进学习画像，下一节课从上次的薄弱点自然接上，并按记忆规律安排复习。
+- **讲解不刷屏**：限制单轮知识量与篇幅，长对话自动压缩。
+
+</details>
+
+<details>
+<summary><b>学习负荷的四个读数</b></summary>
+
+很多人学三天就放弃，不是懒，是开头冲太猛。WenFlow 借鉴耐力训练里「负荷 / 疲劳 / 状态」的思路，给学习强度也装了一块仪表盘：
+
+| 界面上的读数 | 缩写 | 它在告诉你什么 |
+|---|---|---|
+| **学习压力** | LSS | 这一节课学得有多猛：由认知负荷、效率、时长、完成率与任务类型综合算出 |
+| **训练负荷** | KTL | 长期学习压力的累积：变化平缓，反映近期的底子 |
+| **疲劳程度** | LF | 近期学习压力的累积：变化快，连着学几天就会上去 |
+| **整体状态** | LSB | 综合读数：现在处于精力充沛、最优训练区还是该休息；刚起步、数据不足时显示「积累中」 |
+
+四个读数刻度不同，产品里只看趋势、不横向比数值。判定用的是相对量（疲劳相对底子涨了多快），所以习惯每天多学几节课的人不会被误判成「过度疲劳」。
+
+这是一套工程启发式口径，不是医学或运动科学上的测量。实现见 `backend/src/services/learning/learning-load.pmc.ts` 与 `learning-load-verdict.ts`。
+
+</details>
+
+<details>
+<summary><b>虚拟学习者实验室怎么工作</b></summary>
+
+没有大规模真人样本时，怎么知道教学有没有效？项目内置 Virtual Learner Lab，让 AI 来当学生：
+
+- **AI 扮演学习者**：从角色卡派生出有基础、有性格、有时间预算的虚拟学习者，像真实用户一样走完「澄清目标 → 生成路径 → 上课答题」。
+- **黑盒模拟**：只用产品界面能看到的动作，不改数据、不读内部状态；另有辅助模拟，由人选定故事与目标后跑完整链路。
+- **独立裁判**：教学结束后，由不参与教学的裁判与角色保真审计给教学质量打分。
+- **角色卡库**：仓库自带覆盖学科、工程实操、应试、业务诊断等场景的角色卡；卡只是档案，派生学习者时才创建账号。
+
+需要知道的局限：虚拟学习者自带偏置，而它目前是主要的评测语料，偏置可能被误读成产品特性。已知偏差在[设计文档](doc/VIRTUAL_LEARNER_DESIGN.md)第 11 节逐条量化；链路实现见[链路说明](doc/VIRTUAL_LEARNER_CHAIN.md)。
+
+</details>
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| **前端** | Vue 3 + TypeScript + Vite 6 + 自研 Mk* 管理端原语 + lucide 图标 + Pinia |
+| **前端** | Vue 3 + TypeScript + Vite + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库** | SQLite 双库架构（主库 55 个模型 + system 库 15 表），零外部数据库依赖即可跑通 |
-| **AI 接入** | 四层模型家族：① 对话/推理/评测 LLM——OpenAI 兼容网关（默认均为 deepseek-v4.1-flash），支持 SSE 流式、重试预算与 thinking mode 控制；② 基础设施模型——Embedding / Rerank（默认 bge-m3 / bge-reranker-v2-m3，资料语义检索与重排，未配置时 fail-open 回退关键词）；③ 决策模型（decision-gate，资料质量闸门判定）；④ 生图（text-to-image 外挂）。②③④ 均可选，不配置按 documented 语义降级 |
-| **Agent / Skill** | 5 个顶层 Agent（目标 / 路径 / 教学 / 画像 / 仿真）+ Skill 执行层（提示词真源 `prompts/core/*.yaml` → 编译产物 → 数据库镜像）+ 流程编排器 + 持久化事件链 |
-| **模型配置分层** | 环境变量 → 平台默认 → Agent / Skill 级 → 用户自定义 API 与模型覆盖 |
-| **虚拟实验** | Virtual Learner Lab（黑盒模拟 + 辅助模拟） |
-| **可观测** | Agent / Skill 调用日志、Trace 瀑布、LLM 执行明细 |
+| **数据库** | SQLite 双库架构（业务库 + system 库），零外部数据库依赖即可跑通 |
+| **AI 接入** | OpenAI 兼容网关，支持 SSE 流式、重试预算与 thinking mode 控制；Embedding / Rerank 可选，未配置时 fail-open 回退关键词检索 |
+| **Agent / Skill** | 5 个顶层 Agent（目标 / 路径 / 教学 / 画像 / 仿真）+ Skill 执行层 + 流程编排器 + 持久化事件链 |
 | **安全** | JWT + CSRF + 登录限流 + Secret AES-256-GCM 静态加密 + 敏感存储权限审计 |
-| **部署** | 跨平台启动脚本（`npm run dev`）+ 可选 Nginx 测试部署 + Docker（Linux/macOS 推荐） |
+| **部署** | Docker（Nginx + 后端，只发布 Nginx 端口）或本地 `npm run dev` |
 
 <details>
-<summary><b>项目结构（点开）</b></summary>
+<summary><b>项目结构</b></summary>
 
 ```text
 backend/            Node.js + Express + TypeScript 后端
@@ -268,7 +278,7 @@ backend/            Node.js + Express + TypeScript 后端
     events/         持久化事件与 outbox
     scripts/        正式工具：门禁 / 只读审计 / 探针 / 回填 / 运维
   prisma/           主库 schema 与 migrations；system/ 为 System DB
-frontend/           Vue 3 + TypeScript + Vite 6 前端
+frontend/           Vue 3 + TypeScript + Vite 前端
   src/
     views/v2/             学习者端页面
     views/admin-redesign/ 管理端页面与场景清单 manifest.ts
@@ -276,19 +286,15 @@ frontend/           Vue 3 + TypeScript + Vite 6 前端
     api/ · stores/ · router/ · composables/
 prompts/            File-as-Truth 提示词：core/*.yaml 真源 → skill.*.md 编译产物
 scripts/            仓库根脚本（跑批 / 巡检 / 演示 / 门禁），索引见 doc/DEV_SCRIPTS.md
-virtual-learners/   预制虚拟学习者语料 presets.yaml + 学习者卡库金标 cards/（200 张默认金标，首次启动自动种子）
+virtual-learners/   虚拟学习者语料：presets.yaml + 学习者卡库 cards/
 doc/                设计文档总索引 doc/README.md（过程材料在 gitignored 的 doc/local/）
 .github/workflows/  CI 门禁 quality-check.yml
 ```
 
 </details>
 
----
-
-## 页面地图
-
 <details>
-<summary><b>学习者端（点开）</b></summary>
+<summary><b>页面地图：学习者端</b></summary>
 
 落地页 `/` 与 `/vision`，登录 `/login`、注册 `/register`，登录后进入学习台。
 
@@ -300,7 +306,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 | 目标规划 | `/goal-conversation` | 多轮对话澄清真实目标 |
 | 学习路径 | `/learning-paths` | 路径列表与进度 |
 | 知识图谱 | `/knowledge-map` | 全部路径的知识聚合视图（学习页内只看当前路径） |
-| 学习状态 | `/learning-state` | LSS / KTL / LF / LSB 与疲劳提醒 |
+| 学习状态 | `/learning-state` | 训练负荷、疲劳度与掌握进度 |
 
 核心学习流：注册 / 登录 → `/onboarding` 引导 → `/goal-conversation` 澄清目标 → 你确认后生成路径 → `/learning-paths` → `/learning-path/:id` 路径详情 → `/learn/:taskId` 回合式学习 → `/learn/:taskId/evaluation/:sessionId` 课后评估。
 
@@ -309,25 +315,25 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 </details>
 
 <details>
-<summary><b>管理端场景（点开）</b></summary>
+<summary><b>页面地图：管理端</b></summary>
 
-管理后台在 `/admin`，共 **19 个场景页 / 7 个分组**（另有 1 个隐藏的「运营术语表」，仅供页头帮助入口）：
+管理后台在 `/admin`，数据全部来自真实 API：每次调用的 Token 成本、模型耗时、Agent 执行链路与重试时间线都能在这里查到。侧栏分五组，另有一个置顶的平台总览：
 
-- **总览**：平台总览，当日系统健康度、失败率最高的模型与待排查事项
-- **教学**：用户与学习者、学习状态（风险与疲劳度，支持手动重算快照）、教学会话、目标对话、学习路径、记忆与复习
-- **虚拟学习者**：运行态（并发配额 / 全局限速 / 实例流水 / 批量新建、单步测试）、学习者卡库（角色卡结构化导入导出）
-- **Skill**：字段流转（阶段泳道 + 字段数据旅程 / 逻辑图 + 调用用量）、Skill 目录与插件（Skill 设计二级页含协议编辑、编译、守门检查、发布、回滚、试跑）
-- **系统与接入（运营组「系统设置」页）**：模型与接入（路由 / 连通性 / 网络边界 / 重试超时）＋ 运维工具、数据导出、会话安全、访问与注册
-- **运营**：运营中心（待办工作台 / 反馈 / 成就 / 公告 / 站内通知）
+- **运营**：运营中心（待办、反馈、成就、公告、站内通知）、系统设置（模型与接入、数据导出、会话安全、访问与注册）、用户账号
+- **学习**：目标对话、学习路径、教学会话、学习状态、复习积压
+- **仿真**：虚拟学习者、会话评审报告、学习者卡库
+- **Skill**：字段流转、Skill 目录、插件
 - **观测与排查**：执行日志、审计日志、成本分析、健康中心
 
-场景清单以 [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts) 为准；页面新增、下线与旧链接重定向的历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+运营工作台覆盖教学会话、学习状态风险、复习积压、反馈与公告。
+
+页面清单以 [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts) 为准；页面新增、下线与旧链接重定向的历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 </details>
 
----
+## 运维与进阶
 
-## 进阶部署与运维
+部署拓扑（Docker / 本机 Nginx）、反向代理与前端环境变量见 [`DEPLOYMENT.md`](DEPLOYMENT.md)；下面只留仓库内的运维入口。
 
 <details>
 <summary><b>局域网多设备调试（手机 / 平板真机）</b></summary>
@@ -338,31 +344,6 @@ npm run dev:lan                     # 自动获取局域网 IP
 ```
 
 会把局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不改变管理员登录的 `ADMIN_ACCESS_MODE` 限制。
-
-</details>
-
-<details>
-<summary><b>本机 Nginx 测试部署（HTTP）</b></summary>
-
-```bash
-npm run dev:nginx                        # 依赖本机已装 nginx 且在 PATH
-./start-dev.ps1 -UseNginx -Domain test.example.com
-./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
-```
-
-会自动构建前端并生成配置到 `runtime/nginx/wenflow.nginx.conf`，启动前校验 80 端口可用。
-
-</details>
-
-<details>
-<summary><b>Docker 部署（Linux / macOS）</b></summary>
-
-```bash
-./docker-start.sh          # 交互式补齐 backend/.env 后启动
-docker compose -f docker-compose.operations.yml run --rm backup   # 数据库备份（需先设 WENFLOW_BACKUP_HOST_DIR）
-```
-
-`docker-compose.yml` 提供 migrate / backend / nginx 三个服务，默认只发布 Nginx（80），不发布后端 3001；后端强制 `ADMIN_ACCESS_MODE=private`。详见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
 
 </details>
 
@@ -385,9 +366,9 @@ CI（`.github/workflows/quality-check.yml`）在 push main/master/develop 与 PR
 </details>
 
 <details>
-<summary><b>Prompt 初始化与维护（File-as-Truth）</b></summary>
+<summary><b>Prompt 初始化与维护</b></summary>
 
-真源是 `prompts/core/*.yaml`（唯一人工编辑入口，进 git），编译产物是 `prompts/skill.*.md`（模型唯一读取文本），数据库 `agent_prompts` 只是运行时镜像。编辑 → 编译 → 发布链路（含守门检查与回滚）在管理端「Prompt 设计台」操作，机制见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)，目录说明见 [`prompts/_README.md`](prompts/_README.md)。
+真源是 `prompts/core/*.yaml`，编译产物是 `prompts/skill.*.md`，数据库 `agent_prompts` 只是运行时镜像；编辑 → 编译 → 发布的机制见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)，目录说明见 [`prompts/_README.md`](prompts/_README.md)。
 
 ```bash
 cd backend
@@ -404,23 +385,15 @@ npm run prompts:lint && npm run prompts:core:check
 
 两个 SQLite 库，相对 URL 按各自 schema 目录解析：
 
-| 库 | Schema | 环境变量 | 默认路径 | 表数 |
-|----|--------|----------|----------|------|
-| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 54 |
-| System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 15 |
+| 库 | Schema | 环境变量 | 默认路径 |
+|----|--------|----------|----------|
+| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` |
+| System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` |
 
 - 迁移与校验：`npm run prisma:migrate:verify-clean`（空库回放）、`npm run prisma:baseline:audit`（只读审计）、`npm --prefix backend run prisma:migrate:deploy:all`
 - 备份与维护：`npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`
 - **换 worktree 或移动目录后连错库**：Prisma 客户端会把生成时的相对路径写进 `node_modules/.prisma/client/index.js`，应用可能仍解析到另一棵树的库，表现为“迁移与运行数据分离”。修复方式是**在当前工作区**重新生成客户端并部署迁移：`npm --prefix backend run prisma:prepare`。
 - 不要继续使用旧的 `file:./prisma/*.db`，也不要把 System URL 改成 `file:./system.db`。
-
-</details>
-
-<details>
-<summary><b>前端 API 环境变量</b></summary>
-
-- 默认前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发；无特殊部署需求保持默认即可。
-- 配置只认 `VITE_API_BASE_URL`（`frontend/.env`）；开发模式固定走 `/api` 代理，缺省值也是 `/api`。
 
 </details>
 
@@ -458,21 +431,13 @@ npm run prompts:lint && npm run prompts:core:check
 
 </details>
 
----
+## 文档
 
-## 设计文档入口
-
-仓库文档总表在 [`doc/README.md`](doc/README.md)，按「活规范 / 设计留痕 / 历史快照」分类登记。常用入口：
-
-- **教学理论落点**：[`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)
-- **Agent / Skill**：[`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md)（why）、[`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)（协议）、[`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md)（新建 / 改造 Skill）
-- **架构与模型**：[`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md)、[`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
-- **开发脚本**：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
-- **部署 / 安全 / 管理**：[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`SECURITY.md`](SECURITY.md)、[`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
-- **参与开发**：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型 `develop` → `main`、门禁、文档治理与共享工作树纪律）
-- **更新日志**：[`CHANGELOG.md`](CHANGELOG.md)
-
----
+- 文档总索引：[`doc/README.md`](doc/README.md)（按「活规范 / 设计方案 / 参考资料 / 结果台账」分类）
+- 部署 / 安全 / 运营：[`DEPLOYMENT.md`](DEPLOYMENT.md) · [`SECURITY.md`](SECURITY.md) · [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
+- 开发脚本：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
+- 更新日志：[`CHANGELOG.md`](CHANGELOG.md)
+- 参与开发：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型、门禁、提交规范与共享工作树纪律）
 
 ## License
 
@@ -480,12 +445,6 @@ npm run prompts:lint && npm run prompts:core:check
 
 Copyright (c) 2026 wenflow-org
 
----
-
 ## 致谢
 
 感谢 [Linux.do](https://linux.do/) 社区成员长期以来的支持与分享。
-
----
-
-*当 AI 能够解答一切标准问题时，提出好问题的个体将定义未来。*

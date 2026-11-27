@@ -159,10 +159,10 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
     expect(source, '长回复没有分段处理，会退回字墙').toContain('withReadableParagraphs');
   });
 
-  it('2026-11-18 走查：确认弹窗去掉核心问题、补单次耗时、按钮改成继续微调', () => {
+  it('2026-11-25 去时间化：确认弹窗不再报单次分钟/总时长', () => {
     expect(source, '确认弹窗仍展示「核心问题」学情诊断').not.toContain('<span>核心问题</span>');
-    expect(source, '路径大纲没有单次耗时预估').toContain('单次约 {{ reviewProposal.sessionMinutes }} 分钟');
-    expect(source, '路径大纲没有总时长，3 阶段会被误读成 3 次').toContain('预计总时长约 {{ reviewProposal.totalHours }} 小时');
+    expect(source, '路径大纲仍展示平台默认的单次分钟').not.toContain('reviewProposal.sessionMinutes');
+    expect(source, '路径大纲仍展示内容体量折算的总时长').not.toContain('reviewProposal.totalHours');
     expect(source, '弹窗按钮仍是「再补充点信息」（与调大纲行为不符）').not.toContain('>再补充点信息</button>');
     expect(source, '弹窗按钮没有改成「继续微调方向」').toContain('继续微调方向');
   });

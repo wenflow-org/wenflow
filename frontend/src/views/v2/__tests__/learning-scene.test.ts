@@ -43,3 +43,23 @@ describe('useOpeningSceneViews 恢复卡', () => {
     expect(sceneUnresolved.value).toEqual(['A', 'B', 'C']);
   });
 });
+
+describe('useOpeningSceneViews 重学卡', () => {
+  it('有真实遗留点就点名，不报裸次数', () => {
+    const scene = ref<any>({
+      kind: 'relearn',
+      attempt: 7,
+      recap: { unresolved: ['柏拉图型相论'] },
+    });
+    const { sceneLead } = useOpeningSceneViews(scene);
+    expect(sceneLead.value).toBe('上次「柏拉图型相论」还没稳，这次接着补。');
+    expect(sceneLead.value).not.toMatch(/第\s*\d+\s*次/);
+  });
+
+  it('没有遗留点时不写「重点补上次没掌握的」空话', () => {
+    const scene = ref<any>({ kind: 'relearn', attempt: 3, recap: { unresolved: [] } });
+    const { sceneLead } = useOpeningSceneViews(scene);
+    expect(sceneLead.value).toBe('把这节课再过一遍。');
+    expect(sceneLead.value).not.toContain('第 3 次');
+  });
+});

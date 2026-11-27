@@ -80,16 +80,18 @@
               <span v-if="lifecyclePreparing && !lifecycleFailed" class="metric"><b>准备中</b>课程与任务</span>
               <template v-else-if="!lifecyclePreparing">
                 <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
-                <span class="metric" :title="`已生成 ${lessonCount} 节课，合计约 ${preparedHours} 小时。整条路径计划约 ${path.estimatedHours} 小时`"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${preparedHours} 小时` : '—' }}</b>已备好</span>
+                <span class="metric"><b>{{ lessonCount ? `${lessonCount} 节课` : '—' }}</b>已备好</span>
               </template>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
               <span v-if="designActive && canLearn" class="metric"><b>后续</b>课程正在准备</span>
             </div>
             <!-- 终局交付物（2026-11-18 方向五）：把「上课打卡」讲成「攒成果」。
                  取用户确认方案时定下的 firstDeliverable；旧路径没有该字段时不显示。 -->
+            <!-- 交付物收紧成一行（2026-11-25 走查）：原大框 + 「N 个阶段都朝这份成果收口」
+                 与右栏「设计意图 · 预计产出」重复；现在只留标题行，完整值进 title。 -->
             <div v-if="finalDeliverable" class="hero__deliverable">
               <span class="hero__deliverable-tag">走完会拿到</span>
-              <p>{{ finalDeliverable }}</p>
+              <p class="hero__deliverable-line" :title="finalDeliverable">{{ finalDeliverable }}</p>
             </div>
             <div class="hero__actions">
               <button
@@ -109,6 +111,16 @@
                 @click="openAdjustDialog"
               >
                 调整路径
+              </button>
+              <button
+                v-if="hasSideInfo"
+                ref="sideTriggerRef"
+                type="button"
+                class="btn-ghost"
+                title="查看设计依据、学习资料与调整历史"
+                @click="openSideModal"
+              >
+                路径说明
               </button>
               <button
                 v-if="rollbackAvailable"
@@ -176,7 +188,7 @@
               <span class="kicker">路径准备中</span>
               <strong>还没有阶段与任务</strong>
             </section>
-            <section v-for="(stage, si) in stages" :key="stage.id || si" class="stage card" :class="`stage--${stageStatus(stage, si)}`">
+            <section v-for="(stage, si) in stages" :key="stage.id || si" class="stage card" :class="[`stage--${stageStatus(stage, si)}`, { 'stage--open': openStages.includes(si) }]">
               <button type="button" class="stage__head" :aria-expanded="openStages.includes(si)" @click="toggleStage(si)">
                 <span class="stage__no" :class="`stage__no--${stageStatus(stage, si)}`">
                   <svg v-if="stageStatus(stage, si) === 'done'" viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
@@ -185,9 +197,6 @@
                 <span class="stage__title">
                   <strong>阶段 {{ stageNo(stage, si) }} · {{ stage.title }}</strong>
                   <small>{{ stage.goal || stage.description }}</small>
-                  <!-- 时间说明（2026-10-12）：生成期的诚实声明此前只追加进 description，而本行取 goal 优先
-                       ⇒ 学习者永远看不到。显式提到阶段头（折叠态即可见），披露才真正到达学习者。 -->
-                  <small v-if="stageCapacityNote(stage)" class="stage__capacity">{{ stageCapacityNote(stage) }}</small>
                 </span>
                 <span class="stage__prog">{{ stageTasks(stage).length ? `${stageDoneCount(stage)} / ${stageTasks(stage).length}` : '待解锁' }}</span>
                 <span class="stage__chev" :class="{ 'stage__chev--open': openStages.includes(si) }">⌄</span>
@@ -217,19 +226,18 @@
                   </span>
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
-                    <!-- 知识组件胶囊（2026-11-18 方向五）：这节课点亮哪些能力单元 -->
-                    <div v-if="task.kcs && task.kcs.length" class="task__kcs">
+                    <!-- 知识组件胶囊（2026-11-18 方向五）：这节课点亮哪些能力单元。
+                         2026-11-25 走查：待解锁任务不再挂 KC 标签，避免满屏蓝胶囊比任务标题还抢眼；
+                         当前任务仍保留（低对比度），让「开始学习」成为唯一焦点。 -->
+                    <div v-if="task.kcs && task.kcs.length && taskCls(task) !== 'locked'" class="task__kcs">
                       <span v-for="kc in task.kcs" :key="kc.kcId" class="task__kc">{{ kc.name }}</span>
                     </div>
                   </div>
-                  <!-- 任务行（2026-11-06 二次走查·三行压两行）：左「类型 · 时长 · 资料签」、
-                       右「操作按钮」同一行两端对齐。
-                       资料签从独占一行的「资料：[📄 公文种类]」并进本行——它的信息维度与
-                       「类型 · 时长」同级（都是这条任务的属性），单占一行纯属浪费高度。
-                       时长 nowrap（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」孤字行。 -->
+                  <!-- 任务行（2026-11-06 二次走查·三行压两行）：左「类型 · 资料签」、
+                       右「操作按钮」同一行两端对齐。2026-11-25 去时间化：不再展示猜测的单课分钟。 -->
                   <div class="task__line">
                     <span class="task__meta">
-                      {{ taskKindText(task) }} · <span class="task__mins">{{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</span>
+                      {{ taskKindText(task) }}
                       <!-- 引用签（v-for 走 materialRefsOf：后端按 sectionId|quote 去重，
                            同一章节的不同引文会并存 → 不去重就连排三颗同名签） -->
                       <button
@@ -269,26 +277,9 @@
                        （同一张高亮卡、底部一条细分割线），并把三类操作拆成上下两行——
                        此前 6 个控件挤一排，红色「删除」与「插入」只隔 6px，手一抖就删错任务。 -->
                   <div v-if="editingTaskId === task.id" class="task-edit" role="group" aria-label="任务微调">
-                    <!-- 第一行：时长步进器（左） + 删除（独立在右端，远离下面的插入键） -->
+                    <!-- 第一行：删除（独立在右端，远离下面的插入键）。2026-11-25 去时间化：
+                         单课分钟不再由用户微调，避免继续强化「每节课必须撑够 N 分钟」的暗示。 -->
                     <div class="task-edit__row task-edit__row--split">
-                      <span class="task-edit__field">
-                        <span class="task-edit__label">预计时长</span>
-                        <button
-                          type="button"
-                          class="task-edit__step"
-                          :disabled="structuralEditBusy"
-                          aria-label="缩短 10 分钟"
-                          @click="changeTaskMinutes(task, -10)"
-                        >−10 分</button>
-                        <strong class="task-edit__minutes">{{ task.estimatedMinutes || 30 }} 分钟</strong>
-                        <button
-                          type="button"
-                          class="task-edit__step"
-                          :disabled="structuralEditBusy"
-                          aria-label="延长 10 分钟"
-                          @click="changeTaskMinutes(task, 10)"
-                        >+10 分</button>
-                      </span>
                       <button
                         v-if="task.status === 'todo'"
                         type="button"
@@ -328,10 +319,34 @@
 
           </div><!-- /stages-col -->
 
-          <!-- 侧栏（2026-09-25 收敛）：原 6 张异构卡 → 3 组
-               「进行到哪」（当前任务 + 接下来合并）／「学习资料」（资料 + 原文预览合并）／
-               「设计意图」（默认折叠，依据型信息）；「路径状态」空态卡删除（hero 指标已覆盖） -->
-          <aside class="side">
+          <!-- 2026-11-25 单栏化：右栏不再常驻（300px 常驻列把首屏切成两半，且「设计意图」
+               与 hero 的「走完会拿到」重复）。依据型信息整体收进「路径说明」弹层，默认关闭；
+               主列吃满 1080px，阶段与任务优先。 -->
+          <Teleport to="body">
+            <!-- v-show 而不是 v-if：弹层内容常驻 DOM（关闭时 display:none），
+                 既保证「路径说明」打开即完整，也不让侧栏的折叠状态在每次关闭后重置。 -->
+            <div v-show="sideOpen" class="side-modal-mask" @click.self="closeSideModal">
+              <div
+                ref="sideModalRef"
+                class="side-modal card"
+                :style="{ zoom: sideZoom, '--side-zoom': String(sideZoom) }"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="sideModalTitle"
+                tabindex="-1"
+                @keydown.esc="closeSideModal"
+              >
+                <header class="side-modal__head">
+                  <div>
+                    <span id="sideModalTitle" class="kicker">路径说明</span>
+                    <p>设计依据、学习资料与调整历史</p>
+                  </div>
+                  <button type="button" class="adjust-dialog__close" aria-label="关闭" @click="closeSideModal">
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+                  </button>
+                </header>
+                <div class="side-modal__body">
+                  <aside class="side">
             <!-- 「接下来」卡片整块删除（2026-11-06 走查 图1/2/3）：左栏阶段 1 展开后
                  已经把同一批任务连标题带时长列了一遍，右栏再抄一次且序号对不上
                  （复现缺第 1 条、原第 2 条被标成 1.）。分工改为——
@@ -447,7 +462,11 @@
                 <p v-if="rollbackAvailable" class="lineage-note">每次调整前的安排都会自动留存。</p>
               </div>
             </section>
-          </aside>
+                  </aside>
+                </div>
+              </div>
+            </div>
+          </Teleport>
         </div>
       </template>
     </main>
@@ -752,6 +771,8 @@ import { toast } from '@/utils/toast';
 import { readMaterial } from '@/api/materials';
 import { dedupeMaterialRefs, normalizeMaterialMarkdown } from '@/utils/materialText';
 import { plainMessageHtml } from '@/utils/messageMarkdown';
+import { resolveVisualScale } from '@/utils/zoom';
+import { stripPseudoTime } from '@/utils/timeText';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { pickCurrentTask } from '@/composables/useCurrentTask';
 import { buildGenerationProgress, buildGenerationRetryCopy, isDesignPollingActive } from './learningPathProgress';
@@ -930,7 +951,10 @@ watch(() => reader.value.open, (open) => {
 onBeforeUnmount(() => window.removeEventListener('keydown', onReaderKey));
 
 const openMaterial = ref<number | null>(null);
-const heroDescription = computed(() => String(path.value?.summary || path.value?.description || '').trim());
+/** 路径简介：2026-11-25 去时间化——生成期写入的「每次约 N 分钟 / 每天约 N 分钟」
+ *  不再上屏；真实外部截止（deadlineText）仍由 hero 指标单独承载。 */
+const heroDescription = computed(() => stripPseudoTime(path.value?.summary)
+  || stripPseudoTime(path.value?.description));
 const descExpanded = ref(false);
 const heroDescOverflow = ref(false);
 const heroDescRef = ref<HTMLElement | null>(null);
@@ -1658,13 +1682,6 @@ async function runStructuralEdit(
   }
 }
 
-function changeTaskMinutes(task: Record<string, any>, delta: number) {
-  void runStructuralEdit(
-    { op: delta > 0 ? 'extend_task' : 'shrink_task', taskId: task.id, deltaMinutes: Math.abs(delta) },
-    delta > 0 ? '已延长任务' : '已缩短任务',
-  );
-}
-
 function insertTaskAfter(stage: Record<string, any>, task: Record<string, any>) {
   const title = insertTitle.value.trim();
   if (!title) return;
@@ -1732,13 +1749,6 @@ function objectivesOf(stage: Record<string, any>): string[] {
   return [];
 }
 
-/** 阶段时间说明（生成期诚实声明，2026-10-12）：从 description 提取，折叠态在阶段头直接展示 */
-function stageCapacityNote(stage: Record<string, any>): string {
-  const desc = typeof stage?.description === 'string' ? stage.description : '';
-  const matched = desc.match(/(?:容量说明|时间说明)[：:][^\n]*/);
-  return matched ? matched[0].trim() : '';
-}
-
 function toggleStage(si: number) {
   const i = openStages.value.indexOf(si);
   if (i >= 0) openStages.value.splice(i, 1);
@@ -1747,14 +1757,6 @@ function toggleStage(si: number) {
 
 /* ---------- 进度 ---------- */
 const allTasks = computed(() => stages.value.flatMap((s) => stageTasks(s)));
-/** 已备好课的分钟汇总：与「已备好」同口径，不能拿整条路径总学时冒充已生成部分 */
-const preparedMinutes = computed(() => allTasks.value.reduce(
-  (sum, task) => sum + (Number(task.estimatedMinutes) || 0),
-  0,
-));
-const preparedHours = computed(() => (preparedMinutes.value > 0
-  ? Math.max(0.1, Math.round(preparedMinutes.value / 6) / 10)
-  : 0));
 const hasFlexibleTasks = computed(() => allTasks.value.some((t) => t.adjustability === 'flexible'));
 const hiddenFlexibleCount = computed(() => stages.value.reduce(
   (sum, stage) => sum + stageTasks(stage).length - displayStageTasks(stage).length,
@@ -1869,13 +1871,9 @@ const sceneRows = computed(() => {
   const s = sceneSummary.value;
   if (!s || typeof s === 'string') return [];
   const rows: Array<{ label: string; value: string }> = [];
-  // 预计产出优先与「走完会拿到」同源（末阶段 goal）；旧路径没有末阶段 goal 时，
-  // 才回落到 goal 层 confirmedProposal.firstDeliverable。避免同页出现两个不同的“产出”。
-  const deliverable = finalDeliverable.value || (s.firstDeliverable ? String(s.firstDeliverable) : '');
-  if (deliverable) rows.push({ label: '预计产出', value: deliverable });
-  if (s.targetState) rows.push({ label: '目标状态', value: String(s.targetState) });
-  // 规划焦点（confirmedProposal.keyStages）与左侧阶段列表重复，不再在此展示
-  // 注意：excludedScope/「先不学」不展示——不学的内容无需让用户确认，避免不必要的顾虑（与 goal 预览一致）
+  // 2026-11-25 走查：删掉「预计产出」（与 hero「走完会拿到」同源）和「目标状态」
+  // （同一件事的第三种说法）——首屏不再复读三遍；设计意图只保留原始问题与背景约束。
+  // 规划焦点（confirmedProposal.keyStages）与阶段列表重复，也不再展示。
   if (s.timeBudget) rows.push({ label: '时间预算', value: String(s.timeBudget) });
   if (s.timeHorizon) rows.push({ label: '时间跨度', value: String(s.timeHorizon) });
   return rows;
@@ -1883,8 +1881,35 @@ const sceneRows = computed(() => {
 
 /** 问题背景（问题原文 realProblem）：默认折叠；标题已是同一段时不再重复展示 */
 const bgExpanded = ref(false);
-/** 设计意图卡：默认收起（用户侧收敛：侧栏优先「进行到哪」，意图是依据型信息，2026-09-25） */
+/** 设计意图卡：默认仍收起（列表页预览态可读）；打开「路径说明」弹层时自动展开。 */
 const intentOpen = ref(false);
+/** 「路径说明」弹层（2026-11-25 单栏化）：默认关闭，主列不再常驻右栏。 */
+const sideOpen = ref(false);
+const sideModalRef = ref<HTMLElement | null>(null);
+const sideTriggerRef = ref<HTMLElement | null>(null);
+/** 弹层被 Teleport 到 body，脱离了 .v2-page 的 zoom 上下文；
+    不补缩放的话 4K 档位下弹层字号/间距会比页面小一圈（实测 1.3 档差 30%）。 */
+const sideZoom = ref(1);
+function syncSideZoom() {
+  const page = typeof document !== 'undefined'
+    ? document.querySelector('.v2-page') as HTMLElement | null
+    : null;
+  const scale = (page && resolveVisualScale(page)) || 1;
+  sideZoom.value = Math.round(scale * 100) / 100;
+}
+const hasSideInfo = computed(() => !!sceneSummary.value
+  || pathMaterials.value.length > 0
+  || lineageRows.value.length > 0
+  || !!lineageSourcePathId.value);
+function openSideModal() {
+  syncSideZoom();
+  sideOpen.value = true;
+  nextTick(() => sideModalRef.value?.focus());
+}
+function closeSideModal() {
+  sideOpen.value = false;
+  nextTick(() => sideTriggerRef.value?.focus());
+}
 const sceneProblemBackground = computed(() => {
   const s = sceneSummary.value;
   if (!s || typeof s === 'string') return '';
@@ -1893,6 +1918,13 @@ const sceneProblemBackground = computed(() => {
 });
 
 watch(sceneProblemBackground, () => { bgExpanded.value = false; });
+/** 弹层是「路径说明」的次级入口：打开时直接展示设计意图正文，不让用户再点一次。 */
+watch(sideOpen, (open) => {
+  if (open) {
+    intentOpen.value = true;
+    bgExpanded.value = false;
+  }
+});
 
 /* 收起态摘要（2026-11-11 走查）：只复述已有内容，不写「点击展开」这类操作说明。
    有结构化字段时报字段名；只有标题/背景时退回标题本身。 */
@@ -1989,12 +2021,17 @@ async function viewFeedback(task: Record<string, any>) {
 
 onMounted(() => {
   load();
-  window.addEventListener('resize', measureClampedText);
+  window.addEventListener('resize', onWindowResize);
 });
 onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
-  window.removeEventListener('resize', measureClampedText);
+  window.removeEventListener('resize', onWindowResize);
 });
+/** 4K 档位切换/窗口拉伸时，弹层的补偿缩放要跟着页面走（弹层开着才需要） */
+function onWindowResize() {
+  measureClampedText();
+  if (sideOpen.value) syncSideZoom();
+}
 </script>
 
 <style scoped>
@@ -2098,7 +2135,8 @@ onBeforeUnmount(() => {
 .hero__ring-text b { font-size: 20px; }
 .hero__ring-text small { font-size: 12px; color: var(--faint); }
 
-.detail__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+/* 2026-11-25 单栏化：右栏依据型信息收进「路径说明」弹层，主列吃满 1080px */
+.detail__grid { display: block; }
 .stages { display: grid; gap: 12px; }
 
 .stages__empty {
@@ -2132,14 +2170,8 @@ onBeforeUnmount(() => {
 .stage__no--current { background: var(--blue); color: var(--text-on-primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 13%, transparent); }
 .stage__title strong { display: block; font-size: 15px; }
 .stage__title small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
-/* 时间说明（生成期诚实声明）：与常规副行区分——左边一条浅色竖线 + 略深字色，提示"这是口径说明" */
-.stage__title .stage__capacity {
-  margin-top: 4px;
-  padding-left: 8px;
-  border-left: 2px solid var(--line);
-  color: var(--muted);
-  line-height: 1.5;
-}
+/* 2026-11-25 走查：折叠态不再堆两行验收细则（展开后再看）。 */
+.stage:not(.stage--open) .stage__title > small { display: none; }
 .stage__prog { font-size: 12px; font-weight: 800; color: var(--muted); }
 .stage--current .stage__prog { color: var(--blue-deep); }
 .stage__chev { color: var(--faint); font-size: 15px; transition: transform .18s ease; justify-self: end; }
@@ -2286,17 +2318,25 @@ onBeforeUnmount(() => {
 .task__kcs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .task__kc {
   font-size: var(--mk-fs-micro); line-height: 1; padding: 4px 7px; border-radius: 999px;
-  color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
+  /* 2026-11-25 走查：KC 是任务的二级属性，不再用高饱和蓝底抢「任务标题/开始学习」的焦点 */
+  color: var(--muted); background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
   white-space: nowrap;
 }
-.hero__deliverable {
-  margin-top: 14px; padding: 10px 12px; border-radius: 12px;
-  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
+.task--current .task__kc {
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 15%, transparent);
 }
-.hero__deliverable-tag { font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
-.hero__deliverable p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.55; }
+/* 2026-11-25 走查：交付物从大色块收成一行，不再和右栏/设计意图复读整段 */
+.hero__deliverable {
+  margin-top: 12px; display: flex; align-items: baseline; gap: 8px; min-width: 0;
+}
+.hero__deliverable-tag { flex: 0 0 auto; font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
+.hero__deliverable-line {
+  margin: 0; min-width: 0; font-size: 13px; line-height: 1.5; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .badge--topology { background: transparent; border: 1px dashed color-mix(in srgb, var(--blue) 35%, transparent); color: var(--blue-deep); }
 .stages__toolbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -2342,6 +2382,27 @@ onBeforeUnmount(() => {
 .task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; display: inline-flex; align-items: center; height: 32px; padding: 0 8px; min-width: 44px; border-radius: 8px; }
 .task__lock-label, .task__todo-label { font-size: 12px; color: var(--faint); }
 
+/* 「路径说明」弹层（2026-11-25 单栏化）：原右栏内容整体搬进来，默认关闭 */
+.side-modal-mask {
+  position: fixed; inset: 0; z-index: var(--mk-z-modal, 200);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 56px 16px 24px; overflow: auto;
+  background: color-mix(in srgb, var(--canvas) 62%, transparent);
+  backdrop-filter: blur(3px);
+}
+.side-modal {
+  /* Teleport 出 .v2-page 后不再继承页面 zoom，由 sideZoom 内联补偿；
+     视口高度是视觉 px，先除回逻辑 px，否则 4K 下 max-height 再放大 1.3 会溢出屏幕。 */
+  width: min(760px, 100%);
+  max-height: min(calc(82vh / var(--side-zoom, 1)), 900px);
+  overflow: auto;
+  padding: 20px 22px 22px; display: grid; gap: 14px;
+}
+.side-modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.side-modal__head p { margin: 4px 0 0; font-size: 12.5px; color: var(--faint); }
+.side-modal__body { display: grid; gap: 12px; }
+.side-modal .side { position: static; }
+.side-modal .sidecard { background: var(--canvas); }
 .side { display: grid; gap: 12px; position: sticky; top: 16px; }
 .sidecard { padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
 .sidecard strong { font-size: 15px; line-height: 1.5; }
@@ -2976,7 +3037,8 @@ onBeforeUnmount(() => {
 }
 .reader__card {
   width: min(760px, 100%);
-  max-height: min(86dvh, 900px);
+  /* dvh 会被 .v2-page 的 zoom 放大；折回逻辑 px，避免 4K 下卡片上下被裁 */
+  max-height: min(calc(86dvh / var(--vp-zoom, 1)), 900px);
   display: flex; flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line);

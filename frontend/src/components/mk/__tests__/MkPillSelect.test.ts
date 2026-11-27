@@ -28,7 +28,8 @@ function harness(initial = '', active = false) {
     template: `<MkPillSelect v-model="value" label="状态" aria-label="按状态筛选"
                  :options="OPTIONS" :active="active" />`
   })
-  return mount(Harness, { attachTo: document.body })
+  // 弹层已 Teleport 到 body；测试里用 teleport stub 让它在原位渲染，便于断言
+  return mount(Harness, { attachTo: document.body, global: { stubs: { teleport: true } } })
 }
 
 const trigger = (w: ReturnType<typeof harness>) => w.find('button.mk-pillselect')

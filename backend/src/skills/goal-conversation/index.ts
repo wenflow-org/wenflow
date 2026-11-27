@@ -1,4 +1,5 @@
 import { logger } from '../../utils/logger';
+import { reconcileGoalConversationOutput } from './output-consistency';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { mergeStateDelta } from './delta-merge';
 import {
@@ -1025,6 +1026,18 @@ export function parseGoalConversationResponse(
   }
 
   quickReplies = normalizeProposingQuickReplies(quickReplies, stage);
+  // 输出一致性护栏（2026-11-26）：结构是唯一真值——阶段数/成功标准/确认类快选/默认时间假设
+  // 都在这里做确定性收敛，不依赖模型每次把数字说对。
+  const reconciled = reconcileGoalConversationOutput({
+    reply: dialogueText,
+    quickReplies,
+    understanding,
+    confirmedProposal,
+    stage,
+  });
+  dialogueText = reconciled.reply;
+  quickReplies = reconciled.quickReplies;
+  understanding = reconciled.understanding;
 
   const parsed: GoalConversationAgentResult = {
     userVisible: dialogueText,

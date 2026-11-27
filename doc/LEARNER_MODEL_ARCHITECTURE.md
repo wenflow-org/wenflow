@@ -1,6 +1,6 @@
 # 学习者模型场景设计（新版架构）
 
-> 📌 类型：活规范（实现度 ~90%；Phase 5 已消费；§6 契约表/§10/§11 待补）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（定义学习者快照的契约、数据来源、刷新时机与 admin 观察口径）｜索引见 [doc/README.md](./README.md)。
 
 ## 1. 目标
 
@@ -9,7 +9,7 @@
 - 为教学、路径重调、后台诊断提供统一的学习者快照（Learner Snapshot）
 - 将用户长期画像、近期学习状态、路径级知识记忆从教学链路中解耦
 - 保持现有路径编排器与教学编排器不变，仅新增稳定的上游状态层
-- 为未来 milestone 级路径重构提供可消费的结构化证据
+- 为 milestone 级路径重排（replan）提供可消费的结构化证据
 
 本文档覆盖：
 
@@ -42,37 +42,26 @@
 输出给：
 
 - `TeachingContextBuilder`
-- 未来的 path/milestone replan
+- path/milestone replan
 - admin 观察与诊断
 
 ## 3. 是否需要编排器
 
 学习者模型场景的 orchestrator 已在编排层注册：`learnerAgentRuntimeDefinition`（id `profile-agent`、`managedByCode: true`），三步链路 `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`（`backend/src/coordinators/learner.definition.ts`；已列入 `ORCHESTRATOR_RUNTIME_DEFINITIONS`）。
 
-原因（最初保持无 orchestrator 的考量，Phase 1）：
+判断是否需要独立编排层的口径：
 
 1. 学习者模型场景不是一个独立用户流程，而是跨路径/教学/admin 的共享上游状态层。
-2. 当前主要工作是确定性聚合、事件触发刷新、按需读取，不是多 Agent 多阶段编排。
-3. 过早引入 orchestrator 会放大实现复杂度，包括阶段状态、失败重试、阶段日志与后台管理。
+2. 主要工作是确定性聚合、事件触发刷新、按需读取，不是多 Agent 多阶段编排。
+3. 把它做成多阶段编排会放大实现复杂度（阶段状态、失败重试、阶段日志与后台管理），所以编排链保持单线。
 
-### 当前推荐形态
+只有当出现以下任一需求时，才值得把刷新扩展成多子 Agent 的编排链：多个子 Agent 共同产出快照、刷新成为明显的多阶段流程、存在高成本异步批量重算、需要失败重试 / 阶段日志 / 后台运行状态管理。
+
+### 当前形态
 
 - 对外：`skill:learner-model`
 - 对内：若干 deterministic service
 - 更新方式：事件驱动刷新 + 按需读取
-
-### 未来何时引入 orchestrator
-
-> 本节所列条件已在实现中发生——编排层已注册学习者主链 orchestrator（`learnerAgentRuntimeDefinition`，id `profile-agent`、`managedByCode: true`；链路 `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`）。以下为最初的判断条件，保留供参考。
-
-当满足以下任一条件时，可考虑新增 `learner-refresh-orchestrator`：
-
-- 学习者快照由多个子 Agent 共同产出
-- 刷新过程变成明显的多阶段流程
-- 存在高成本异步批量重算需求
-- 需要失败重试、阶段日志、后台运行状态管理
-
-在此之前，不新增 orchestrator（该阶段已随上述注册结束）。
 
 ## 4. 在新版架构中的位置
 
@@ -97,7 +86,7 @@ teaching-turn-agent / peer-agent / session-wrapup-agent
 
 ### 5.1 Canonical Agent Id
 
-- `skill:learner-model`（别名 `learner-model-agent`，2026-08-09 统一为 canonical 前缀）
+- `skill:learner-model`（别名 `learner-model-agent`）
 
 ### 5.2 输出命名空间
 
@@ -452,15 +441,13 @@ admin v1 优先做：
 - 人工直接改 concept mastery
 - 人工改 teaching hints
 
-### 10.2 推荐页面
+### 10.2 页面
 
 #### 1. Learner Models 列表页
 
-建议新增：
+实现于 `frontend/src/views/admin-redesign/LearnerCenter.vue`。
 
-- `frontend/src/views/admin/LearnerModels.vue`（已实现于 `admin-redesign/LearnerCenter.vue`）
-
-建议展示：
+展示：
 
 - user
 - active path
@@ -475,11 +462,9 @@ admin v1 优先做：
 
 #### 2. Learner Model 详情页
 
-建议新增：
+实现于 `frontend/src/views/admin-redesign/LearnerDetail.vue`。
 
-- `frontend/src/views/admin/LearnerModelDetail.vue`（已实现于 `admin-redesign/LearnerDetail.vue`）
-
-建议 tab：
+tab：
 
 1. Profile
 2. Dynamic State
@@ -536,9 +521,9 @@ query：
 - `pathId?`
 - `limit?`
 
-## 12. 服务拆分建议
+## 12. 服务拆分
 
-学习者模型场景的 orchestrator 已在编排层注册（见 §3）；此外建议引入以下服务：
+学习者模型场景的 orchestrator 已在编排层注册（见 §3）；支撑它的服务：
 
 ### 12.1 `LearnerSnapshotService`
 
@@ -571,7 +556,7 @@ query：
 
 - 响应事件触发局部或全量重算
 
-## 13. 建议文件落点
+## 13. 文件落点
 
 ### 后端 Agent
 
@@ -590,80 +575,25 @@ query：
 ### Teaching 接入
 
 - `backend/src/services/ai-teaching/TeachingContextBuilder.ts`
-- `backend/src/services/ai-teaching/AITeachingCoordinator.ts`（原 `AITeachingOrchestrator.ts`）
-- `backend/src/skills/teaching-turn/`（原 `agents/teaching-turn-agent/index.ts`）
+- `backend/src/services/ai-teaching/AITeachingCoordinator.ts`
+- `backend/src/skills/teaching-turn/`
 
 ### Admin API
 
-- `backend/src/routes/admin/learner-models.ts`
-
-> ⚠️ 2026-08-30 复核：页面实际实现于管理端重构后的新路径（`/admin/learner-models` 与 `/admin/learner-center` 旧路径均重定向至 `/admin/learner-state`）：
-> - 前端列表页：`frontend/src/views/admin-redesign/LearnerCenter.vue`（原设计名 LearnerModels.vue）
-> - 前端详情页：`frontend/src/views/admin-redesign/LearnerDetail.vue`（原设计名 LearnerModelDetail.vue）
+- `backend/src/routes/admin/learner-models.ts`（列表/详情页路由现为 `/admin/learner-state`，`/admin/learner-models` 与 `/admin/learner-center` 重定向至此）
 
 ### Admin 前端
 
-- `frontend/src/views/admin-redesign/LearnerCenter.vue`（原设计 `views/admin/LearnerModels.vue`）
-- `frontend/src/views/admin-redesign/LearnerDetail.vue`（原设计 `views/admin/LearnerModelDetail.vue`）
+- `frontend/src/views/admin-redesign/LearnerCenter.vue`
+- `frontend/src/views/admin-redesign/LearnerDetail.vue`
 - `frontend/src/api/adminApi.ts`
 - `frontend/src/router/index.ts`
 
-## 14. 分阶段实施计划
+## 14. 实现范围
 
-### Phase 1：契约与 Teaching 接入
+已实现：`LearnerSnapshot` / `TeachingLearnerProjection` 契约与 Teaching 接入、Knowledge Memory v1（`taskMastery / conceptStates / milestoneProgress / recentEvidence`）、事件刷新（`goal:understanding:updated`、`path:generated`、`lesson:completed`、`task:completed`、`path:adjusted`）、Admin 观察页（列表 / 详情 / 手动重算 / recent evidence）。
 
-目标：
-
-- 定义 `LearnerSnapshot`
-- 定义 `TeachingLearnerProjection`
-- `TeachingContextBuilder` 接 learner snapshot
-- `skill:learner-model` 输出收口到 `internal.ext.learner`
-
-不做：
-
-- 新表
-- admin 页面
-- replan 消费
-
-### Phase 2：Knowledge Memory v1
-
-目标：
-
-- 计算 path-scoped `knowledgeMemory`
-- 形成 `taskMastery / conceptStates / milestoneProgress / recentEvidence`
-
-### Phase 3：刷新机制
-
-目标：
-
-- 在 `goal:understanding:updated`
-- `path:generated`
-- `lesson:completed`
-- `task:completed`
-- `path:adjusted`
-
-这些节点触发 snapshot 刷新
-
-### Phase 4：Admin 观察页
-
-目标：
-
-- 列表页
-- 详情页
-- 手动重算
-- recent evidence
-
-### Phase 5：Replan 消费
-
-目标：
-
-- milestone/path replan 从 learner memory 读状态
-- 不再只依赖 `completedTaskIds`
-
-已消费（2026-09 起）：
-
-- `requestPathReplan()` 已将 `learnerReplanProjection` 放入返回的 `request.evidence`
-- replan 链路已实际消费该投影作为上游输入（契约见 PATH_PRODUCTION_REPLAN_CONTRACT.md）
+replan 消费：milestone/path replan 从 learner memory 读状态，而不是只依赖 `completedTaskIds`。`requestPathReplan()` 把 `learnerReplanProjection` 放入返回的 `request.evidence`，replan 链路消费该投影作为上游输入（契约见 PATH_PRODUCTION_REPLAN_CONTRACT.md）。
 
 ## 15. 当前决策总结
 

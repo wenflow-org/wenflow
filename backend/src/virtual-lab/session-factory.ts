@@ -31,8 +31,15 @@ function normalizeText(value: any) {
  * 不进入模拟学习者的上下文：避免"观测影响被测对象"——扮演者若知道自己被标成
  * permission_process / emotion_relationship，可能改变表演。只影响 storyContext，
  * 不改存储里的 `virtual_learner_profiles.profile.storyPool`（源头标注仍在）。
+ *
+ * 2026-11-24 补：卡库旧版把评测标注（`expect` / `group` / `focus` / `webSource` /
+ * `privateMaterialBrief`）也放在 goalSeed 里。运行时不消费这些字段，若漏进 storyContext
+ * 等于把「该不该出路径 / 作者的诊断结论」直接喂给扮演者，故一并剥离。
  */
-const AUTHOR_ANNOTATION_KEYS = ['primaryBlockType', 'blockTypeEvidence', 'recurrence'] as const;
+const AUTHOR_ANNOTATION_KEYS = [
+  'primaryBlockType', 'blockTypeEvidence', 'recurrence',
+  'expect', 'group', 'focus', 'webSource', 'privateMaterialBrief',
+] as const;
 
 export function stripAuthorAnnotations(goalSeed: any): any {
   if (!goalSeed || typeof goalSeed !== 'object') return null;

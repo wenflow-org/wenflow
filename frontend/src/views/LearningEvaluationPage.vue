@@ -1138,7 +1138,15 @@ const exportImage = async () => {
   if (!reportRef.value || exportingImage.value) return;
   exportingImage.value = true;
   const collapsedForExport = await expandTranscriptForExport();
+  /* html2canvas-pro 不识别 CSS zoom：报告在 .v2-page 内（≥1600 视口 zoom 1.08–1.3），
+     它会拿视觉 rect 当布局坐标，导出图按 1/zoom 缩小、右侧留白或被裁。导出期间把
+     页面 zoom 摘掉（还原后无痕），截完再恢复。 */
+  const zoomHost = reportRef.value.closest('.v2-page') as HTMLElement | null;
   try {
+    if (zoomHost) {
+      zoomHost.style.setProperty('zoom', '1');
+      await nextTick();
+    }
     const { default: html2canvas } = await import('html2canvas-pro');
     const canvas = await html2canvas(reportRef.value, {
       scale: 2,
@@ -1155,6 +1163,7 @@ const exportImage = async () => {
   } catch (err: any) {
     toast.error(err?.message || '导出图片失败');
   } finally {
+    if (zoomHost) zoomHost.style.removeProperty('zoom');
     exportingImage.value = false;
     if (collapsedForExport) transcriptExpanded.value = false;
   }
@@ -1190,7 +1199,8 @@ onUnmounted(() => {
 
 <style scoped>
 .evaluation-page {
-  min-height: 100vh;
+  /* .v2-page 在 ≥1600 视口有 zoom（1.08–1.3），100vh 会被一起放大、凭空多出滚动 */
+  min-height: calc(100vh / var(--vp-zoom, 1));
   background: var(--canvas);
   padding: 28px 0 64px;
 }

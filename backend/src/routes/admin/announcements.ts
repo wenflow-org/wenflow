@@ -19,6 +19,8 @@ const router = express.Router();
 router.use(authMiddleware);
 
 const SEVERITIES = new Set(['info', 'warning', 'critical']);
+/** 受众（2026-11-26）：all=全部 / learner=只给学习者 / admin=只给管理员（运维、巡检、内部变更） */
+const AUDIENCES = new Set(['all', 'learner', 'admin']);
 
 /**
  * 解析 expiresAt：接受 ISO 8601 带时区时间戳（如 2026-12-31T23:59:59+08:00 / 2026-12-31T15:59:59Z），
@@ -40,6 +42,7 @@ function shape(a: Record<string, unknown>) {
     body: a.body,
     severity: a.severity,
     status: a.status,
+    audience: a.audience ?? 'all',
     publishedAt: a.publishedAt,
     expiresAt: a.expiresAt,
     createdBy: a.createdBy,
@@ -78,7 +81,7 @@ router.get('/', async (_req: Request, res: Response) => {
 /** POST / — 新建（默认草稿；publishNow=true 直接发布） */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { title, body, severity = 'info', expiresAt = null, publishNow = false } = req.body || {};
+    const { title, body, severity = 'info', audience = 'all', expiresAt = null, publishNow = false } = req.body || {};
     if (!title || !String(title).trim()) {
       return res.status(400).json({ success: false, error: '标题必填' });
     }
@@ -87,6 +90,9 @@ router.post('/', async (req: Request, res: Response) => {
     }
     if (!SEVERITIES.has(severity)) {
       return res.status(400).json({ success: false, error: `severity 只能是 ${[...SEVERITIES].join('/')}` });
+    }
+    if (!AUDIENCES.has(audience)) {
+      return res.status(400).json({ success: false, error: `audience 只能是 ${[...AUDIENCES].join('/')}` });
     }
     let expiresAtDate: Date | null = null;
     try {
@@ -105,6 +111,7 @@ router.post('/', async (req: Request, res: Response) => {
         title: String(title).trim(),
         body: String(body).trim(),
         severity,
+        audience,
         expiresAt: expiresAtDate,
         status: publishNow ? 'published' : 'draft',
         publishedAt: publishNow ? new Date() : null,
@@ -172,7 +179,7 @@ router.put('/:id/archive', async (req: Request, res: Response) => {
 /** PUT /:id — 编辑（标题/正文/级别/过期；不改变发布状态） */
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { title, body, severity, expiresAt } = req.body || {};
+    const { title, body, severity, expiresAt, audience } = req.body || {};
     if (!title || !String(title).trim()) {
       return res.status(400).json({ success: false, error: '标题必填' });
     }
@@ -181,6 +188,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     if (!SEVERITIES.has(severity)) {
       return res.status(400).json({ success: false, error: `severity 只能是 ${[...SEVERITIES].join('/')}` });
+    }
+    if (audience !== undefined && !AUDIENCES.has(audience)) {
+      return res.status(400).json({ success: false, error: `audience 只能是 ${[...AUDIENCES].join('/')}` });
     }
     let expiresAtDate: Date | null = null;
     try {
@@ -194,6 +204,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         title: String(title).trim(),
         body: String(body).trim(),
         severity,
+        ...(audience !== undefined ? { audience } : {}),
         expiresAt: expiresAtDate
       }
     });

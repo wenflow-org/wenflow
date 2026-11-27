@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-exit-ticket
-coreHash: 0d20000cb087247230781be74efb1ca46ef8cb4668c9d69c19df3273a7e5fbec
+coreHash: f9b3038e04b4d64a9423ca7a32a14ce22a14f2208828c2df9cb6cb5a67413c27
 coreVersion: 1
 temperature: 0.5
 maxTokens: 64000
@@ -23,6 +23,7 @@ failurePolicy: propagate
 - 「subject（string）」`user:teachingExitTicket.subject`（用户/平台） — 学科/领域（用于题目措辞）
 - 「topic（string）」`user:teachingExitTicket.topic`（用户/平台） — 本课主题
 - 「taskTitle（string）」`user:teachingExitTicket.taskTitle`（用户/平台） — 任务标题（终检题应落在任务要求的可迁移能力上）
+- 「taskMaterial（string?）」`sandbox:teaching.task.material`（编排注入） — 本课材料本体（题面/表格式数据/样本值/原文片段）；需要读数或引用材料时，题干必须从这份材料取真实表头与数据行。缺省表示本课无独立材料
 - 「coreKcs（object[]）」`user:teachingExitTicket.coreKcs`（用户/平台） — 契约核心 KC 列表（name=知识点名，hasIndependentEvidence=是否已有独立证据）；终检题必须从这些 KC 中选一个
 - 「recentDialogue（object[]）」`user:teachingExitTicket.recentDialogue`（用户/平台） — 最近课堂对话（role/content），用于避免出课上已答过的同构题
 
@@ -34,12 +35,14 @@ failurePolicy: propagate
 4. 题目不得包含提示、步骤拆解、答案暗示；不得在题干里写出正确结论或答案键原词
 5. 优先 single_choice（4 项以内，干扰项要像真实误解，不得明显荒谬）；不适合选择题时才用 short_answer，并给 1-3 个「任何正确作答都会出现」的核心词（用 | 合并同义写法，不得用题干里已有的词当要点）
 6. 选择题必须给 correctOptionIds（必须是 options 里真实存在的 id，单选只给一个）；简答题必须给 expectedKeywords
-7. 题干用自然、简短的中文（不超过 2 句），面向学生，不出现「契约/终检/系统/检查点/证据」等内部词
-8. 若选择题，题干末尾自然要求学生「回复选项字母」，让学生知道怎么作答
+7. 题干用自然、简短的中文；面向学生，不出现「契约/终检/系统/检查点/证据」等内部词
+8. 题干默认不超过 2 句；**但需要材料才能作答时，先完整给出表头与必要数据行（Markdown 表格或逐行文本），再问一个问题**——材料展示不计入 2 句限制
+9. 需要读数时优先用 taskMaterial 的表头与数据行；若换新情境，可以给一组**自洽的示例数字**，但必须让题目本身读得通，且不得声称这组数来自用户材料/原文。引用 taskMaterial 的具体事实、专有名词或原文时必须逐字一致，不得改写或补造
+10. 材料里的原文只能来自输入的 taskMaterial 或 recentDialogue；两者都没有、又需要具体数据时，不要凭空编一张表冒充材料，改出不需要外部材料的判断/解释题
 
 ## 输出字段
 
-- question · string — 一道新情境终检题（≤2 句），不含答案与提示
+- question · string — 一道新情境终检题；默认 ≤2 句，需要材料时可先带完整表头与数据行（材料块不计入句数），不含答案与提示
 - type · enum — single_choice|multi_choice|short_answer
 - conceptName · string — 本题考核的核心 KC 名（逐字取自 coreKcs[].name）
 - options · object[]? — 选择题必填，2-4 项：[{ "id": "A", "text": "选项" }]

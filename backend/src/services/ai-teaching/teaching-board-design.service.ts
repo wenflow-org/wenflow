@@ -11,12 +11,19 @@ import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { normalizeTeachingFigureForProbe, type TeachingFigure } from '../../skills/teaching-turn';
 import { FIGURE_KIND_GUIDE } from './teaching-visual.service';
 import type { BoardIntent } from './board-intent';
+import { BOARD_LESSON_KIND_GUIDE, isDegenerateMatrixFigure } from './board-lesson';
+import { logger } from '../../utils/logger';
 
 const BOARD_DESIGNER_PROMPT = loadPromptFile('skill:teaching-board-design')?.systemPrompt || '';
 // 图型契约（每种 kind 的 spec 字段）原本只在 teaching-turn 的 system prompt 里；teaching-board-design
 // 自己那份只讲「画到哪为止」。不拼进来，模型会照着脑补的 `states` 画 state-strip，归一化直接拒绝。
 const BOARD_DESIGNER_SYSTEM = BOARD_DESIGNER_PROMPT
   ? `${BOARD_DESIGNER_PROMPT}\n\n${FIGURE_KIND_GUIDE}`
+  : '';
+// 整课板书模式（课堂阶段协议，2026-11-26）：换成板书专用的图型契约。逐轮配图那份指南的「留白关 / 留 ? /
+// 表格写正文」与「一块板管一节课、一次画完整」正面冲突，两份一起给会各听一半。
+const LESSON_BOARD_DESIGNER_SYSTEM = BOARD_DESIGNER_PROMPT
+  ? `${BOARD_DESIGNER_PROMPT}\n\n${BOARD_LESSON_KIND_GUIDE}`
   : '';
 /**
  * teaching-board-design 是 teaching-turn 的视觉翻译器，跑在同一档对话模型上。
@@ -131,20 +138,35 @@ export function declinesParaphrasedMaterialBoard(taskDescription: string, figure
 export async function designBoard(
   request: BoardDesignRequest,
   context: { userId?: string; sessionId?: string; taskId?: string },
+  options: { lessonPlan?: boolean } = {},
 ): Promise<{ figure: TeachingFigure | null; reason: string }> {
-  if (!BOARD_DESIGNER_SYSTEM) return { figure: null, reason: 'teaching-board-design prompt missing' };
+  const systemPrompt = options.lessonPlan ? LESSON_BOARD_DESIGNER_SYSTEM : BOARD_DESIGNER_SYSTEM;
+  if (!systemPrompt) return { figure: null, reason: 'teaching-board-design prompt missing' };
   let lastReason = 'teaching-board-design call failed';
   // 归一化拒绝（图型契约不成立/两栏逐行相同）是模型选错了形状，不是调用失败：
   // 换一条纠偏指令重画一次，仍不行才 fail-open。温度随重试抬高，避免 0 温稳定复现同一种错。
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const requestForAttempt = attempt === 0 ? request : {
+  // 2026-11-26 新增一类纠偏：空壳矩阵（只有 ✓/— 状态符号、没有可读内容）——挂载层的退化判定发生在
+  // 绘图之后、下游，此前从不回传给绘图员，空壳板一路存活到第 8 版。现在带纠偏指令重画一次。
+  let retryKind: 'normalizer' | 'degenerate' = 'normalizer';
+  const retryRequest = (): BoardDesignRequest => (retryKind === 'degenerate'
+    ? {
+      ...request,
+      instruction: `${request.instruction}\n上一次板面被系统退回（${lastReason}）：格子里只有 ✓/—/≡ 这类状态符号，学生读不出任何内容。请重画——把材料里的表格内容直接写进格子（matrix 的 cells[].t：一行一格一个短语，例如「线粒体基质」「2 丙酮酸 + 6 H₂O」），并用 rowSegments 给每行标上教学段；材料里没有可写进表格的内容时，改画能承载关系的其它图型，或声明不画。`,
+      questionIntent: {
+        ...request.questionIntent,
+        instruction: `${request.questionIntent.instruction}\n上一次板面被系统退回（${lastReason}），请把内容写进格子后重画。`,
+      },
+    }
+    : {
       ...request,
       instruction: `${request.instruction}\n上一次板面被系统校验拒绝（${lastReason}）：两栏每行文字完全相同、或结构契约不成立。请重画——左右两栏必须逐行能看出差异；若两栏只是同一批数据的两种排版，改用 position-line / range-bar / matrix 这类能承载真实关系的图型。`,
       questionIntent: {
         ...request.questionIntent,
         instruction: `${request.questionIntent.instruction}\n上一次板面被系统校验拒绝（${lastReason}），请换一种能真正承载当前关系的图型重画。`,
       },
-    };
+    });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const requestForAttempt = attempt === 0 ? request : retryRequest();
     try {
       const result = await callPrompt<BoardDesignRequest, { figure?: unknown }>({
         agentId: 'skill:teaching-board-design',
@@ -156,7 +178,7 @@ export async function designBoard(
       }, requestForAttempt, {
         ...context,
         // 拼上图型契约后必须走 override：DB ACTIVE prompt 只存绘图员正文，不含 guide。
-        systemPromptOverride: BOARD_DESIGNER_SYSTEM,
+        systemPromptOverride: systemPrompt,
         // 板图 spec 本身只有一两千字，但该模型会先花几千 reasoning token；ACTIVE prompt 的
         // 4000 预算会被推理吃满、正文为空（finishReason=length），必须留出正文空间。
         generationOverride: {
@@ -179,9 +201,20 @@ export async function designBoard(
         // 「无 boardContext → reply 必须纯文本自足」的既有闸兜住）。
         return { figure: null, reason: 'material-paraphrase-board（板面把编号材料概括成短语，学生读不到材料本体）' };
       }
+      if (normalized.figure && attempt === 0 && isDegenerateMatrixFigure(normalized.figure)) {
+        retryKind = 'degenerate';
+        lastReason = 'degenerate-matrix：板上只有状态符号、没有可读内容';
+        logger.info('[AITeaching] 首版板书是空壳矩阵，带纠偏指令重画一次', {
+          sessionId: context.sessionId,
+          taskId: context.taskId,
+          rows: ((normalized.figure.spec as { rowLabels?: unknown[] } | undefined)?.rowLabels ?? []).length,
+        });
+        continue;
+      }
       if (normalized.figure || normalized.reason !== 'rejected-by-normalizer' || attempt === 1) {
         return normalized;
       }
+      retryKind = 'normalizer';
       lastReason = normalized.reason;
     } catch (error) {
       return { figure: null, reason: error instanceof Error ? error.message : String(error) };

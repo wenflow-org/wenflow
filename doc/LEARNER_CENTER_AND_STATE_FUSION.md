@@ -1,24 +1,23 @@
 # 学习者中心与状态融合（Q6 / Q7 专门说明 · 开发者向）
 
-> 📌 类型：活规范（实现度 ~85%；§3.3 多源真值已接线）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（学习者中心的通用/特异维度判别，以及知识状态的聚合、拆分、融合、评估机制）｜索引见 [doc/README.md](./README.md)。
 
-> **本文回答两个原始"北星"问题**（见 [`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §0.5、`20questions/TWELVE_QUESTIONS_INVESTIGATION.md` §6/§7——本地研究资料，未入库）：
+> **本文回答两个"北星"问题**（见 [`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §0.5、`20questions/TWELVE_QUESTIONS_INVESTIGATION.md` §6/§7——本地研究资料，未入库）：
 >
 > - **Q6**：从学习支持服务角度来看，学习者模型更像是学习者中心；**通常有哪些需要考虑的维度，哪些是本项目特异的**？
 > - **Q7**：知识或状态的**聚合、拆分、融合、评估**，**具体是怎么做到的**？
 >
-> **本文是什么（定位）**
+> **定位**
 > - 是**开发者文档**：解释"为什么这样拆、代码在哪、哪些没做"，服务于改造/排障，不承诺产品能力。对外能力以 `README.md` / `ADMIN_OPERATIONS_MANUAL.md` 为准。
 > - 与 [`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) 的分工：那篇讲 `LearnerSnapshot` 的**契约与场景设计**（what）；本文只补 Q6/Q7 特有的**维度判别**与**机制级解释**（why + how），**不重复**其快照字段表。
-> - 相邻：[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)（诊断层 + BKT + 校准闭环）、`LEARNING_SCIENCE_AUDIT.md`（自认边界与溯源）、[`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)（理论落点）。
+> - 相邻：[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)（诊断层 + BKT + 校准闭环）、[`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)（理论落点）。
 >
-> **诚实约定**：每条机制结论尽量带 `文件:行`。凡代码里**没有真正接线**、或只是纯函数/`test-only` 的，本文明确标 **「已实现算法，未接线」** 或 **「未实现/未核实」**，绝不用"架构上支持"糊过去。
+> 标注约定：凡代码里**没有真正接线**、或只是纯函数/`test-only` 的，本文明确标 **「已实现算法，未接线」** 或 **「未实现/未核实」**。
 
 ---
 
 ## 目录
 
-- [0. 为什么有这份文档](#0-为什么有这份文档)
 - [1. 学习者模型：通用维度 vs 特异性维度](#1-学习者模型通用维度-vs-特异性维度)
   - [1.1 通用维度（任何"学习者中心"都需要）](#11-通用维度任何学习者中心都需要)
   - [1.2 本项目特异维度（为什么是它）](#12-本项目特异维度为什么是它)
@@ -37,27 +36,10 @@
   - [4.2 独立传感器：代码裁决的检查点](#42-独立传感器代码裁决的检查点)
   - [4.3 独立锚题探针（证伪，不改写）](#43-独立锚题探针证伪不改写)
   - [4.4 难度调整：从"纯阻尼"到"双向带 + 地板"](#44-难度调整从纯阻尼到双向带--地板)
-  - [4.5 观察 ≠ 因果，以及"阻尼陷阱"](#45-观察--因果以及阻尼陷阱)
+  - [4.5 观察 ≠ 因果，以及难度控制的边界](#45-观察--因果以及难度控制的边界)
 - [5. 与字段数据旅程（Q9 逻辑图）的关系](#5-与字段数据旅程q9-逻辑图的关系)
 - [6. 已知边界与未做](#6-已知边界与未做)
 - [附录 · 代码索引](#附录--代码索引)
-
----
-
-## 0. 为什么有这份文档
-
-**Q6 原话**（`20questions/TWELVE_QUESTIONS_INVESTIGATION.md:80`，本地研究资料，未入库）：
-> 从学习支持服务角度看学习者模型（通常要考虑什么 / 什么是特异的）。
-
-**Q7 原话**（同文件 `:90`）：
-> 知识/状态的聚合与拆分、融合、评估怎么做到的。
-
-**为什么此前"少做"**：这两问的答案**散落在** `LEARNER_MODEL_ARCHITECTURE.md`（快照契约）、`EDUCATIONAL_THEORY_MAP.md`（理论落点）、`LEARNING_SCIENCE_AUDIT.md`（诚实边界）三处，没有一份**把"通用/特异"判据与"聚合→拆分→融合→评估"机制串起来**的开发者文档。
-[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §0.5 把 Q6/Q7 的"剩余"列为 **"专门说明文档（此前少做）"**，§5① 与 §6 也把它列为"现在就能做/剩余可选"。**本文就是补齐这一项**。
-
-**本文修什么**：
-1. 给 Q6 一张"通用维度 → 本项目是否实现 + 证据"的对账表，并明确本项目的**特异维度**（哪些是产品私有、为什么不该照抄通用框架）。
-2. 给 Q7 一条**从 append-only 事件到概念的完整数据旅程**，逐个点名真实的表/服务/纯函数，并**明确区分"已接线"与"仅算法"**。
 
 ---
 
@@ -90,7 +72,7 @@
 | 特异维度 | 为什么特异 | 真实证据 |
 |---|---|---|
 | **"真实问题澄清"起点** | 命题是"学习始于对真实问题的澄清，而非选课"；画像从 goal 对话抽取，而不是先修课程/测评 | `goal_conversations`（`schema.prisma:238`）；`LearnerModelProfile` 的 `narrativeInsights`（`types.ts:66`） |
-| **运动科学负荷隐喻 LSS/KTL/LF/LSB** | 用负荷/疲劳/平衡这套自造标度驱动课堂，是产品私有口径（审计承认是工程启发式） | `learning-load.pmc.ts`（PMC/TSB 日负荷 EWMA，2026-10-15 起为权威时钟）；`learning-load-verdict.ts`（相对量判据 form/acwr）；`TWELVE_QUESTIONS_INVESTIGATION.md:86` |
+| **运动科学负荷隐喻 LSS/KTL/LF/LSB** | 用负荷/疲劳/平衡这套自造标度驱动课堂，是产品私有的工程启发式口径 | `learning-load.pmc.ts`（PMC/TSB 日负荷 EWMA，权威时钟）；`learning-load-verdict.ts`（相对量判据 form/acwr）；`TWELVE_QUESTIONS_INVESTIGATION.md:86` |
 | **预测校准闭环** | 不信"LLM 自报置信度"，用"预测 vs 实际命中率"替代 | `prediction_records`（`schema.prisma:650`）；`PredictionCalibrationService.ts:27` |
 | **记忆与画像分层**（用户级跨路径记忆 vs 路径级概念隔离） | 刻意让"遗忘不分路径"，但"知识结构分路径"，避免跨路径污染 | `ConceptConsolidatorService.ts:9-13`（分层边界）；`memory_traces` 无 `pathId` 唯一约束、`conceptLedger` 按 path 隔离 |
 | **教学提示层 + 任务级难度裁决** | `taskDifficulty` 由代码判定后整体注入课堂 prompt，不让模型自行揣测难度 | `LearnerProjectionService.ts:173` `toTeachingProjection`；`TeachingContextBuilder.ts:131-133` |
@@ -127,7 +109,7 @@
 
 **关键点**：
 - ② 是**事实源**，只追加（`LearnerEvidenceProjector.ts:21`）；③④ 都是**可重建的投影**——这是把"知识/状态聚合"做在代码而非模型里的一半原因。
-- ⑤ 的 LSS/KTL/LF/LSB 是**确定性的 EWMA**。**2026-10-15 负荷模型改造（PMC/TSB）**：时钟由「按课 EWMA」改为「**按天**日负荷 EWMA」——当日负荷 = 该日各节课 `lss` 之和，空闲日以 0 参与（自然回落），半衰期不变（KTL λ=0.95≈13.5 天、LF λ=0.70≈1.9 天，`learning-load.pmc.ts`）；读取侧独立的跨日自然衰减退役（两套时钟合一）。机制判据改**相对量**（`form=ktl−lf`、`acwr=lf/ktl`，单一真理源 `learning-load-verdict.ts`）。都不是 LLM 产出。
+- ⑤ 的 LSS/KTL/LF/LSB 是**确定性的 EWMA**。负荷时钟为**按天**的日负荷 EWMA（PMC/TSB）：当日负荷 = 该日各节课 `lss` 之和，空闲日以 0 参与（自然回落），半衰期 KTL λ=0.95≈13.5 天、LF λ=0.70≈1.9 天（`learning-load.pmc.ts`）；读取侧无独立的跨日自然衰减（两套时钟合一）。机制判据用**相对量**（`form=ktl−lf`、`acwr=lf/ktl`，单一真理源 `learning-load-verdict.ts`）。都不是 LLM 产出。
 - ④ 的 `memory_traces` 是**概念级物化聚合**：复习/温故的结果经 FSRS 更新后落到该行（`fsrs.ts:128` `fsrsSchedule`、`:161` `fsrsRetrievability`）。
 
 > **关于"per-skill 聚合"的诚实说明**：系统**没有**一张"按 skill 聚合的长期状态表"。skill 维度出现在**证据的 `evidenceType`/运行用量**（如 `checkpoint:result`、`task:difficulty:adjustment`）与 `prompt_call_logs` 的运行时统计里；**长期学习状态的聚合键是 `conceptKey`（概念），不是 skill**。这是有意的：教的内容跨 skill 复用，概念才是知识结构的单位。
@@ -187,7 +169,7 @@
 
 **冲突信号（同词异义）**：候选带 `pathTitles`（归属路径），跨 path 是风险信号（`ConceptConsolidatorService.ts:426` `attachOriginPaths`）；不确定的建议落入 `ambiguous` 而非强行合并。
 
-### 3.3 多源真值发现：已实现并接线（2026-09）
+### 3.3 多源真值发现：已实现并接线
 
 `backend/src/services/learner/truth-discovery.ts` 是 Q7 里"多源加权融合"的算法实现，**纯函数、无 IO、确定性**：
 
@@ -196,10 +178,10 @@
 - 元认知校准：`metacognitiveCalibration(self, truth)` 给出带符号 `gap` + `bias`（overconfident/accurate/underconfident）（`:182`）。
 - 设计意图：**"代码裁决一票否决主观声称"**——一条 code 裁决（0.95）远大于自评（0.20），自评不能凭数量/时效压过它（`:33-42`）。
 
-> ✅ **接线现状（2026-11-02 复核）**：该模块已有唯一的生产消费适配层 `concept-truth-fusion.ts`——`:92` `adjudicateConceptTruth` 把多源主张整理成 `TruthClaim`，`:101` 调 `discoverTruth` 裁决；该适配层再被状态评审实调。也就是说：
+> **接线现状**：该模块有唯一的生产消费适配层 `concept-truth-fusion.ts`——`:92` `adjudicateConceptTruth` 把多源主张整理成 `TruthClaim`，`:101` 调 `discoverTruth` 裁决；该适配层再被状态评审实调。
 > - **已接线**：`LearnerStateReviewService.ts:199-215` 把 `conceptAssessments`（LLM 诊断）与锚题代码裁决 `anchor:result` 各自转成 `TruthClaim`，调 `adjudicateConceptTruth` 融合，再经 `concept-belief.applyObservations` 落 BKT 状态。
-> - **算法本身**：融合数学 + 单元测试（`1e1b0fba`），纯函数、无 IO、确定性。
-> - 因此 Q7 的"多源真值融合"当前是**运行中的回路**，不是仅"可用的纯算法"。
+> - **算法本身**：融合数学 + 单元测试，纯函数、无 IO、确定性。
+> - 因此 Q7 的"多源真值融合"是**运行中的回路**，不是仅"可用的纯算法"。
 > - 仍属**注释设计、未接线**的只有：分歧度 `disagreement` 高时降权/触发重测（`truth-discovery.ts:223-236` 末尾注释第 4 条）。
 
 ### 3.4 冲突信号怎么处理
@@ -226,7 +208,7 @@
 - **记忆层**：`memory_traces` 的 `masteryScore` + FSRS 状态；考试目标保留率默认 0.9（`fsrs.ts:38`），到期 = `lastReview + stability` 天（`:143`）。
 - **结果层（最小）**：**保持率 × 间隔**曲线（`memory/retention-curve.ts:79` `buildRetentionCurve`）。按 `elapsedDays` 分桶统计检索成功率，数据来源是既有复习结果，不新增测验（`:1-15`）。
 - **独立层**：代码裁决的检查点 + 独立锚题探针（见下）。
-- **未得**：标准参照后测、延迟后测、迁移测。"有没有学会"在**多数路径上仍是 LLM 自述**（`LEARNING_SCIENCE_AUDIT.md:15`、`TWELVE_QUESTIONS_INVESTIGATION.md:100`）。
+- **未得**：标准参照后测、延迟后测、迁移测。"有没有学会"在**多数路径上仍是 LLM 自述**。
 
 ### 4.2 独立传感器：代码裁决的检查点
 
@@ -260,12 +242,12 @@
 - **软传感只降不升**：连续受挫 ≥2 轮只降档/挡升档，结构上进不了 `canIncrease`（`:222-224,265-269`）。
 - **留痕与效果**：`TaskDifficultyAdjustmentLedger.ts:22` 落 `task:difficulty:adjustment`。
 
-### 4.5 观察 ≠ 因果，以及"阻尼陷阱"
+### 4.5 观察 ≠ 因果，以及难度控制的边界
 
 两条必须随结论一起给出的边界：
 
-- **观察性保持率曲线不是因果**：什么点在什么间隔被回顾由调度器（按稳定性/到期）与配额决定，与概念难度/掌握度相关，不能把"间隔越长成功率越低"直接读成因果（`retention-curve.ts:10-14`、`LEARNING_SCIENCE_AUDIT.md:264`）。要因果结论需**随机分配间隔**（MRT/E1–E3，尚未做）。
-- **阻尼陷阱（历史缺陷，已部分修复）**：难度控制律曾是纯阻尼——7 条降档理由、升档要"无任何理由"永远不成立，稳态必然沉到最低档；而它的"有效"判据（同类降档理由不再出现）**几乎必然自我印证**（降档本身让状态回落）。见 `LEARNING_SCIENCE_AUDIT.md:697-702`、`TaskDifficultyAdjustmentLedger.ts:8`。修复 = 独立传感器 + 双向成功率带（§4.2）。**限定**：修复只对"跨课档位"成立，课内动态另在 skill 层。
+- **观察性保持率曲线不是因果**：什么点在什么间隔被回顾由调度器（按稳定性/到期）与配额决定，与概念难度/掌握度相关，不能把"间隔越长成功率越低"直接读成因果（`retention-curve.ts`）。要因果结论需**随机分配间隔**的实验（MRT/E1–E3），未做。
+- **难度控制律是独立传感器 + 双向成功率带，不是纯阻尼**（见 §4.2、§4.4）。**限定**：这仅对"跨课档位"成立，课内动态另在 skill 层（`TaskDifficultyAdjustmentLedger.ts`）。
 - **弱独立要自认**：检查点的题目与答案键仍由 LLM 产出，独立的只是"评判学习者"这一步（`teaching-checkpoint.ts:345`）；简答按关键词判定仍是噪声源（`independent-success-band.service.ts:96-98`）。
 - **BKT 参数是未拟合先验**，只用于有界判定，不驱动调度（`concept-belief.service.ts:9-13`）；已补经典约束校验（`:64` `validateBktParams`）。
 
@@ -290,7 +272,7 @@ Q9 的产出是 admin 的**「字段数据旅程（逻辑图 · 字段血缘）�
 - `topology/field-hit-rates.ts`（聚合 `prompt_call_logs.extractedJson` 顶层键 → produced/dead/drift）；
 - `topology/topology-field-stats.ts`（把命中率贴到逻辑图字段节点与 routing 边）；
 - `topology/handoff-edge-usage.ts`（哪条交接边真的在跑）；
-- **路由层已拆除**：`routes/admin/platform.ts` 于 2026-09-28 移除调用次数统计整层（原含字段命中率，见 `:241-243`、`:611-615` 注释），路由上已无 `fieldStats` 响应；聚合实现仅保留在 `services/topology/*`（`audit-handoff-edges` 等 CLI 仍用），生产请求链路上暂无消费点。
+- **路由层无此消费点**：`routes/admin/platform.ts` 已无 `fieldStats` 响应；聚合实现仅保留在 `services/topology/*`（`audit-handoff-edges` 等 CLI 仍用），生产请求链路上暂无消费点。
 
 **关系一句话**：学习者状态是**图上的字段/数据**，逻辑图是**这些字段在哪、是否被消费**的运行时视图；Q7 讲的是字段**怎么被聚合/拆分/融合/评估**，Q9 讲的是字段**在编排图上怎么流动**。两者互证：逻辑图的 `dead`/`drift` 统计（`UPGRADE_DIRECTION_20Q.md:153`）能暴露"声明了但没人产出/没人消费"的状态字段。
 
@@ -302,18 +284,18 @@ Q9 的产出是 admin 的**「字段数据旅程（逻辑图 · 字段血缘）�
 2. **无 per-skill 长期状态聚合**：长期状态键是 `conceptKey`，不是 skill（§2.1）。
 3. **掌握判定仍大量依赖 LLM 自述**：先修/后测/迁移测缺位；只有检查点是弱独立。
 4. **结果测量是观测层，非因果**：无随机实验（MRT/E1–E3），保持率曲线不能读因果（§4.5）。
-5. **锚题只标记不改写**：`falsified` 不直接改 masteryScore/信念/难度；但 anchor:result 证据经 `LearnerStateReviewService`（truth-discovery 加权融合，code 0.95 > llm 0.5）**间接**回流 BKT 与 relearnSuggestions（2026-10-05 复核已接线）——「完全无下游」为旧表述；真实模型长跑中仍未大规模验证。
+5. **锚题只标记不改写**：`falsified` 不直接改 masteryScore/信念/难度；但 anchor:result 证据经 `LearnerStateReviewService`（truth-discovery 加权融合，code 0.95 > llm 0.5）**间接**回流 BKT 与 relearnSuggestions；真实模型长跑中仍未大规模验证。
 6. **BKT 参数未拟合**：只是有人工档位的可调先验，`pKnowL` 不驱动间隔/难度。
 7. **D_floor / 成功率带 / 归并阈值都是政策常量**，不是拟合结果（`TaskDifficultyAdjustmentService.ts:28-35`、`independent-success-band.service.ts:20-27`、`ConceptConsolidatorService.ts:26-35`）。
 8. **未建模维度**：SDT 归属/自主/胜任、成长型思维、OLM 自述仲裁、标准化量表（§1.1）。
 9. **死字段/半成品**：`frustrationTolerance`、`BehavioralBaseline` 死默认；`narrativeInsights` 未进确定性判定（§1.3）。
-10. **Q8 延迟锚题复用已落地**：`anchor-probe.ts:310` `selectDelayedAnchorCandidates`（默认延后 `ANCHOR_PROBE_DEFAULT_DELAYED_DAYS = 7` 天，`:46`）对已掌握/完成点做保持率复测；`teaching-checkpoint.ts:592-626` 在 `resolveAnchorProbeTarget` 内把延迟锚题列为**第一优先**（env `TEACHING_DELAYED_ANCHOR_DAYS` 可覆盖），由 `teaching-turn-engine.ts:405` 接入。
+10. **Q8 延迟锚题复用**：`anchor-probe.ts:310` `selectDelayedAnchorCandidates`（默认延后 `ANCHOR_PROBE_DEFAULT_DELAYED_DAYS = 7` 天，`:46`）对已掌握/完成点做保持率复测；`teaching-checkpoint.ts:592-626` 在 `resolveAnchorProbeTarget` 内把延迟锚题列为**第一优先**（env `TEACHING_DELAYED_ANCHOR_DAYS` 可覆盖），由 `teaching-turn-engine.ts:405` 接入。
 
 ---
 
 ## 附录 · 代码索引
 
-> 行号随重构漂移，务必以仓库现状复核（本节引用已在 2026-11-02 复核标题所述要点；`schema.prisma` 指 `backend/prisma/schema.prisma`）。
+> 行号随重构漂移，以仓库现状为准（`schema.prisma` 指 `backend/prisma/schema.prisma`）。
 
 ### 学习者模型 / Q6
 
@@ -364,7 +346,7 @@ Q9 的产出是 admin 的**「字段数据旅程（逻辑图 · 字段血缘）�
 | 难度留痕 | `backend/src/services/learner/TaskDifficultyAdjustmentLedger.ts:22` |
 | 保持率曲线（观测层） | `backend/src/services/memory/retention-curve.ts:79`（边界 `:10-14`） |
 | FSRS 调度与可提取率 | `backend/src/services/memory/fsrs.ts:128,161` |
-| 阻尼陷阱 / 观察非因果 | `LEARNING_SCIENCE_AUDIT.md（已移出仓库，见 git 历史）:264,697-702` |
+| 阻尼陷阱 / 观察非因果 | 本文 §4.2、§4.4 |
 
 ### 逻辑图（Q9）
 
@@ -373,5 +355,5 @@ Q9 的产出是 admin 的**「字段数据旅程（逻辑图 · 字段血缘）�
 | 字段命中率聚合 | `backend/src/services/topology/field-hit-rates.ts:1` |
 | 命中率贴到逻辑图 | `backend/src/services/topology/topology-field-stats.ts:1` |
 | 交接边用量 | `backend/src/services/topology/handoff-edge-usage.ts:1` |
-| 路由 `fieldStats`（已拆除，2026-09-28） | `backend/src/routes/admin/platform.ts` 已无 `fieldStats` 响应（原 :1510）；聚合保留在 `services/topology/*`（CLI/离线用） |
+| 路由 `fieldStats`（已无响应） | `backend/src/routes/admin/platform.ts` 已无 `fieldStats` 响应；聚合保留在 `services/topology/*`（CLI/离线用） |
 | 前端逻辑图 | `frontend/src/views/admin-redesign/DataFlowGraph.vue:58`、`Orchestrator.vue:45` |

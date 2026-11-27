@@ -92,32 +92,12 @@ describe('V2LearningPathDetail 任务微调', () => {
     expect(w.findAll('.task__edit').length).toBe(0);
   });
 
-  it('延长 / 缩短走 extend_task / shrink_task，带 10 分钟增量', async () => {
-    /* 2026-11-06 重构：啰嗦的「缩短/延长 10 分钟」换成步进器 —— [−10 分] 与 [+10 分] */
+  it('去时间化：不再提供延长/缩短任务分钟的入口', async () => {
+    /* 2026-11-25：单课分钟不再参与用户决策，结构微调只保留插入/删除 */
     const w = await mountDetail();
     await w.findAll('.task__edit')[0].trigger('click');
-    const steps = w.findAll('.task-edit__step');
-    expect(steps.length, '步进器应恰好两颗（−10 分 / +10 分）').toBe(2);
-    expect(steps[0].attributes('aria-label')).toBe('缩短 10 分钟');
-    expect(steps[1].attributes('aria-label')).toBe('延长 10 分钟');
-
-    await steps[1].trigger('click'); // +10 分
-    await flushPromises();
-    expect(applyStructuralEdit).toHaveBeenCalledWith('lp_test', {
-      op: 'extend_task',
-      taskId: 't2',
-      deltaMinutes: 10,
-    });
-
-    applyStructuralEdit.mockClear();
-    await w.findAll('.task__edit')[0].trigger('click');
-    await w.findAll('.task-edit__step')[0].trigger('click'); // −10 分
-    await flushPromises();
-    expect(applyStructuralEdit).toHaveBeenCalledWith('lp_test', {
-      op: 'shrink_task',
-      taskId: 't2',
-      deltaMinutes: 10,
-    });
+    expect(w.findAll('.task-edit__step').length).toBe(0);
+    expect(w.text()).not.toContain('预计时长');
   });
 
   it('插入任务带上阶段与插入位置；删除需确认', async () => {

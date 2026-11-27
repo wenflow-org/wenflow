@@ -277,6 +277,14 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
 }
 .mk-kpi-grid > * { flex: 1 1 180px; min-width: 0; }
 
+/* 手机端 KPI 两列（2026-11-26 管理端手机走查 AM-06）：180px 基准在 390 内容宽下
+   只能一列，5 张卡吃掉约 55% 首屏（teaching-sessions 实测表格第一行到 y≈812）。
+   两列仍可读（learner-state 已用 42% / 2% 的 2 列形态自证）；奇数张时末张靠 flex-grow
+   铺满整行，不留半格空洞。 */
+@media (max-width: 1023.98px) {
+  .mk-kpi-grid > * { flex-basis: calc(50% - var(--mk-space-4) / 2); }
+}
+
 /* ----- 卡片 -----
    面是平的：0 阴影 + 1px 发丝线。elevation 只有三档——面=平、悬浮条=shadow-sm、
    弹层=shadow-pop。此前卡片边框+阴影叠加，暗色下阴影不可见、亮色靠阴影撑质感，
@@ -1477,7 +1485,7 @@ html[data-theme='dark'] .mk-link,
    默认按视口扣除 顶栏52 + 状态条~53 + 页脚~40 + 页面内边距与间距 ≈ 230px 计算，
    页面可覆盖 --mk-empty-min-h 调整 */
 .mk-empty--min {
-  min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
+  min-height: var(--mk-empty-min-h, calc((100dvh - 230px) / var(--admin-zoom, 1)));
   place-content: center;
 }
 /* fill 卡 / fill 页内的空态：直接吃掉剩余高度并在其中居中，不再走上面的视口常量。
@@ -1521,7 +1529,7 @@ html[data-theme='dark'] .mk-link,
    靠源码顺序会被后面的 --min 覆盖，故在 --min 上显式排除 --inline。
    实测 MkRowList / LearnerDetail 的 `.mk-loading--inline.mk-loading--min` 高 470px
    （=100dvh-230px），行列表加载态在卡内撑出近一屏空白。--min 只服务整页加载。 */
-.mk-loading--min:not(.mk-loading--inline) { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
+.mk-loading--min:not(.mk-loading--inline) { min-height: var(--mk-empty-min-h, calc((100dvh - 230px) / var(--admin-zoom, 1))); }
 .mk-loading__text { color: var(--mk-muted); }
 
 /* ----- 骨架屏（统一 shimmer）-----

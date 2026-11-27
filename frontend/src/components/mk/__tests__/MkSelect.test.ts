@@ -27,7 +27,8 @@ function harness(initial: unknown, options: unknown = STRING_OPTIONS, extra = ''
     },
     template: `<MkSelect v-model="value" :options="options" aria-label="测试下拉" ${extra} />`
   })
-  return mount(Harness, { attachTo: document.body })
+  // 弹层已 Teleport 到 body；测试里用 teleport stub 让它在原位渲染，便于断言
+  return mount(Harness, { attachTo: document.body, global: { stubs: { teleport: true } } })
 }
 
 const trigger = (w: ReturnType<typeof harness>) => w.find('button[aria-label="测试下拉"]')
@@ -114,5 +115,25 @@ describe('MkSelect · 自绘 listbox', () => {
     await trigger(empty).trigger('click')
     expect(empty.find('.mk-select__empty').text()).toBe('请选择')
     empty.unmount()
+  })
+
+  it('触发器被重排挪走（无 scroll/resize 事件）时，弹层跟住新位置', async () => {
+    /* 2026-11-25 用户反馈「排序菜单位移」：数据加载后工具栏换行、抽屉挤占宽度、
+       页面缩放换档这类重排不发 scroll/resize，弹层会停在旧坐标（实测可漂出半屏）。
+       rAF 跟随必须重新贴到触发框左缘。 */
+    const w = harness('')
+    const button = trigger(w).element as HTMLElement
+    let left = 100
+    button.getBoundingClientRect = () => ({
+      left, top: 50, right: left + 60, bottom: 80, width: 60, height: 30,
+      x: left, y: 50, toJSON: () => ({})
+    }) as DOMRect
+    await trigger(w).trigger('click')
+    expect(menu(w).attributes('style')).toContain('left: 100px')
+
+    left = 320
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(menu(w).attributes('style')).toContain('left: 320px')
+    w.unmount()
   })
 })

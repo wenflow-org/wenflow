@@ -1,196 +1,140 @@
-# WenFlow
+<div align="center">
 
-![WenFlow Banner](doc/logo/品牌横幅.png)
+<img src="doc/logo/横版logo.png" alt="WenFlow" width="480" />
 
-> ⚠️ **Current Main Development**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) branch | main is stable
+**Say clearly what you want to solve before you start learning.**
 
-**An AI learning-support service platform that starts from real problems**
+**WenFlow** (问流) is an open-source, self-hostable AI-native learning platform: it talks a vague goal into focus,
+builds a learning path from it, teaches in round-based lessons with a whiteboard, schedules reviews
+along the forgetting curve, and manages your pace with a training-load model.
 
-> Core idea: learning begins with clarifying the real problem, not with choosing a course.
-
-English Version | [中文版](README.md)
-
-🌐 **Demo Site**: https://wenflow.org
-
-> Demo only, not for production use, and all accounts and data are periodically purged. Do not store important information.
-
+[![Demo](https://img.shields.io/badge/demo-wenflow.org-2563eb.svg)](https://wenflow.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml/badge.svg?branch=main)](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
-[![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
-📋 **[Changelog](CHANGELOG.md)** · Monthly feature updates
+English · [中文](README.md) · [Quick start](#quick-start)
 
----
+</div>
 
-## Why WenFlow?
+Try it at [wenflow.org](https://wenflow.org). The demo is for evaluation only; accounts and data are purged periodically, so do not store anything important there.
 
-Many learning difficulties stem not from a lack of effort, but from goals that are too broad, an overload of materials, and an unclear first step.
+## What makes it "AI-native"
 
-Most learning products start by supplying content: courses, materials, exercises, and predefined paths. WenFlow takes a different approach — it first helps learners clarify the problem they actually need to solve, then generates an actionable learning path from it, refined continuously through dialogue, output, and feedback.
+WenFlow ships no courses or question banks. You state a problem you want to solve; a conversation turns it into a clear goal, and the path and each lesson are generated from there.
 
-As AI becomes increasingly capable of producing answers, the skills worth cultivating are no longer limited to memorizing content, but:
+## How is it different from just asking an AI?
 
-- **problem definition**: turning a vague goal into an explorable question
-- **systems thinking**: understanding the structural relationships between knowledge, context, and action
-- **judgment**: discerning what is worth trusting amid information overload
-- **AI collaboration**: treating AI as a partner for questioning, feedback, and reasoning
-- **creativity**: making new connections between existing knowledge
+You can ask ChatGPT or DeepSeek and get an answer, but setting the goal, breaking it into a plan, checking whether you really understood it, and reviewing it days later are all left to you.
 
-**Answers will become increasingly abundant; the quality of the questions will matter more.**
+| | Asking a general AI assistant | Using WenFlow |
+|---|---|---|
+| **Set the goal** | You decide what to learn and how far | Questions turn a vague goal into a clear one and define what counts as done; you confirm it |
+| **Plan** | The plan is yours to keep and push forward | A phased path is generated; today's task is right there |
+| **Learn** | Question and answer, with no check that you really got it | Round-based lessons: explain, then ask; a new angle or missing prerequisites when stuck |
+| **Remember you** | Your learning progress is not tracked by default | Weak spots are remembered and picked up next lesson; reviews follow the forgetting curve |
+| **Pace** | Not concerned with how tired you are | Training load and fatigue are tracked; you are told to ease off when pushing too hard |
 
----
+The thinking behind the project is on the [vision page](https://wenflow.org/vision) (Chinese).
 
-## Core Experience Preview
+## When it fits
 
-These seven screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
+If you just want to learn how a piece of software works, or have a script written to batch-process files, hand it to AI — there is no need to spend time learning it. WenFlow is for problems where you have to make the judgment and understand the underlying logic: a homework conflict at home, a business decision, or getting to grips with a new field.
 
-| ① Start from a Real Problem |
-|:---:|
-| ![Start from a Real Problem](doc/images/home-start-from-problem.png) |
-| Learners state their problem first, rather than choosing a course |
+## One real question, end to end
 
-| ② Clarify the Real Goal | ③ Generate a Learning Path |
-|:---:|:---:|
-| ![Clarify the Real Goal](doc/images/goal-clarification.png) | ![Generate a Learning Path](doc/images/learning-path.png) |
-| The AI clarifies the real goal through multi-round questioning | A vague goal becomes phases, tasks, and an actionable first step |
+For example: "My child won't do homework, and every attempt to hurry them ends in a fight. I want to understand why, so next time I know whether to step in and how."
 
-| ④ Enter Round-based Learning (with the Classroom Whiteboard) |
-|:---:|
-| ![Enter Round-based Learning](doc/images/round-based-learning.png) |
-| While teaching, the AI draws structural content on the whiteboard (mappings, flow loops, comparisons); the board updates as the lesson advances, and answers get immediate feedback |
+From one sentence to the end of the first lesson:
 
-| ⑤ Post-session Evaluation | ⑥ Learning State Tracking |
-|:---:|:---:|
-| ![Learning Loop Overview](doc/images/learning-loop-overview.png) | ![Learning State Tracking](doc/images/learning-state.png) |
-| A post-session summary with per-knowledge-point evidence and mastery / pressure / fatigue readings, plus next-step advice | LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
+| ![Goal clarification: the AI asks follow-up questions while the sidebar collects goal information](doc/images/goal-clarification.png) | ![Learning path: stages, tasks and progress](doc/images/learning-path.png) |
+|---|---|
+| ![Classroom whiteboard: an attribution table that fills in as the lesson advances](doc/images/round-based-learning.png) | ![Learning state: training load, fatigue and today's plan](doc/images/learning-state.png) |
 
-| ⑦ Operations Admin Console |
-|:---:|
-| ![Operations Admin Console](doc/images/admin-overview.png) |
-| 19 scene pages of operations and observability: health, teaching sessions, execution logs, model access, the virtual learner lab |
+- **① Clarify the goal** (top left): the AI asks about the child's grade, what the dawdling looks like, and how you handle it now. Seven fields are collected as you talk; three are filled in from what you said, marked as tentative, and can be edited.
+- **② Generate the path** (top right): lessons are planned only after you confirm: three stages, two to three weeks, about 25 minutes each. The first stage's three lessons are ready; the next two are generated from how you actually do.
+- **③ Lessons with a whiteboard** (bottom left): the board puts "they're just lazy" beside three concrete behaviours and updates the attribution cell by cell after each exchange; when an answer misses, it says which cell doesn't line up.
+- **④ Learning state** (bottom right): the lesson took 43 minutes; training load and fatigue are 29.5 each and overall state is low, so the page suggests review or light work today. It also notes the point that didn't hold and schedules it for the start of the next lesson.
 
----
+The screenshots are in Chinese; the UI is currently Chinese-only.
 
-## Highlights
+Also:
 
-### 1. A multi-agent classroom that actually teaches
+- Upload course notes or a book, and lessons retrieve and quote the relevant passages.
+- Any OpenAI-compatible provider works, and learners can bring their own API key.
+- SQLite files with no external database service; MIT licensed and fully self-hostable.
 
-Most AI teaching tools are a chat box with a prompt attached, and the conversation drifts. WenFlow runs on an explicit division of labour and a round-based protocol:
+## Quick Start
 
-```mermaid
-flowchart TD
-    U[Learner states a problem] --> G1[Goal clarification: clarifying questions until confirmable]
-    G1 -- explicit confirmation --> P1[Path planning: phase skeleton and daily tasks]
-    P1 --> T0[Round-based classroom]
+All you need is an API key for an OpenAI-compatible endpoint. [DeepSeek](https://platform.deepseek.com/) is the default, and any compatible provider can be configured in the admin console.
 
-    T0 --> T1[Explain, ask, quiz]
-    T1 --> C1{Correct / can explain it back?}
-    C1 -- not mastered --> T1
-    T1 --> D{Repeatedly stuck or asks for help?}
-    D -- yes --> PEER[Peer reinforcement: slower pace, different explanation]
-    D -- no --> NEXT{Lesson complete?}
-    PEER --> NEXT
-    C1 --> NEXT
-
-    NEXT -- wrap up --> W1[Post-session summary and mastery evaluation]
-    W1 --> R1[Follow-up path adjustment suggestion]
-    W1 -. remembers weak spots .-> T0
-    R1 -. after your confirmation .-> P1
-```
-
-- **It never acts on its own**: generating a path or changing a plan requires the learner's explicit confirmation.
-- **Getting stuck is handled**: after repeated wrong answers or an explicit request for help, the session switches into peer reinforcement and rebuilds the missing prerequisites instead of pushing on.
-- **Memory carries across lessons**: each session feeds the learner profile, so the next lesson picks up from the weak spots and schedules reviews according to memory science.
-- **A whiteboard that draws along**: when the tutor hits structural content, the classroom whiteboard puts a figure on the board (script-line-to-manual-step mappings, flow loops, side-by-side comparisons), moving the cognitive weight of dense text onto the board; the board keeps updating as the lesson advances and can be zoomed in.
-- **Your materials join the conversation**: upload materials for "learning a course / a book" and Embedding/Rerank semantic search brings the right passages into the lesson as references instead of stuffing the whole book into the model; without semantic models configured it falls back to keyword search automatically.
-
-### 2. Managing cognitive load like physical training load
-
-People often quit after three days, not out of laziness but because they start too hard. WenFlow borrows the load-and-recovery model from endurance sports and gives study intensity its own dashboard:
-
-| Metric | Full name | In plain words |
-|------|------|------|
-| **LSS** | Learning Stress Score | How hard today's session hit: computed from task difficulty, duration, cognitive load, and completion rate |
-| **KTL** | Knowledge Training Load | Your long-term base: accumulated study load with daily decay retention (half-life ≈ 13.5 days) |
-| **LF** | Learning Fatigue | How tired you are right now: short-term accumulated fatigue (half-life ≈ 1.9 days) that spikes when you study back-to-back |
-| **LSB** | Learning State Balance | Whether you can take more: KTL − LF; when low, the platform warns against over-learning and suggests rest or review |
-
-### 3. Educational theory that lands in code
-
-WenFlow's teaching behaviour is not prompt guesswork; each design point has a theory behind it (11 of them map directly to product behaviour, and the full 16 with literature links are in [`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)):
-
-- **Cognitive load theory**: caps the knowledge points and length of each turn, compresses long conversations instead of flooding the screen
-- **Zone of proximal development + scaffolding**: difficulty rises and falls with demonstrated understanding, and prerequisites are rebuilt when progress stalls
-- **Feynman technique + retrieval practice**: being able to explain it back and pass the in-session check is what counts, not a feeling of “I get it”
-- **Productive failure**: try first, then compare and integrate with the AI, turning wrong answers into understanding
-- **Spacing and the review loop**: reviews are scheduled across days by the FSRS-6 memory model (replacing the earlier SM-2-style fixed multiplier), so knowledge is maintained rather than consumed once
-
-### 4. Virtual Learner Lab
-
-To validate teaching quality without a large human sample, the project ships a Virtual Learner Lab: the library comes seeded with 200 default golden role cards (different backgrounds and personalities, **pure profiles** — auto-loaded on first start), and an account is only created when a learner is derived from a card. Virtual learners then run the full flow like real users — clarify the goal, generate the path, attend the lesson — while an independent judge and a role-fidelity audit score the teaching.
-
-- **Black-box simulation**: only actions visible through the product UI, no data edits, no reading internal state
-- **Quick Learn**: pick a task, complete one lesson automatically, and get a report for fast regression
-
-### 5. An admin console with 19 scene pages
-
-Beyond the learner app there is a full operations and observability console (`/admin`), all backed by real APIs:
-
-- **Prompt Studio (File-as-Truth)**: edit prompts online, compile with gates, publish and roll back in one click; local YAML sources and the runtime mirror in the database stay in sync
-- **End-to-end observability**: token cost, model latency, agent execution chains and retry timelines for every call
-- **Model routing**: any OpenAI-compatible provider, defaulting to `deepseek-v4.1-flash`; fast or reasoning models can be assigned per agent, and users can bring their own API key
-
----
-
-## Quick Start in 3 Minutes
-
-Requirements: **Node.js >= 22.23.4** (`node -v`); Windows (PowerShell 5.1+), Linux, or macOS; on Linux/macOS you can also run `./docker-start.sh` to use Docker.
+### Docker (Linux / macOS)
 
 ```bash
-# 1) Clone
 git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
+./docker-start.sh
+```
 
-# 2) Install dependencies (fresh machines: use the lockfile, so the start script does not fall back to npm install)
-npm ci
-npm --prefix backend ci
-npm --prefix frontend ci
+On first run the script walks you through `backend/.env`: enter an `AI_API_KEY` and the remaining secrets are generated. Then open [http://localhost](http://localhost).
 
-# 3) Initialise backend/.env
-#    Windows: interactive wizard; generates JWT_SECRET / SECRET_ENCRYPTION_KEYS for you
+### Local development (Windows / Linux / macOS)
+
+Prerequisite: **Node.js >= 22.23.4** (check with `node -v`).
+
+```bash
+# 1) Clone and install (always npm ci; see "Common pitfalls" below for why)
+git clone https://github.com/wenflow-org/wenflow.git
+cd wenflow
+npm ci && npm --prefix backend ci && npm --prefix frontend ci
+
+# 2) Configure backend/.env (Windows wizard; Linux / macOS see the fold below)
 npm run env:setup
-#    Linux / macOS: the wizard is PowerShell-only; configure manually:
-#    cp backend/.env.example backend/.env
-#    Fill in at least:
-#      JWT_SECRET=<random string, 32+ chars>
-#      SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
-#      SECRET_ENCRYPTION_KEYS=v1:<32-byte Base64>
-#      AI_API_KEY=<real key>
-#      INIT_ADMIN_PASSWORD=<12+ chars, upper/lower case and digits>
-#    Generate random values:
-#      node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
-#      node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
 
-# 4) One-command start (migrates both databases, syncs built-in prompts, then starts both ends)
+# 3) One-command start (migrates both databases, syncs built-in prompts, then starts both ends)
 npm run dev
 ```
+
+<details>
+<summary><b>Configuring backend/.env by hand on Linux / macOS</b></summary>
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Fill in at least these four (`JWT_SECRET` is a random string of 32+ chars; the encryption key is 32 bytes in Base64):
+
+```dotenv
+JWT_SECRET=<random string, 32+ chars>
+SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
+SECRET_ENCRYPTION_KEYS=v1:<32-byte Base64>
+AI_API_KEY=<real key>
+```
+
+Generate random values:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
+```
+
+</details>
 
 Then open:
 
 - Learner app: http://localhost:5173
-- Admin console: http://localhost:5173/admin (log in with the admin account you set in step 3)
+- Admin console: http://localhost:5173/admin (sign in with the admin account set in the previous step)
 - Backend API: http://localhost:3001
 
 > If it will not start or behaves oddly, run `npm run doctor` first: read-only, takes seconds, and checks Node / dependencies / `.env` / both databases / CORS / ports with fix suggestions.
+> For everything that can be configured from zero to a working deployment (required / optional enhancements / access topology), see [`DEPLOYMENT.md`](DEPLOYMENT.md) (Chinese).
 
 <details>
-<summary><b>Fresh-machine checklist (tested 2026-11-11: empty AI key + no plugin keys)</b></summary>
+<summary><b>Fresh-machine checklist (tested: empty AI key + no plugin keys)</b></summary>
 
 | Item | Required? | Test result |
 |---|---|---|
 | Node.js >= 22.23.4 + npm | Yes | Older versions fail at the Prisma / Vite stage |
-| `backend/.env` | Yes | Missing file stops the start script; Linux/macOS must create it manually in step 3 |
+| `backend/.env` | Yes | Missing file stops the start script; Linux/macOS must create it by hand in step 2 |
 | `JWT_SECRET` (32+ chars) | Yes | Missing or weak value fails fast |
 | `SECRET_ENCRYPTION_CURRENT_KEY_ID` + `SECRET_ENCRYPTION_KEYS` | Yes | Validated by `runtime:validate` inside `prisma:prepare`; missing keys exit |
 | `DATABASE_URL` / `SYSTEM_DATABASE_URL` | Yes | Defaults `file:./dev.db` / `file:../system.db`; SQLite needs no external database |
@@ -212,12 +156,12 @@ The backend still lets you log in, open plugin configuration and every read-only
 </details>
 
 <details>
-<summary><b>First run and common pitfalls (click to expand)</b></summary>
+<summary><b>First run and common pitfalls</b></summary>
 
 - **Always use `npm ci`, never `npm install`.** The lockfile contains mirror-sourced optional / peer entries (e.g. `@parcel/watcher`, `@bufbuild/protobuf`); `npm install` rewrites the lockfile from the current resolution and drops those entries in bulk (hundreds of deleted lines that are not real code changes). To install manually: `npm ci && npm --prefix backend ci && npm --prefix frontend ci`.
 - `npm run dev` already runs `prisma:prepare` (generate both Prisma clients + deploy migrations for both databases). Only if you start things step by step, or explicitly skip it (PowerShell `./start-dev.ps1 -SkipPrisma`, bash `./start-dev.sh --skip-prisma`), do you need to run `npm --prefix backend run prisma:prepare` yourself.
 - The skip option also skips the pre-start core-prompt sync and is only meant for environments where the databases and prompts are already prepared.
-- On Windows, a missing `backend/.env` or an invalid `JWT_SECRET` makes `start-dev.ps1` launch the setup wizard; Linux/macOS `start-dev.sh` does not generate secrets, so fill them in manually as in step 3.
+- On Windows, a missing `backend/.env` or an invalid `JWT_SECRET` makes `start-dev.ps1` launch the setup wizard; Linux/macOS `start-dev.sh` does not generate secrets, so fill them in by hand as in step 2.
 - **Empty AI key boundary**: the backend process starts, but `npm run dev` (Windows) blocks it before launch. Use the step-by-step commands above for UI/admin-only acceptance. Do not use a placeholder key to pretend it is configured — `sk-your-api-key` is treated as missing.
 - **Ports**: the default ports are 3001 (backend) and 5173 (frontend). If either is occupied, the one-command start exits; stop the old process first.
 - If npm 11.16+ prints `allow-scripts ... not yet covered`, install scripts for packages such as Prisma / esbuild were skipped. Follow the prompt (`npm approve-scripts --allow-scripts-pending`) and re-run `npm ci`. On this machine Prisma generation, Vite dev and the frontend build still worked with those scripts skipped, but approving them is the safer troubleshooting path.
@@ -225,35 +169,105 @@ The backend still lets you log in, open plugin configuration and every read-only
 
 </details>
 
----
-
 ## Project Status
 
-WenFlow is independently developed by a single author and has been iterating since its first version in April 2026. Functional validation is done primarily through the built-in AI Virtual Learner Lab, and the public demo site ([wenflow.org](https://wenflow.org)) lets you experience the full loop online.
+WenFlow is built by a single independent developer and has been iterating since its first version in April 2026. It is still an early-stage experiment for validating a teaching concept: interfaces, database schemas and the prompt protocol may change.
 
-The project is not a simple acceleration of existing learning workflows; it explores an alternative path — starting from real problems, with AI helping to clarify goals, shape the path, and organize feedback — to determine whether this approach is better suited to the AI era.
+Validation relies mainly on the built-in AI Virtual Learner Lab; the public demo site ([wenflow.org](https://wenflow.org)) lets you experience the full loop online.
 
-The project will continue to explore how to cultivate five capabilities that matter in the AI era: **problem definition, systems thinking, judgment, AI collaboration, and creativity**.
+- `main`: stable branch; this is what you clone by default
+- `develop`: main development branch, where new features and day-to-day commits land
 
 ---
+
+## Under the Hood
+
+The engineering decisions behind the experience above (details in the linked docs, mostly Chinese):
+
+| Topic | In one sentence | Go deeper |
+|---|---|---|
+| Lesson round protocol | Explain, ask and quiz advance round by round; repeated stalls switch to peer reinforcement, and mastery evidence is written back to the learner profile | [Agent / Skill manual](doc/AGENT_SKILL_MANUAL.md) |
+| Learner model | Aggregates the long-term profile, recent state and per-path memory (FSRS-6 review scheduling) into one learner snapshot consumed by teaching and path replanning | [Learner model architecture](doc/LEARNER_MODEL_ARCHITECTURE.md) |
+| Learning load model | Borrows the load / fatigue / form idea from endurance training, advances per day, and uses relative measures to decide "can more be added" | [Learner center and state fusion](doc/LEARNER_CENTER_AND_STATE_FUSION.md) |
+| Educational theory map | Every teaching design registers its theory source, literature and code location | [Theory map](doc/EDUCATIONAL_THEORY_MAP.md) |
+| Path production and replanning | The contract for how paths are generated and when replanning is triggered | [Contract](doc/PATH_PRODUCTION_REPLAN_CONTRACT.md) |
+| Prompts and Skills | File-as-Truth: YAML source → compiled artifacts → database mirror, with gates and one-click rollback | [Skill protocol v4](doc/SKILL_PROTOCOL_V4.md) · [Development guide](doc/SKILL_DEVELOPMENT_GUIDE.md) |
+| Model gateway | OpenAI-compatible access with per-Agent / per-Skill model routing, SSE streaming, retry budget and thinking mode | [Gateway design](doc/MODEL_GATEWAY_DESIGN.md) |
+| Classroom whiteboard | Structured teaching diagrams are drawn round by round and updated cell by cell, turning causal and contrast relations into a picture and cutting the text load | [Diagram pedagogy research](doc/DIAGRAM_PEDAGOGY_RESEARCH.md) |
+| Admin console | An operations and observability console (`/admin`) beyond the learner app, all backed by real APIs | [Scene list](frontend/src/views/admin-redesign/manifest.ts) |
+
+<details>
+<summary><b>How one lesson round runs</b></summary>
+
+Each lesson advances in rounds: explain → ask → quiz.
+
+```mermaid
+flowchart TD
+    Q["You state a problem<br/>you want to solve"] --> G["Goal clarification<br/>follow-up questions"]
+    G -->|you explicitly confirm| P["Path planning<br/>stages and daily tasks"]
+    P --> T["Round-based lesson<br/>explain · ask<br/>quiz"]
+    T -->|not mastered| T
+    T -->|repeatedly stuck or asks for help| H["Peer reinforcement<br/>new explanation<br/>prerequisites"]
+    H --> T
+    T -->|lesson complete| W["Post-session summary<br/>and mastery evaluation"]
+    W --> R["Path adjustment<br/>suggestion"]
+    R -->|after your confirmation| P
+    W -.->|weak spots written to the profile| T
+```
+
+- **It never acts on its own**: generating a path or changing a plan requires the learner's explicit confirmation.
+- **Getting stuck is handled**: after repeated wrong answers or an explicit request for help, the session switches into peer reinforcement and rebuilds the missing prerequisites instead of pushing on.
+- **Memory carries across lessons**: each session feeds the learner profile, so the next lesson picks up from the weak spots and schedules reviews according to memory science.
+- **No walls of text**: the knowledge and length of each turn are capped, and long conversations are compressed automatically.
+
+</details>
+
+<details>
+<summary><b>The four learning-load readings</b></summary>
+
+People often quit after three days, not out of laziness but because they start too hard. WenFlow borrows the "load / fatigue / form" idea from endurance training and gives study intensity its own dashboard:
+
+| Reading in the UI | Abbreviation | What it tells you |
+|---|---|---|
+| **Learning stress** | LSS | How hard this one lesson hit: computed from cognitive load, efficiency, duration, completion and task type |
+| **Training load** | KTL | Accumulated long-term stress: moves slowly and reflects your recent base |
+| **Fatigue** | LF | Accumulated recent stress: moves fast and climbs after several days in a row |
+| **Overall state** | LSB | The combined reading: fresh, in the sweet spot, or time to rest; shows "building up" when you have just started and there is not enough data |
+
+The four readings are on different scales, so the product only asks you to read trends, not to compare numbers. Verdicts use relative measures (how fast fatigue is rising against your base), so someone used to several lessons a day is not mistaken for being over-tired.
+
+This is an engineering heuristic, not a medical or sports-science measurement. See `backend/src/services/learning/learning-load.pmc.ts` and `learning-load-verdict.ts`.
+
+</details>
+
+<details>
+<summary><b>How the Virtual Learner Lab works</b></summary>
+
+Without a large sample of real learners, how do you know whether the teaching works? The project ships a Virtual Learner Lab and lets AI play the student:
+
+- **AI plays the learner**: a virtual learner with a background, a personality and a time budget is derived from a role card and runs the whole flow like a real user: clarify the goal, generate the path, attend lessons and answer questions.
+- **Black-box simulation**: only actions visible through the product UI, with no data edits and no reading of internal state. An assisted mode runs the full chain once a person picks the story and the goal.
+- **Independent judge**: after teaching ends, a judge that took no part in teaching, together with a role-fidelity audit, scores the teaching quality.
+- **Role card library**: the repository ships cards covering academic subjects, engineering practice, exams, business diagnosis and more; a card is only a profile, and the account is created when a learner is derived from it.
+
+A limitation worth knowing: virtual learners come with biases, and they are currently the main evaluation corpus, so a bias can be misread as a product trait. Known biases are quantified one by one in section 11 of the [design document](doc/VIRTUAL_LEARNER_DESIGN.md); the run chain is documented in the [chain doc](doc/VIRTUAL_LEARNER_CHAIN.md).
+
+</details>
 
 ## Tech Stack
 
 | Layer | Technology |
 |------|------|
-| **Frontend** | Vue 3 + TypeScript + Vite 6 + in-house Mk* admin primitives + lucide icons + Pinia |
+| **Frontend** | Vue 3 + TypeScript + Vite + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
-| **Database** | SQLite, dual-database architecture (main DB: 54 models; system DB: 15 tables), runs with no external database service |
-| **AI Integration** | Four model families: ① chat / reasoning / evaluation LLMs — OpenAI-compatible gateway (defaults all deepseek-v4.1-flash) with SSE streaming, retry budget, thinking-mode control; ② infrastructure models — Embedding / Rerank (defaults bge-m3 / bge-reranker-v2-m3) powering semantic material search and reranking, fail-open to keyword fallback when unconfigured; ③ decision model (decision-gate, material-quality gate judgements); ④ image generation (text-to-image plugin). Families ②③④ are optional and degrade by documented semantics when unconfigured |
-| **Agent / Skill** | 5 top-level agents (goal / path / teaching / profile / simulation) + Skill execution layer (prompt source `prompts/core/*.yaml` → compiled artifacts → database mirror) + coordinators + persisted event chain |
-| **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API and model overrides |
-| **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
-| **Observability** | Agent/Skill call logs, trace waterfall, LLM execution details |
+| **Database** | Two SQLite databases (main + system); no external database service needed |
+| **AI access** | OpenAI-compatible gateway with SSE streaming, retry budget and thinking-mode control; Embedding / Rerank optional, failing open to keyword search when unconfigured |
+| **Agent / Skill** | 5 top-level agents (goal / path / teaching / profile / simulation) + Skill execution layer + coordinators + persisted event chain |
 | **Security** | JWT + CSRF + login rate limiting + Secret AES-256-GCM encryption + sensitive-storage permission audits |
-| **Deployment** | Cross-platform start script (`npm run dev`) + optional Nginx test deployment + Docker (recommended for Linux/macOS) |
+| **Deployment** | Docker (Nginx + backend, only the Nginx port is published) or local `npm run dev` |
 
 <details>
-<summary><b>Project structure (click to expand)</b></summary>
+<summary><b>Project structure</b></summary>
 
 ```text
 backend/            Node.js + Express + TypeScript backend
@@ -268,7 +282,7 @@ backend/            Node.js + Express + TypeScript backend
     events/         persisted events and outbox
     scripts/        official tooling: gates / read-only audits / probes / backfills / ops
   prisma/           main DB schema and migrations; system/ holds the System DB
-frontend/           Vue 3 + TypeScript + Vite 6 frontend
+frontend/           Vue 3 + TypeScript + Vite frontend
   src/
     views/v2/             learner app pages
     views/admin-redesign/ admin pages and scene manifest.ts
@@ -276,19 +290,15 @@ frontend/           Vue 3 + TypeScript + Vite 6 frontend
     api/ · stores/ · router/ · composables/
 prompts/            File-as-Truth prompts: core/*.yaml source → skill.*.md compiled artifacts
 scripts/            repo-root scripts (runs / inspections / demos / gates), index in doc/DEV_SCRIPTS.md
-virtual-learners/   preset virtual-learner material presets.yaml + golden card library cards/ (200 default golden cards, auto-seeded on first start)
+virtual-learners/   virtual-learner material: presets.yaml + role card library cards/
 doc/                documentation index at doc/README.md (process material lives in gitignored doc/local/)
 .github/workflows/  CI gate quality-check.yml
 ```
 
 </details>
 
----
-
-## Page Map
-
 <details>
-<summary><b>Learner app (click to expand)</b></summary>
+<summary><b>Page map: learner app</b></summary>
 
 Landing pages `/` and `/vision`, login `/login`, register `/register`; after signing in you land on the dashboard.
 
@@ -300,7 +310,7 @@ Five entries in the top / bottom navigation:
 | Goal planning | `/goal-conversation` | Multi-round dialogue to clarify the real goal |
 | Learning paths | `/learning-paths` | Path list and progress |
 | Knowledge map | `/knowledge-map` | Aggregated knowledge view across all paths (in-lesson view shows only the current path) |
-| Learning state | `/learning-state` | LSS / KTL / LF / LSB with fatigue alerts |
+| Learning state | `/learning-state` | Training load, fatigue and mastery progress |
 
 Core flow: register / log in → `/onboarding` → `/goal-conversation` → after your confirmation the path is generated → `/learning-paths` → `/learning-path/:id` → `/learn/:taskId` round-based learning → `/learn/:taskId/evaluation/:sessionId` post-session evaluation.
 
@@ -309,24 +319,25 @@ The personal centre lives under `/user/*`: account, settings (including API acce
 </details>
 
 <details>
-<summary><b>Admin console scenes (click to expand)</b></summary>
+<summary><b>Page map: admin console</b></summary>
 
-The admin console lives at `/admin` with **19 scene pages in 7 groups** (plus one hidden “operations glossary” used only by the header help entry):
+The admin console lives at `/admin`, and every view is backed by real APIs: token cost, model latency, agent execution chains and retry timelines for each call are all visible here. The sidebar has five groups plus a pinned platform overview:
 
-- **Overview**: platform overview with today's health, the models with the highest failure rates, and open items
-- **Learning**: goal conversations, learning paths, teaching sessions, learning state (risk and fatigue, with manual snapshot recompute), review backlog
-- **Simulation**: virtual learners (runtime: concurrency quota / global rate limit / instance stream / batch creation, single-step test), learner card library (pure-profile role cards: structured import/export, one-click load of the 200 golden presets; accounts are created only when deriving learners from cards)
-- **Skill**: field flow (phase swimlanes + field data journey and logic graph + call usage), skill catalogue (skill runtime + model routing; the skill-design sub-page covers protocol editing, compile, gates, publish, rollback, trial run), prompt evaluation (case sets + run history), plugins (keys / MCP / web access / decision / image-generation extensions)
-- **Observability & diagnosis**: execution logs (log / trace tabs with retry timeline, auto refresh, export), audit log, cost analysis, health centre, models and access (chat gateway routing / infrastructure models Embedding·Rerank / connectivity / network boundary / retry timeout)
-- **Operations**: operations centre (todo workbench / feedback / achievements / announcements / notifications / data export / session security / ops tools tabs), user accounts
+- **Operations**: operations centre (to-dos, feedback, achievements, announcements, notifications), system settings (models and access, data export, session security, access and registration), user accounts
+- **Learning**: goal conversations, learning paths, teaching sessions, learning state, review backlog
+- **Simulation**: virtual learners, session review reports, learner card library
+- **Skill**: field flow, Skill catalogue, plugins
+- **Observability and diagnosis**: execution logs, audit log, cost analysis, health centre
+
+The operations workbench covers teaching sessions, learning-state risks, review backlog, feedback and announcements.
 
 The authoritative scene list is [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts); the history of pages added, retired, and redirected lives in [`CHANGELOG.md`](CHANGELOG.md).
 
 </details>
 
----
+## Operations
 
-## Advanced Deployment and Operations
+Deployment topology (Docker / local Nginx), reverse proxy and frontend environment variables live in [`DEPLOYMENT.md`](DEPLOYMENT.md) (Chinese); this section keeps the in-repo operations entry points.
 
 <details>
 <summary><b>LAN development mode (phones / tablets)</b></summary>
@@ -337,31 +348,6 @@ npm run dev:lan                        # detect the LAN IP automatically
 ```
 
 Adds the LAN IP to `CORS_ORIGIN` for multi-device testing of the learner app; it does not change the admin `ADMIN_ACCESS_MODE` restriction.
-
-</details>
-
-<details>
-<summary><b>Local Nginx test deployment (HTTP)</b></summary>
-
-```bash
-npm run dev:nginx                          # requires nginx on PATH
-./start-dev.ps1 -UseNginx -Domain test.example.com
-./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
-```
-
-Builds the frontend and writes a runtime config to `runtime/nginx/wenflow.nginx.conf`; it checks that port 80 is free before starting.
-
-</details>
-
-<details>
-<summary><b>Docker deployment (Linux / macOS)</b></summary>
-
-```bash
-./docker-start.sh        # interactively completes backend/.env, then starts
-docker compose -f docker-compose.operations.yml run --rm backup   # DB backup (set WENFLOW_BACKUP_HOST_DIR first)
-```
-
-`docker-compose.yml` defines migrate / backend / nginx; it only publishes Nginx (80) and never publishes backend `3001`, and the backend is forced to `ADMIN_ACCESS_MODE=private`. See [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 </details>
 
@@ -384,9 +370,9 @@ CI (`.github/workflows/quality-check.yml`) runs on push to main/master/develop a
 </details>
 
 <details>
-<summary><b>Prompt bootstrap and maintenance (File-as-Truth)</b></summary>
+<summary><b>Prompt bootstrap and maintenance</b></summary>
 
-The source of truth is `prompts/core/*.yaml` (the only hand-edited entry point, tracked in git); compiled artifacts are `prompts/skill.*.md` (the only text the model reads); the `agent_prompts` table in the database is a runtime mirror. The edit → compile → publish chain (with gates and rollback) is operated from the admin Prompt Studio; the mechanism is documented in [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) and the directory notes in [`prompts/_README.md`](prompts/_README.md).
+The source of truth is `prompts/core/*.yaml`, compiled artifacts are `prompts/skill.*.md`, and the `agent_prompts` table is only a runtime mirror. The mechanism behind edit → compile → publish is in [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md), and the directory notes are in [`prompts/_README.md`](prompts/_README.md).
 
 ```bash
 cd backend
@@ -403,23 +389,15 @@ npm run prompts:lint && npm run prompts:core:check
 
 Two SQLite databases; relative URLs resolve against their own schema directory:
 
-| Database | Schema | Env var | Default path | Tables |
-|----|--------|----------|----------|------|
-| Main | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 54 |
-| System | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 15 |
+| Database | Schema | Env var | Default path |
+|----|--------|----------|----------|
+| Main | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` |
+| System | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` |
 
 - Migrations and checks: `npm run prisma:migrate:verify-clean` (empty-DB replay), `npm run prisma:baseline:audit` (read-only audit), `npm --prefix backend run prisma:migrate:deploy:all`
 - Backup and maintenance: `npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`
 - **After switching worktrees or moving the directory, the app may connect to the wrong database**: the generated Prisma client records the relative path at generation time in `node_modules/.prisma/client/index.js`, so the app can keep resolving to another tree's DB while the CLI migrates the current one. Fix it by regenerating in the current workspace: `npm --prefix backend run prisma:prepare`.
 - Do not use the legacy `file:./prisma/*.db`, and do not change the System URL to `file:./system.db`.
-
-</details>
-
-<details>
-<summary><b>Frontend API environment variables</b></summary>
-
-- By default the frontend calls the backend through the relative `/api` path, proxied by Vite or Nginx; keep the default unless you have a specific deployment need.
-- The admin console mainly reads `VITE_API_BASE_URL` from `frontend/.env`; the learner app uses `/api` in development, and in non-development builds `VITE_API_BASE_URL` takes precedence while `VITE_API_URL` remains only for backward compatibility.
 
 </details>
 
@@ -457,21 +435,13 @@ The full list lives in the root `package.json` and [`doc/DEV_SCRIPTS.md`](doc/DE
 
 </details>
 
----
+## Documentation
 
-## Design Documentation
-
-The documentation index is [`doc/README.md`](doc/README.md), organised as “living specs / design traces / historical snapshots”. Common entry points:
-
-- **Where educational theory lands**: [`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)
-- **Agent / Skill**: [`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md) (why), [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) (protocol), [`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md) (building or changing a skill)
-- **Architecture and models**: [`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md), [`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
-- **Development scripts**: [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
-- **Deployment / security / admin**: [`DEPLOYMENT.md`](DEPLOYMENT.md), [`SECURITY.md`](SECURITY.md), [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
-- **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md) (branch model `develop` → `main`, gates, documentation governance and shared-worktree discipline)
-- **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
-
----
+- Documentation index: [`doc/README.md`](doc/README.md) (organised as “living specs / design docs / references / result ledgers”; Chinese)
+- Deployment / security / operations: [`DEPLOYMENT.md`](DEPLOYMENT.md) · [`SECURITY.md`](SECURITY.md) · [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
+- Development scripts: [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) (branch model, quality gates, commit conventions, shared-worktree discipline)
 
 ## License
 
@@ -479,12 +449,6 @@ Released under the [MIT License](LICENSE).
 
 Copyright (c) 2026 wenflow-org
 
----
-
-## Acknowledgments
+## Acknowledgements
 
 Thanks to the [Linux.do](https://linux.do/) community for their long-term support and feedback.
-
----
-
-*When AI can answer every standard question, the people who ask good questions will define the future.*

@@ -62,7 +62,7 @@
         <MkKpi
           label="完成率（全部会话）"
           :value="statsKpiValue(completionKpiText)"
-          :tone="statsState === 'error' ? 'bad' : ''"
+          :tone="statsState === 'error' ? 'bad' : runStats.totalSessions > 0 ? '' : 'muted'"
           :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : statsState === 'loading' ? '统计加载中…' : ''"
           :title="statsState === 'error' ? STATS_RETRY_TITLE : completionTitle"
           :clickable="statsState === 'error'"
@@ -78,7 +78,7 @@
         <MkKpi
           label="系统失败率（全部会话）"
           :value="statsKpiValue(failureKpiText)"
-          :tone="statsState === 'error' ? 'bad' : failureRateTone(runStats.systemFailureRate, runStats.failed)"
+          :tone="statsState === 'error' ? 'bad' : runStats.totalSessions > 0 ? failureRateTone(runStats.systemFailureRate, runStats.failed) : 'muted'"
           :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : statsState === 'loading' ? '统计加载中…' : ''"
           :title="statsState === 'error' ? STATS_RETRY_TITLE : failureTitle"
           :clickable="statsState === 'error'"
@@ -1037,9 +1037,11 @@ const completionPct = computed(() => {
   const s = runStats.value
   return s.totalSessions > 0 ? (s.completed / s.totalSessions) * 100 : 0
 })
-/* 无会话时显「—」而不是 0%：0% 会被读成「跑过但全没完成」 */
-const completionKpiText = computed(() => (runStats.value.totalSessions > 0 ? statsKpiPct(completionPct.value) : '—'))
-const failureKpiText = computed(() => (runStats.value.totalSessions > 0 ? statsKpiPct(runStats.value.systemFailureRate) : '—'))
+/* 无会话时显「暂无」而不是 0%：0% 会被读成「跑过但全没完成」。
+   也不能用「—」：KPI 数字是 26px/700，一枚长破折号在卡里就是一根 40×6 的横条，
+   手机截图里被读成「进度条坏了、没有数字」（2026-11-26 AM-11）。 */
+const completionKpiText = computed(() => (runStats.value.totalSessions > 0 ? statsKpiPct(completionPct.value) : '暂无'))
+const failureKpiText = computed(() => (runStats.value.totalSessions > 0 ? statsKpiPct(runStats.value.systemFailureRate) : '暂无'))
 
 /* ===== P1#19 运行统计三态（2026-10-02 人类可读性）：
      live.ts 导出 liveVirtualStatsLoading/liveVirtualStatsError（stats 拉取失败不再被静默吞掉），

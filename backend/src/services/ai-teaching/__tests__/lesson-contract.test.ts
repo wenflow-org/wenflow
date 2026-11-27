@@ -23,7 +23,6 @@ const context = (overrides: Record<string, unknown> = {}) => ({
   ],
   taskKnowledgeSeeds: [{ name: '种子概念', status: 'pending', progress: 0 }],
   taskProfile: { coreConcept: '核心概念' },
-  taskEstimatedMinutes: 30,
   ...overrides,
 } as any);
 
@@ -33,7 +32,7 @@ describe('buildLessonContract', () => {
     expect(contract.coreKcs.map((kc) => kc.kcId)).toEqual(['kc-1', 'kc-2']);
     expect(contract.minIndependentEvidence).toBe(1);
     expect(contract.minTurns).toBe(3);
-    expect(contract.timeBudgetMin).toBe(30);
+    expect(contract.timeBudgetMin).toBeNull();
     expect(contract.branchBudgets.deeperTurns).toBe(3);
   });
 

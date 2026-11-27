@@ -103,8 +103,6 @@ router.get('/', async (req, res) => {
  * 0 调用的新漂移点，故登记在此、不计入 unconfigured——skills 列表仍完整可见（审计可见性保留）。
  * 若未来其中某个进入高频主链，应先补配置行再把它移出本名单（09-28「漏配静默落旧通道」
  * 教训只针对高频主链技能）。
- * （2026-11-22 清理：skill-author/skill-compiler 两元技能连同 yaml/服务已整体退役移除，
- * 不在本名单占位——详见 docs/UX_AUDIT_2026-11-22.md 元技能清理批。）
  */
 const PLATFORM_DEFAULT_ALLOWLIST: readonly string[] = [
   'simulation-referee',

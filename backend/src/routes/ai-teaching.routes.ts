@@ -627,6 +627,8 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
     lessonReport: result.lessonReport ? stripCheckpointAnswerKeys(result.lessonReport) : null,
     exitTicket: result.exitTicket ? stripCheckpointAnswerKeys(result.exitTicket) : null,
     branch: result.branch ? stripCheckpointAnswerKeys(result.branch) : null,
+    // 课堂阶段摘要（课堂阶段协议，2026-11-26）：学生端顶部阶段条消费；协议未生效为 null
+    lessonPhase: result.lessonPhase ?? null,
     revision: result.revision,
   };
 };

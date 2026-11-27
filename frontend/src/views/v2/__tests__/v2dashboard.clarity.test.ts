@@ -4,7 +4,7 @@
  * ① 已完成路径上「今天没有待办任务」与「继续」并存：CTA 实际落到路径详情，
  *    读作「还有事可继续」。现在标题/标签/CTA 同说「学完了」，CTA 去学习记录。
  * ② 卡头「阶段 1 / 2 · 任务」缺数量：改报本阶段任务数；整条完成后报「已完成 · 共 N 个任务」。
- * ③ 「今日已学 64 / 25 分钟」= 256% 却无说明：超目标时改自然语言并标出超出量。
+ * ③ 「今日已学 64 / 25 分钟」把任务估算当成今日硬目标：2026-11-25 去时间化后只报真实已学分钟。
  * ④ 服务端 headline 把「欢迎回来，X」与路径说明拼成 28 字长句：按姓名边界拆成主/副两层。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -153,7 +153,7 @@ describe('学习台已完成态：标题 / 标签 / CTA 不再自相矛盾（走
   });
 });
 
-describe('学习台今日进度：超过目标要说明（走查 #1）', () => {
+describe('学习台今日进度：只报真实已学分钟，不造今日目标（2026-11-25 去时间化）', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     userState.user = { name: '奶茶店店长' };
@@ -163,24 +163,24 @@ describe('学习台今日进度：超过目标要说明（走查 #1）', () => {
     getAdaptiveGuidance.mockReset();
   });
 
-  it('64 / 25 分钟 → 自然语言写明目标已达成与超出量，进度条仍封顶 100%', async () => {
+  it('64 分钟只报 64 分钟，不再出现「今日目标 25 分钟」或超额说明', async () => {
     const w = await mountDashboard({ copy: guidanceCopy(), sessions: [todaySession()] });
     const today = w.find('.action__today');
     expect(today.text()).toContain('今日已学 64 分钟');
-    expect(today.text()).toContain('今日目标 25 分钟已达成');
-    // 2026-11-22 UI 走查：「已超出 39 分钟」的「超出」带越界负面感，改成达成口径
-    expect(today.text()).toContain('多学 39 分钟');
-    expect(today.text()).not.toContain('已超出');
-    expect(today.classes()).toContain('action__today--over');
-    expect(w.find('.action__today-bar i').attributes('style')).toContain('width: 100%');
+    expect(today.text()).not.toContain('今日目标');
+    expect(today.text()).not.toContain('25 分钟');
+    expect(today.classes()).not.toContain('action__today--over');
+    // 路径已全部完成时没有「当前任务」，进度条不再硬凑一个 100%
+    expect(w.find('.action__today-bar').exists()).toBe(false);
   });
 
-  it('未超目标时保留 x / y 口径', async () => {
+  it('10 分钟只报 10 分钟，不再出现 x / 25 的分母', async () => {
     const w = await mountDashboard({
       copy: guidanceCopy(),
       sessions: [todaySession({ durationMinutes: 10 })],
     });
-    expect(w.find('.action__today').text()).toContain('今日已学 10 / 25 分钟');
+    expect(w.find('.action__today').text()).toContain('今日已学 10 分钟');
+    expect(w.find('.action__today').text()).not.toContain('25 分钟');
     expect(w.find('.action__today').classes()).not.toContain('action__today--over');
   });
 });

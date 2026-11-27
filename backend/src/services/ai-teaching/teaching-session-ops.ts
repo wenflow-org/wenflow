@@ -39,7 +39,7 @@ import type { ProcessStudentMessageOptions } from './AITeachingCoordinator';
 
 /**
  * 检查点提交的对外结果（提交路由与幂等重放共用）：
- * 回合载荷 → `{passed, feedback, hint?, revision, checkpoint?, lessonContract?, lessonReport?, exitTicket?, branch?}`。
+ * 回合载荷 → `{passed, feedback, hint?, revision, checkpoint?, lessonContract?, lessonReport?, exitTicket?, branch?, lessonPhase?}`。
  */
 export function buildCheckpointSubmitResult(turn: {
   aiResponse: string;
@@ -53,6 +53,11 @@ export function buildCheckpointSubmitResult(turn: {
   lessonReport?: Record<string, any> | null;
   exitTicket?: Record<string, any> | null;
   branch?: Record<string, any> | null;
+  /**
+   * 课堂阶段摘要：提交回合也必须下发。实测（2026-11-26）作答后的响应缺这个键，
+   * 前端阶段条直接从「整合/迁移」跳回「协议未生效」——阶段机在跑，读数却断了。
+   */
+  lessonPhase?: Record<string, any> | null;
 }): CheckpointSubmitResult {
   const passed = turn.checkpointResolution?.passed === true;
   const hint = !passed && turn.analysis?.confusionPoints?.length
@@ -73,6 +78,8 @@ export function buildCheckpointSubmitResult(turn: {
     ...(turn.lessonReport ? { lessonReport: stripCheckpointAnswerKeys(turn.lessonReport) } : {}),
     ...(turn.exitTicket ? { exitTicket: stripCheckpointAnswerKeys(turn.exitTicket) } : {}),
     ...(turn.branch ? { branch: stripCheckpointAnswerKeys(turn.branch) } : {}),
+    // 阶段摘要只含阶段名/段号/露出程度，无答案信息，不参与深剥离（同一把剥离也无副作用，但没必要）
+    ...(turn.lessonPhase ? { lessonPhase: turn.lessonPhase } : {}),
   };
 }
 

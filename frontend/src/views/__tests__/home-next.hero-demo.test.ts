@@ -48,4 +48,11 @@ describe('首页 Hero 演示：只播一次并停在结果（2026-11-07）', () 
     expect(script).toContain("matchMedia('(prefers-reduced-motion: reduce)')");
     expect(script).toContain('? 99');
   });
+
+  it('打字态不改变卡片高度（回复常驻布局，点只做覆盖）', () => {
+    expect(source, 'AI 回复又变回 v-else 条件渲染，打字态会把卡片撑高').not.toMatch(/v-else[\s\S]{0,200}先不急着管/);
+    expect(source, '隐藏回复的类没了，打字态会重新占位').toContain('hn-demo--hidden');
+    expect(css, '打字点没有绝对定位，仍会参与高度计算').toMatch(/\.hn-typing__dots\s*\{[^}]*position:\s*absolute/);
+    expect(css, '回复容器没有 position:relative，打字点无法覆盖其上').toMatch(/\.hn-bubble--ai\s*>\s*div\s*\{[^}]*position:\s*relative/);
+  });
 });

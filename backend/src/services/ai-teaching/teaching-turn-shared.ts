@@ -10,6 +10,7 @@ import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { teachingContextCompressionService } from './TeachingContextCompressionService';
 import { parseSessionArtifacts } from './checkpoint-shared';
 import { pendingWarmupForModel } from './teaching-warmup';
+import { lessonPhaseSummary, type LessonPhaseTurnView } from './lesson-phase';
 import { shouldEmitCheckpoint, summarizeCheckpointHistory } from './teaching-checkpoint';
 import {
   LearnStage,
@@ -67,16 +68,26 @@ export async function buildTeachingTurnInput(
   context: TeachingScenarioContext,
   options: {
     anchorTarget?: AnchorProbePlan | null;
-    /** 检查点作答回合的代码裁决（报告 #14）：透传进 controls.checkpointVerdict（缺省不注入） */
-    checkpointVerdict?: { passed: boolean; detail: string | null } | null;
+    /**
+     * 检查点作答回合的代码裁决（报告 #14）：透传进 controls.checkpointVerdict（缺省不注入）。
+     * `correctAnswer` 是给老师的正确答案文本，只在不会泄题的时点给（答对时 / 重答次数已用完时）。
+     */
+    checkpointVerdict?: { passed: boolean; detail: string | null; correctAnswer?: string | null } | null;
     /** 课末终检的确定性判分（上一轮发题、本轮作答）：透传进 controls，模型据此如实反馈 */
-    exitTicketVerdict?: { passed: boolean; detail: string | null } | null;
+    exitTicketVerdict?: { passed: boolean; detail: string | null; correctAnswer?: string | null } | null;
     /**
      * 课堂契约缺口强制出题（2026-11-19）：契约独立证据不足时，平台必须给模型一个
      * 落证据的检查点机会——不能因为「当前焦点已考过/已收口」把节奏闸门一直关着。
      * 仅在无 pending 检查点时由引擎置 true；出题内容仍由模型按契约目标 KC 生成。
      */
     forceCheckpoint?: boolean;
+    /**
+     * 课堂阶段协议（2026-11-26）：出题时机由阶段状态机给出（只在整合/迁移/审错三个阶段各 1 道）。
+     * 给出时**覆盖**常规节奏闸与 forceCheckpoint 旁路——阶段机说不能出题的回合，任何旁路都不能出。
+     */
+    emitCheckpoint?: boolean;
+    /** 课堂阶段协议：本轮阶段视图（指令随载荷尾部注入）；存量课堂（协议未激活）为 null */
+    lessonPhase?: LessonPhaseTurnView | null;
   } = {},
 ): Promise<TeachingTurnInput> {
   const compression = teachingContextCompressionService.compress(session.messages);
@@ -126,6 +137,13 @@ export async function buildTeachingTurnInput(
       }
     : undefined;
 
+  // 2026-11-24「空气读数课」：学生当轮说看不到数据/表/图上的数时，代码显式置位，
+  // 教学规则据此解除图文互锁、直接在 reply 正文补全 taskMaterial。只在有 taskMaterial
+  // 时才有意义；没有材料时不误触发「我也没有」式退回。
+  const lastUserMessage = [...session.messages].reverse().find((item) => item.role === 'user')?.content;
+  const materialVisibilityIssue = Boolean(context.taskMaterialPayload)
+    && /(看不到|没看到|看不见|没有数|没给.*(表|数据)|表呢|数据呢|图上没有|板上没有|哪来的数)/.test(String(lastUserMessage || ''));
+
   const scenario: TeachingTurnInput['scenario'] = {
     subject: context.subject,
     topic: context.topic,
@@ -135,6 +153,7 @@ export async function buildTeachingTurnInput(
     // 本课材料本体（2026-11-18 materialPayload；2026-11-19 审计补装配）：此前只送给白板设计器，
     // 教师 LLM 拿不到题面/日志/样本，条件规则 `scenario.taskMaterial` 也因此恒被剥离。
     taskMaterial: context.taskMaterialPayload ?? null,
+    ...(materialVisibilityIssue ? { materialVisibilityIssue: true } : {}),
     // 课堂契约（2026-11-19）：最低必须完成集 + 当前支线预算/指令。契约稳定，支线逐回合变化。
     lessonContract: context.lessonContract ?? null,
     branchState: context.branchState ?? null,
@@ -226,8 +245,11 @@ export async function buildTeachingTurnInput(
     temporalGap?: TeachingTemporalGap;
   } = {    mode: session.mode as TeachingMode,
     teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
-    // 出题触发由代码给（2026-09-17）：模型只出题与答案键，不再自行决定"什么时候探测"
-    emitCheckpoint: shouldEmitCheckpoint(session, teachingState) || options.forceCheckpoint === true,
+    // 出题触发由代码给（2026-09-17）：模型只出题与答案键，不再自行决定"什么时候探测"。
+    // 课堂阶段协议激活时（2026-11-26）以阶段机为准：它是唯一权威，常规闸与 forceCheckpoint 都不参与。
+    emitCheckpoint: options.emitCheckpoint !== undefined
+      ? options.emitCheckpoint
+      : shouldEmitCheckpoint(session, teachingState) || options.forceCheckpoint === true,
   };
   // 独立锚题探针（Q13/B4）：仅当本轮由代码选定目标时注入——提示词据此把本次检查点改成
   // 对该概念的独立复测（见 prompts/core/teaching-turn.yaml 的锚题约束）。目标为 null 时不注入任何字段。
@@ -240,12 +262,18 @@ export async function buildTeachingTurnInput(
     controls.checkpointVerdict = {
       passed: options.checkpointVerdict.passed === true,
       detail: options.checkpointVerdict.detail ?? null,
+      ...(options.checkpointVerdict.correctAnswer
+        ? { correctAnswer: options.checkpointVerdict.correctAnswer }
+        : {}),
     };
   }
   if (options.exitTicketVerdict) {
     controls.exitTicketVerdict = {
       passed: options.exitTicketVerdict.passed === true,
       detail: options.exitTicketVerdict.detail ?? null,
+      ...(options.exitTicketVerdict.correctAnswer
+        ? { correctAnswer: options.exitTicketVerdict.correctAnswer }
+        : {}),
     };
   }
   // 真实侧时间信号（Q19 真实侧）：有前序会话才注入；无前序时字段缺失，提示词行为不变。
@@ -264,7 +292,10 @@ export async function buildTeachingTurnInput(
         ? channels['knowledge.state']
         : session.knowledgeState),
     },
-    controls
+    controls,
+    ...(options.lessonPhase
+      ? { lessonPhase: { ...lessonPhaseSummary(options.lessonPhase), directive: options.lessonPhase.directive } as TeachingTurnInput['lessonPhase'] }
+      : {}),
   };
 }
 

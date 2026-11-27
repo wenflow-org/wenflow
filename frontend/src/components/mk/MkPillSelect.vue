@@ -28,6 +28,7 @@
         <ChevronDown :size="12" :stroke-width="2" aria-hidden="true" />
       </span>
     </button>
+    <Teleport to="body">
     <ul
       v-show="open"
       :id="menuId"
@@ -58,6 +59,7 @@
         <Check v-if="o.value === modelValue" :size="13" :stroke-width="2.2" aria-hidden="true" />
       </li>
     </ul>
+    </Teleport>
   </div>
 </template>
 

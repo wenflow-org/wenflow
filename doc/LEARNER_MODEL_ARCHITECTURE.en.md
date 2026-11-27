@@ -1,6 +1,6 @@
 # Learner Model Scenario Design (New Architecture)
 
-> 📌 类型：活规范（英文同步版，与中文 .md 同步更新）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+> 📌 Type: Living spec (defines the learner snapshot contract, data sources, refresh timing and admin observation) | Index: [doc/README.md](./README.md).
 
 ## 1. Objective
 
@@ -9,7 +9,7 @@ This document defines learner model scenario under new architecture, with goals:
 - Provide unified Learner Snapshot for teaching, path adjustment, backend diagnostics
 - Decouple user long-term profile, recent learning state, path-level knowledge memory from teaching pipeline
 - Keep existing path orchestrator and teaching orchestrator unchanged, only add stable upstream state layer
-- Provide consumable structured evidence for future milestone-level path restructuring
+- Provide consumable structured evidence for milestone-level path replanning
 
 This document covers:
 
@@ -42,37 +42,26 @@ Its responsibility is aggregating following data sources into unified snapshot:
 Output to:
 
 - `TeachingContextBuilder`
-- Future path/milestone replan
+- Path/milestone replan
 - Admin observation and diagnostics
 
 ## 3. Whether Orchestrator Needed
 
-A learner mainline orchestrator is now registered at the orchestration layer: `learnerAgentRuntimeDefinition` (id `profile-agent`, `managedByCode: true`), chaining `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService` (`backend/src/coordinators/learner.definition.ts`; listed in `ORCHESTRATOR_RUNTIME_DEFINITIONS`).
+A learner mainline orchestrator is registered at the orchestration layer: `learnerAgentRuntimeDefinition` (id `profile-agent`, `managedByCode: true`), chaining `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService` (`backend/src/coordinators/learner.definition.ts`; listed in `ORCHESTRATOR_RUNTIME_DEFINITIONS`).
 
-Reasons the scenario was initially kept orchestrator-free (Phase 1):
+The criterion for whether a separate orchestration layer is needed:
 
 1. Learner model scenario is not an independent user flow, but shared upstream state layer across path/teaching/admin.
-2. Current main work is deterministic aggregation, event-triggered refresh, on-demand reading, not multi-Agent multi-stage orchestration.
-3. Early orchestrator introduction increases implementation complexity, including stage state, failure retry, stage logs and backend management.
+2. Main work is deterministic aggregation, event-triggered refresh, on-demand reading, not multi-Agent multi-stage orchestration.
+3. Turning it into multi-stage orchestration would increase implementation complexity (stage state, failure retry, stage logs and backend management), so the chain stays single-line.
 
-### Current Recommended Form
+Only when any of the following needs arises is it worth expanding refresh into a multi-sub-Agent orchestration chain: snapshot produced by multiple sub-Agents together, refresh becoming an obvious multi-stage flow, high-cost async batch recomputation, or needing failure retry / stage logs / backend running-state management.
+
+### Current Form
 
 - External: `skill:learner-model`
 - Internal: Several deterministic services
 - Update method: Event-driven refresh + on-demand reading
-
-### When to Introduce Orchestrator in Future
-
-> The conditions listed in this section have since occurred in the implementation — a learner mainline orchestrator is registered at the orchestration layer (`learnerAgentRuntimeDefinition`, id `profile-agent`, `managedByCode: true`; chain `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`). The original criteria are kept below for reference.
-
-Consider adding `learner-refresh-orchestrator` when any condition met:
-
-- Learner snapshot produced by multiple sub-Agents together
-- Refresh process becomes obvious multi-stage flow
-- High-cost async batch recomputation needs exist
-- Failure retry, stage logs, backend running state management needed
-
-Before that, no new orchestrator (that phase has since ended with the registration above).
 
 ## 4. Position in New Architecture
 
@@ -97,7 +86,7 @@ teaching-turn-agent / peer-agent / session-wrapup-agent
 
 ### 5.1 Canonical Agent Id
 
-- `skill:learner-model` (alias `learner-model-agent`; unified to the canonical prefix on 2026-08-09)
+- `skill:learner-model` (alias `learner-model-agent`)
 
 ### 5.2 Output Namespace
 
@@ -383,7 +372,7 @@ Such nodes only update session internal overlay, e.g.:
 ### 8.3 Read Nodes (read-only snapshot)
 
 1. `TeachingContextBuilder`
-2. Future replan
+2. Path/milestone replan
 3. Admin detail page
 
 ## 9. Computation Strategy
@@ -443,15 +432,13 @@ Not do:
 - Human direct change concept mastery
 - Human change teaching hints
 
-### 10.2 Recommended Pages
+### 10.2 Pages
 
 #### 1. Learner Models List Page
 
-Suggested add:
+Implemented at `frontend/src/views/admin-redesign/LearnerCenter.vue`.
 
-- `frontend/src/views/admin-redesign/LearnerCenter.vue` (originally designed as `views/admin/LearnerModels.vue`)
-
-Suggested display:
+Display:
 
 - user
 - active path
@@ -466,11 +453,9 @@ Suggested display:
 
 #### 2. Learner Model Detail Page
 
-Suggested add:
+Implemented at `frontend/src/views/admin-redesign/LearnerDetail.vue`.
 
-- `frontend/src/views/admin-redesign/LearnerDetail.vue` (originally designed as `views/admin/LearnerModelDetail.vue`)
-
-Suggested tabs:
+Tabs:
 
 1. Profile
 2. Dynamic State
@@ -527,9 +512,9 @@ query:
 - `pathId?`
 - `limit?`
 
-## 12. Service Split Suggestion
+## 12. Service Split
 
-The orchestrator for the learner model scenario is now registered at the orchestration layer (see §3); in addition, the following services are suggested:
+The orchestrator for the learner model scenario is registered at the orchestration layer (see §3); the services behind it:
 
 ### 12.1 `LearnerSnapshotService`
 
@@ -562,7 +547,7 @@ Responsibility:
 
 - Respond event trigger partial or full recomputation
 
-## 13. Suggested File Locations
+## 13. File Locations
 
 ### Backend Agent
 
@@ -581,76 +566,25 @@ Responsibility:
 ### Teaching Integration
 
 - `backend/src/services/ai-teaching/TeachingContextBuilder.ts`
-- `backend/src/services/ai-teaching/AITeachingCoordinator.ts` (formerly `AITeachingOrchestrator.ts`)
-- `backend/src/skills/teaching-turn/` (formerly `agents/teaching-turn-agent/index.ts`)
+- `backend/src/services/ai-teaching/AITeachingCoordinator.ts`
+- `backend/src/skills/teaching-turn/`
 
 ### Admin API
 
-- `backend/src/routes/admin/learner-models.ts`
+- `backend/src/routes/admin/learner-models.ts` (list/detail page routes are now `/admin/learner-state`; `/admin/learner-models` and `/admin/learner-center` redirect here)
 
 ### Admin Frontend
 
-- `frontend/src/views/admin-redesign/LearnerCenter.vue` (originally designed as `views/admin/LearnerModels.vue`)
-- `frontend/src/views/admin-redesign/LearnerDetail.vue` (originally designed as `views/admin/LearnerModelDetail.vue`)
+- `frontend/src/views/admin-redesign/LearnerCenter.vue`
+- `frontend/src/views/admin-redesign/LearnerDetail.vue`
 - `frontend/src/api/adminApi.ts`
 - `frontend/src/router/index.ts`
 
-## 14. Phased Implementation Plan
+## 14. Implementation Scope
 
-### Phase 1: Contract and Teaching Integration
+Implemented: `LearnerSnapshot` / `TeachingLearnerProjection` contract and Teaching integration, Knowledge Memory v1 (`taskMastery / conceptStates / milestoneProgress / recentEvidence`), event refresh (`goal:understanding:updated`, `path:generated`, `lesson:completed`, `task:completed`, `path:adjusted`), Admin observation pages (list / detail / manual recompute / recent evidence).
 
-Goal:
-
-- Define `LearnerSnapshot`
-- Define `TeachingLearnerProjection`
-- `TeachingContextBuilder` receive learner snapshot
-- `learner-model-agent` output converge to `internal.ext.learner`
-
-Not do:
-
-- New tables
-- Admin pages
-- Replan consumption
-
-### Phase 2: Knowledge Memory v1
-
-Goal:
-
-- Compute path-scoped `knowledgeMemory`
-- Form `taskMastery / conceptStates / milestoneProgress / recentEvidence`
-
-### Phase 3: Refresh Mechanism
-
-Goal:
-
-- At `goal:understanding:updated`
-- `path:generated`
-- `lesson:completed`
-- `task:completed`
-- `path:adjusted`
-
-These nodes trigger snapshot refresh
-
-### Phase 4: Admin Observation Page
-
-Goal:
-
-- List page
-- Detail page
-- Manual recompute
-- Recent evidence
-
-### Phase 5: Replan Consumption
-
-Goal:
-
-- Milestone/path replan read state from learner memory
-- No longer only depend on `completedTaskIds`
-
-Consumed (since 2026-09):
-
-- `requestPathReplan()` already put `learnerReplanProjection` into returned `request.evidence`
-- The replan flow consumes this projection as one of its upstream inputs (see PATH_PRODUCTION_REPLAN_CONTRACT.md)
+Replan consumption: milestone/path replan reads state from learner memory rather than only `completedTaskIds`. `requestPathReplan()` puts `learnerReplanProjection` into returned `request.evidence`, and the replan flow consumes this projection as one of its upstream inputs (see PATH_PRODUCTION_REPLAN_CONTRACT.md).
 
 ## 15. Current Decision Summary
 

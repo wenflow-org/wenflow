@@ -1,7 +1,7 @@
 {
   "name": "wenflow",
   "version": "0.2.0",
-  "description": "问流 / WenFlow - 从真实问题出发的 AI 学习路径原型（先澄清目标，再生成路径）",
+  "description": "问流 / WenFlow —— 先说清你想解决的事，再开始学习。开源、可自托管的 AI 原生学习平台：没有预置课程，AI 澄清目标、生成路径、用带白板的回合制课堂教学，并按遗忘曲线复习、按学习负荷管理节奏",
   "private": true,
   "directories": {
     "doc": "doc"
@@ -56,12 +56,25 @@
     "restart:backend": "node backend/restart.mjs"
   },
   "keywords": [
-    "ai-agent",
+    "wenflow",
+    "问流",
+    "ai-native",
+    "ai-tutor",
     "ai-learning",
+    "ai-education",
+    "ai-agent",
+    "multi-agent",
+    "llm",
+    "adaptive-learning",
+    "personalized-learning",
+    "spaced-repetition",
+    "fsrs",
     "education",
-    "learning-platform",
-    "learning-system",
-    "llm"
+    "self-hosted",
+    "vue3",
+    "nodejs",
+    "typescript",
+    "sqlite"
   ],
   "author": "Jinl2l3",
   "license": "MIT",

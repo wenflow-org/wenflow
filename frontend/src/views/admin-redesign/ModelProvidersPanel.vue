@@ -102,7 +102,6 @@
                  三段的含义即可；状态列只在有告警时才有内容，列头仍常驻以固定动作列位置。 -->
             <div class="mpp-models__head">
               <span>模型 · 默认与能力</span>
-              <span>状态</span>
               <span class="mpp-models__head-act">操作</span>
             </div>
             <div v-for="m in selected.models" :key="m.id" class="mpp-model-row">
@@ -119,6 +118,11 @@
                     title="平台当前默认，未单独配模型的 Skill 都继承它"
                   >默认</span>
                   <span v-for="tag in functionTags(m)" :key="tag" class="mk-badge mk-badge--muted mpp-fn__chip" :title="functionTagTitle(tag)">{{ tag }}</span>
+                  <span
+                    v-if="modelWarnings(m).length"
+                    class="mk-badge mk-badge--warn mpp-label"
+                    :title="modelWarnings(m).join('\n')"
+                  >⚠ {{ warningLabel(m) }}</span>
                 </div>
                 <!-- 测试结果是这一行的第二行读数，与 id 行同一左缘、不占动作列
                      （2026-11-05 用户「调用通过确实还是换行好看一些」）：
@@ -143,10 +147,8 @@
               <!-- 2026-11-05 用户「这个小绿点代表什么」：那枚「当前可被选中调用」的小圆点删掉。
                    它是**无条件渲染**的——2026-11-04 撤掉冷却徽标后条件那一侧就没了，
                    于是每一行都亮着同一枚点，含义退化成「这一行存在」，等于没有信息。
-                   状态格此后只在真有告警时出现，没有告警就整格不渲染。 -->
-              <div v-if="modelWarnings(m).length" class="mpp-model-row__status">
-                <span class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
-              </div>
+                   2026-11-26（管理端走查 AM-02 后半）：独立的「状态」列此后只有告警时才有内容，
+                   绝大多数时候表头挂着一列空白——撤掉这一列，告警徽章并入名称行（与能力胶囊同排）。 -->
               <div class="mpp-rowacts">
                 <!-- 2026-11-07 用户「设置为默认从 ⋯ 里提出来」：行内四枚平铺，
                      不用先点 ⋯ 再猜里面有什么。已是默认的那一行不渲染「设为默认」——
@@ -669,7 +671,7 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
    动作列右对齐，与行内四枚链接的右缘对齐。 */
 .mpp-models__head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
   padding: 0 16px 6px;
@@ -681,7 +683,7 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 .mpp-models__head-act { text-align: right; }
 .mpp-model-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   min-height: 52px;
@@ -700,7 +702,6 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 /* 名称列定宽：能力胶囊因此各行同一起点，不再随模型名长短而参差（2026-11-03 评审）。
    更长的 id 走省略号 + title，不再把后面的胶囊推着走。 */
 .mpp-model-row__id { width: 240px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mpp-model-row__status { grid-column: 2; display: inline-flex; align-items: center; gap: 6px; flex: none; }
 /* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */
 .mpp-setup {
   display: flex;
@@ -725,8 +726,28 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 /* 默认徽章：实心主色 + 白字，全行唯一高亮。
    不用 --mk-blue 当底：它在暗色档被有意提亮成 #5b8def，白字只有 3.23:1
    （与 .mk-btn--primary 同款坑，见 mk-primitives.css:1631）。 */
-.mpp-rowacts { grid-column: 3; display: flex; align-items: center; gap: 8px; white-space: nowrap; justify-self: end; }
+.mpp-rowacts { grid-column: 2; display: flex; align-items: center; gap: 8px; white-space: nowrap; justify-self: end; }
 /* 删除与上面三枚之间多留一段空白：不可撤销动作不贴着高频正向动作放（准则 2 防误触） */
 .mpp-rowacts__danger { margin-left: 12px; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+
+/* 窄屏（≤1023）两行重排（2026-11-26 管理端手机走查 AM-02）：
+   三列栅格 minmax(0,1fr) 96px auto 在 390 宽放不下——动作列 4 枚链接 + 状态列把
+   名称列压到 0 宽，实测 6 个模型里 5 个完全没有名字、第 6 个截成「deepseek…」，
+   而「设为默认」就在这些行里，属于高危误操作入口。名称独占一行，状态与动作落到第二行。 */
+@media (max-width: 1023.98px) {
+  .mpp-models__head { display: none; }
+  .mpp-model-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+  .mpp-model-row__main { grid-column: 1 / -1; }
+  .mpp-model-row__id { width: auto; }
+  .mpp-rowacts {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 4px;
+  }
+}
 </style>

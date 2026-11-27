@@ -92,7 +92,8 @@ const WITH_LLM: TraceSpan[] = [
 function mountWith(spans: TraceSpan[]) {
   h.spans.value = spans;
   h.total.value = spans.length;
-  return mount(TraceWaterfall, { props: { embedded: true } });
+  // 下拉弹层已 Teleport 到 body；原位渲染才能从 wrapper 里断言工具条控件
+  return mount(TraceWaterfall, { props: { embedded: true }, global: { stubs: { teleport: true } } });
 }
 
 describe('Trace 链路概要卡（读数带）', () => {

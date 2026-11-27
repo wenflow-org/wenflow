@@ -1,6 +1,6 @@
-# Admin 表头与工具条规格（ADMIN_TABLE_HEADER_SPEC，v1）
+# Admin 表头与工具条规格
 
-> 📌 类型：活规范｜最后核验：2026-10-27｜索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（Admin 表头区：卡头工具条 + 列头语义与守卫口径）｜索引见 [doc/README.md](./README.md)。
 > 范围：`frontend/src/views/admin-redesign/` 下所有「表头区」= 卡头工具条（`.mk-card__head`）
 > + 列头（`<thead>`）。
 > 分工：页面骨架节奏见 [ADMIN_VISUAL_LAYER_SPEC.md](./ADMIN_VISUAL_LAYER_SPEC.md) §2；
@@ -14,9 +14,8 @@
 成熟产品的表格工具条最终都收敛成同一套语法：**一行工具条，左侧范围，右侧检索与次级工具；
 列头吸顶、可排序；数字右对齐；批量操作以「替换工具条」出现，而不是在工具条里再塞一排按钮。**
 
-本仓 2026-10-15 的拍板（搜索进右组首位）与这套语法一致。所以本轮不是重做，而是收口：
-补齐列头语义（`scope` / `aria-sort`）、消除页面私有的对齐类、把能机器判的契约写进
-`design:check`，避免下一次改表又回到各页一套。
+本仓的搜索进右组首位与这套语法一致。本文约束列头语义（`scope` / `aria-sort`）、
+页面私有对齐类与 `design:check` 的可判契约，避免下一次改表又回到各页一套。
 
 ---
 
@@ -102,25 +101,13 @@
 
 ---
 
-## 5. 收口记录（2026-10-27）
-
-- 列头 `scope`：349 个 `<th>` 中缺失 216 个 → **0**（含 `skill-design/` 子页签）。
-- 可排序 `<th>` 缺 `aria-sort`：**0**。
-- `.mk-table--fixed` 缺 `<colgroup>`：**0**。
-- 页面私有对齐类：ExecLogs 耗时列 `.right` → `mk-th--right` / `mk-num`，并删除重复的
-  `.exec-table th.right, .exec-table td.right` 规则。
-- 工具条槽位：20 个列表页已按「左 chips / 右 search → actions → cols → 筛选 → meta」排布，
-  与 2026-10-15 拍板一致。
-
----
-
-## 6. 明确不做（本轮边界）
+## 6. 明确不做
 
 - **不给所有表强加列设置**。列设置是「列多且可隐藏」的页面能力，Polaris / Primer 也没有
   默认列设置；Feedback / Announcements / Notifications / OpsAchievements 等 6–8 列表
   可按需再接 `MkCols`，不属表头一致性缺陷。
 - **不改排序箭头的可见性**。原型 `sortmark` 只让活跃列显示箭头，非活跃列 hover 给 0.35
-  可发现性，属已拍板口径；改成常显会与原型偏离。
+  可发现性；改成常显会与原型偏离。
 - **不抽 `MkThSort` 组件**。排序标记虽重复，但每页排序状态机不同；守卫先保证语义一致，
   抽组件应与 `useTableSort` 一起做，避免只抽一半。
 - **不改工具条控件形态**。「列」用文字链接、「筛选」用带边框小按钮，是因为后者还要承载

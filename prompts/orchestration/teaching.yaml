@@ -86,14 +86,10 @@ fields:
     promptRole: control-signal
     valueType: object
     description: 补充资料采集请求 {topic, query?}（每 session 至多一次；编排层采集后下一轮注入）
-  - fieldId: diagram
-    promptRole: derived-presentation
+  - fieldId: visualIntent
+    promptRole: control-signal
     valueType: object
-    description: 课堂结构图（mermaid 源码，前端确定性渲染；结构类内容唯一图示通道，节点≤9、标签≤12 字）
-  - fieldId: figure
-    promptRole: derived-presentation
-    valueType: object
-    description: 位置线图（空间位置/距离/朝向/先后的确定性渲染；marks 1-6、spans≤3、数值坐标）
+    description: 视觉意图 {need, relation, focus, kindHint?}——模型只表达要画什么关系，绘图 JSON 由视觉节点生成（2026-11-26）
   - fieldId: knowledge.currentPoint
     promptRole: derived-presentation
     valueType: string
@@ -368,19 +364,12 @@ routings:
     accumulate: false
     notes: 每 session 至多一次；编排层采集后下一轮注入
   - agentId: skill:teaching-turn
-    fieldId: diagram
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
+    fieldId: visualIntent
+    render: hidden
+    handoff: []
+    internal: true
     accumulate: false
-    notes: mermaid 前端确定性渲染（结构类图示唯一通道）
-  - agentId: skill:teaching-turn
-    fieldId: figure
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-    notes: 位置线图（空间/序关系确定性渲染）
+    notes: auto — teaching-turn-engine 读取 need/relation 后调用视觉节点生成图（2026-11-26）
   # cognitiveLevel/understanding 同链交付 peer（teaching-peer-reinforcement 消费）
   - agentId: skill:teaching-turn
     fieldId: analysis.cognitiveLevel

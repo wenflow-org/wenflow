@@ -100,6 +100,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
+import { resolveVisualScale, visualViewportHeight } from '@/utils/zoom'
 
 export interface MkModelOption {
   /** 模型 ID 或逻辑别名；空字符串 = 继承 */
@@ -161,26 +162,36 @@ const listEl = ref<HTMLElement | null>(null)
 const popEl = ref<HTMLElement | null>(null)
 /** fixed 定位的候选层：卡片与滚动容器普遍 overflow:hidden，绝对定位会被卡片边缘裁掉 */
 const popPos = ref<{ left: number; width: number; top?: number; bottom?: number }>({ left: 0, width: 430 })
+/** 候选层 Teleport 到 body（不在 zoom 子树里）：用自身 zoom 还原页面视觉比例，
+    坐标先按缩放折回，再由 zoom 放大回触发框的视觉位置。 */
+const popZoom = ref(1)
 const popStyle = computed(() => {
   const p = popPos.value
   return {
     left: `${p.left}px`,
     width: `${p.width}px`,
     ...(p.top != null ? { top: `${p.top}px` } : {}),
-    ...(p.bottom != null ? { bottom: `${p.bottom}px` } : {})
+    ...(p.bottom != null ? { bottom: `${p.bottom}px` } : {}),
+    zoom: String(popZoom.value)
   }
 })
 
 function place(): void {
   const rect = rootEl.value?.getBoundingClientRect()
   if (!rect) return
-  const width = Math.min(Math.max(rect.width, 430), Math.max(320, window.innerWidth - 32))
-  const below = window.innerHeight - rect.bottom
+  /* rect / clientX 是视觉 px，弹层在 body（不随页面 zoom）：自身带 zoom，
+     所以 left/top/width 先按缩放折回，再由 zoom 放大回视觉位置。 */
+  const zoom = resolveVisualScale(rootEl.value) || 1
+  popZoom.value = zoom
+  const vw = window.innerWidth
+  const vh = visualViewportHeight()
+  const width = Math.min(Math.max(rect.width, 430), Math.max(320, vw - 32)) / zoom
+  const below = vh - rect.bottom
   openUp.value = below < 320 && rect.top > below
-  const left = Math.max(16, Math.min(rect.left, window.innerWidth - width - 16))
+  const left = Math.max(16, Math.min(rect.left, vw - width * zoom - 16)) / zoom
   popPos.value = openUp.value
-    ? { left, width, bottom: window.innerHeight - rect.top + 5 }
-    : { left, width, top: rect.bottom + 5 }
+    ? { left, width, bottom: (vh - rect.top + 5) / zoom }
+    : { left, width, top: (rect.bottom + 5) / zoom }
 }
 const open = ref(false)
 /** 候选层向上展开：控件贴近视口底部时向下会被裁掉（Skill 运行时的模型字段就在折线附近） */
@@ -329,16 +340,19 @@ watch(open, (v) => {
     document.addEventListener('mousedown', onDocDown)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', onScroll)
+    window.visualViewport?.addEventListener('resize', onScroll)
   } else {
     document.removeEventListener('mousedown', onDocDown)
     window.removeEventListener('scroll', onScroll, true)
     window.removeEventListener('resize', onScroll)
+    window.visualViewport?.removeEventListener('resize', onScroll)
   }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocDown)
   window.removeEventListener('scroll', onScroll, true)
   window.removeEventListener('resize', onScroll)
+  window.visualViewport?.removeEventListener('resize', onScroll)
 })
 </script>
 
