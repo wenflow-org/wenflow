@@ -79,14 +79,16 @@ describe('repairContradictedPassedVerdict', () => {
 });
 
 describe('护栏接线（源码守卫）', () => {
-  const engineSource = fs.readFileSync(
-    path.join(__dirname, '..', 'teaching-turn-engine.ts'),
-    'utf-8'
-  );
+  // 回复护栏已拆到 teaching-turn-reply-guards.ts（2026-11-27）；接线与实现分别落在两个文件，
+  // 源码守卫合并读取。
+  const engineSource = [
+    fs.readFileSync(path.join(__dirname, '..', 'teaching-turn-engine.ts'), 'utf-8'),
+    fs.readFileSync(path.join(__dirname, '..', 'teaching-turn-reply-guards.ts'), 'utf-8'),
+  ].join('\n');
 
   it('引擎在 passed=true 的提交轮调用对称护栏并记录遥测', () => {
     expect(engineSource).toContain('repairContradictedPassedVerdict');
     expect(engineSource).toContain("faultCategory: 'MODEL_NEGATION_ON_PASSED_CHECKPOINT'");
-    expect(engineSource).toContain('options.checkpointJudgement.passed === true');
+    expect(engineSource).toContain('checkpointJudgement.passed === true');
   });
 });

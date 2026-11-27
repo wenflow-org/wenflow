@@ -574,7 +574,7 @@ export function gradePendingExitTicket(input: {
   const attempts = countAttempts();
   let verdict: { passed: boolean; detail: string | null } | null = null;
   let graded = false;
-  let formatMiss = false;
+  const formatMiss = false;
   if (state?.status === 'pending' && input.kind !== 'resume-continue' && String(input.message || '').trim()) {
     const submission = parseExitTicketSubmission(state, String(input.message));
     const selected = Array.isArray(submission.selectedOptionIds) ? submission.selectedOptionIds : [];

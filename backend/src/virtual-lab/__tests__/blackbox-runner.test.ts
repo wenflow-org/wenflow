@@ -3081,7 +3081,7 @@ describe('Blackbox Goal 支线消费模拟器离场信号（外部评审 P1.3）
   }
 
   function stubGoalSimulator(output: Record<string, unknown>) {
-    ;(executeSkill as jest.Mock).mockResolvedValueOnce(output)
+    (executeSkill as jest.Mock).mockResolvedValueOnce(output)
   }
 
   beforeEach(() => {

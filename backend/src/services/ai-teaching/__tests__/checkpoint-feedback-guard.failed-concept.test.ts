@@ -66,10 +66,12 @@ describe('shouldGuardReplyForFailedConcept', () => {
 });
 
 describe('#84 护栏接线（源码守卫）', () => {
-  const engineSource = fs.readFileSync(
-    path.join(__dirname, '..', 'teaching-turn-engine.ts'),
-    'utf-8'
-  );
+  // 回复护栏已拆到 teaching-turn-reply-guards.ts（2026-11-27）；接线与实现分别落在两个文件，
+  // 源码守卫合并读取，仍钉死「引擎调用了它 + 实现里保留了单列遥测」。
+  const engineSource = [
+    fs.readFileSync(path.join(__dirname, '..', 'teaching-turn-engine.ts'), 'utf-8'),
+    fs.readFileSync(path.join(__dirname, '..', 'teaching-turn-reply-guards.ts'), 'utf-8'),
+  ].join('\n');
 
   it('引擎在提交轮硬门之后接线后续回合护栏，并使用单列遥测类别', () => {
     expect(engineSource).toContain('shouldGuardReplyForFailedConcept');

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 目标对话产出的动态 JSON 形状，由运行时校验兜底 */
 /**
  * Goal 对话的输出一致性护栏（2026-11-26）。
  *

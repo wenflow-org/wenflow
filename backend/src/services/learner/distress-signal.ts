@@ -33,7 +33,7 @@ export interface DistressEventInput {
  * 不在这里落——它们不代表学习者主动崩溃。
  */
 export async function recordDistressAbandonEvidence(input: DistressEventInput): Promise<void> {
-  const model = (prisma as unknown as { learner_evidence?: { upsert?: Function } }).learner_evidence;
+  const model = (prisma as unknown as { learner_evidence?: { upsert?: (...args: unknown[]) => unknown } }).learner_evidence;
   if (!model?.upsert) return;
   const occurredAt = input.occurredAt ?? new Date();
   const eventId = `session:${input.sessionId}`;
@@ -93,8 +93,8 @@ export async function loadRecentDistressSignal(
   now?: Date,
 ): Promise<RecentDistressSignal | null> {
   const evidence = (prisma as unknown as {
-    learner_evidence?: { findFirst?: Function };
-    teaching_sessions?: { findFirst?: Function };
+    learner_evidence?: { findFirst?: (...args: unknown[]) => Promise<unknown> };
+    teaching_sessions?: { findFirst?: (...args: unknown[]) => Promise<unknown> };
   }).learner_evidence;
   if (!evidence?.findFirst) return null;
   try {
@@ -114,7 +114,7 @@ export async function loadRecentDistressSignal(
     const futureLimit = new Date(effectiveNow.getTime() + 5 * 60 * 1000);
     if (occurredAt < cutoff || occurredAt > futureLimit) return null;
 
-    const sessions = (prisma as unknown as { teaching_sessions?: { findFirst?: Function } }).teaching_sessions;
+    const sessions = (prisma as unknown as { teaching_sessions?: { findFirst?: (...args: unknown[]) => Promise<unknown> } }).teaching_sessions;
     if (sessions?.findFirst) {
       const later = await sessions.findFirst({
         where: {
