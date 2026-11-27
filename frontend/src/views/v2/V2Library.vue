@@ -1111,6 +1111,16 @@ onMounted(load);
   margin-top: 8px;
 }
 
+/* 2026-11-25 全站对齐：901~1100 档其余页面（学习台/路径/状态/图谱）都把内衬收到 14px，
+   本页只在 ≤720 才收，1024 实测内容轨 69..955（邻页 55..969）——切换页面时卡边横跳 14px。
+   这里只补横向内衬，纵向留白仍由 ≤720 档接管。 */
+@media (max-width: 1100px) {
+  .library__main {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
 @media (max-width: 720px) {
   .library__main {
     padding: 16px 14px 32px;

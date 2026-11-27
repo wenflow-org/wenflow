@@ -65,6 +65,16 @@ describe('课堂页窄屏页头标题', () => {
     expect(decl(baseRule, 'text-overflow')).toBe('ellipsis');
   });
 
+  it('320 档放宽到三行，副标题只留节次（2026-11-25 走查）', () => {
+    const blocks = [...css.matchAll(/@media \(max-width: 360px\) \{/g)].map((m) => blockAt(m.index!));
+    const hit = blocks.find((b) => b.includes('.learn__title strong'));
+    expect(hit, '320 没有单独放宽标题行数').toBeTruthy();
+    const flat = hit!.replace(/\s+/g, ' ');
+    expect(flat).toContain('-webkit-line-clamp: 3');
+    expect(flat).toContain('.learn__pathname { display: none; }');
+    expect(source, '副标题的路径名要单独成 span 才能在 320 隐藏').toContain('class="learn__pathname"');
+  });
+
   it('390 页头把三颗动作收进标题行，不再单独占一条动作带', () => {
     const blocks = [...css.matchAll(/@media \(max-width: 640px\) \{/g)].map((m) => blockAt(m.index!));
     const hit = blocks.find((b) => b.includes('.learn__finishbtn-short'));

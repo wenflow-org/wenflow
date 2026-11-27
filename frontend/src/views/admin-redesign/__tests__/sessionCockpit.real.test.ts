@@ -549,7 +549,7 @@ describe('SessionCockpit 双模式', () => {
     const text = panel.text();
     expect(text).toContain('LSS 6.2（中）');
     expect(text).toContain('KTL 7.1（高）');
-    expect(text).toContain('落库状态');
+    expect(text).toContain('记录状态');
     expect(text).toContain('LSS 6.0 · KTL 6.5 · LF 4.4 · LSB -0.2');
     expect(text).toContain('节奏 降压恢复');
     expect(text).toContain('弃课锁生效');
@@ -1326,7 +1326,7 @@ describe('SessionCockpit 双模式', () => {
     await learnTab!.trigger('click');
     await settle();
 
-    expect(wrapper.findAll('.cp-stage__label').map((s) => s.text())).toEqual(['开场', '白板出现', '收束']);
+    expect(wrapper.findAll('.cp-stage__label').map((s) => s.text())).toEqual(['开场', '白板出现', '完成']);
     expect(wrapper.findAll('.cp-msg__avatar').length).toBe(4);
     expect(wrapper.find('.cp-transcript__message.is-teacher .cp-msg__avatar').text()).toBe('师');
     expect(wrapper.find('.cp-transcript__message.is-learner .cp-msg__avatar').text()).toBe('学');

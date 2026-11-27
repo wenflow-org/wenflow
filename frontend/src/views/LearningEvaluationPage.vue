@@ -594,7 +594,7 @@ const transcriptEntries = computed<TranscriptEntry[]>(() => {
   const firstCheckpoint = merged.findIndex((entry) => entry.kind === 'checkpoint');
   if (firstCheckpoint > 0) stageAt.set(firstCheckpoint, '课堂检查点');
   const lastIndex = merged.length - 1;
-  if (lastIndex > 0 && merged[lastIndex].kind === 'message') stageAt.set(lastIndex, '收束');
+  if (lastIndex > 0 && merged[lastIndex].kind === 'message') stageAt.set(lastIndex, '完成');
 
   return merged.map((entry, index) => (
     stageAt.has(index) ? { ...entry, stage: stageAt.get(index) } : entry
@@ -1689,7 +1689,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: color-mix(in srgb, var(--blue) 5%, var(--surface));
   color: var(--blue-deep);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
 
@@ -1709,7 +1709,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   margin: 8px 0 -2px 42px;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
   color: var(--muted);
 }
 
@@ -1921,7 +1921,7 @@ onUnmounted(() => {
   align-items: baseline;
   gap: 6px;
   margin: 2px 0 0;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
   color: var(--muted);
 }
 
@@ -2344,7 +2344,7 @@ onUnmounted(() => {
     width: 28px;
     height: 28px;
     margin-top: 15px;
-    font-size: 11px;
+    font-size: var(--mk-fs-micro);
   }
 
   /* 说话人 + 时间在 390/320 下都放得下一行（≤640 的竖排是白占一行 × 每条消息） */

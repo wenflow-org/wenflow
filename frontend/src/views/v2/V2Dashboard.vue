@@ -350,7 +350,7 @@
                  换成「完成第一次学习后，这里会显示每日时长」的虚线空框——今天依然是
                  11月7日周六，把日历藏起来只让首页像个没数据的毛坯房，还让 PC 双栏的
                  左卡高、右卡矮、底边不齐。现在永远渲染真实日历：无记录的日子显示「—」，
-                 今天显示「待点亮」并带蓝色描边，一眼就能看出「这一格在等我点亮」。 -->
+                 今天显示「今天」并带蓝色描边，一眼就能看出「这一格是今天」。 -->
             <!-- 日历（2026-11-08 走查重做）：周视图与月视图**共用一个网格**，不再上下画两遍。
                  原先「展开整月」在 7 天条下方又画一份「一二三四五六日 + 2~8」，同屏两份
                  星期表头、两份 2~8 号，白吃 120px；且月历格子是纯静态 span，点不开抽屉。
@@ -392,7 +392,7 @@
                     :title="`${d.date} · ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
                     :aria-label="`${d.date} ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
                     @click="selectDay(d.date)"
-                  ><b>{{ d.dayNum }}</b><span class="cal__min">{{ d.minutes ? d.minutes + '分' : (d.isToday ? '待点亮' : '—') }}</span></button>
+                  ><b>{{ d.dayNum }}</b><span class="cal__min">{{ d.minutes ? d.minutes + '分' : (d.isToday ? '今天' : '—') }}</span></button>
                 </template>
               </div>
               <div v-if="monthOpen" class="cal__foot">
@@ -1187,8 +1187,10 @@ const nearestAchievement = computed(() => {
     // 不再含 KTL 缩写，无需在前端二次展开。
     // 2026-11-24：目标与进度拆成两个 span——320 下原来整句在「·」后断行，
     // 第二行只剩「进度 4/5」；现在分隔点跟着进度整体换行。
+    // 2026-11-25 走查：320 实测换行后「· 进度 4/5」以句号起行，孤零零一个点；
+    // 两段本来就靠 8px 间距分家，分隔符是多余标点，去掉。
     goal: nearest.description || '',
-    progress: `· 进度 ${prog}`
+    progress: `进度 ${prog}`
   };
 });
 
@@ -1317,7 +1319,7 @@ const hasAnyMinutes = computed(() => [...minutesByDate.value.values()].some((m) 
 const weekTotal = computed(() => weekDays.value.reduce((s, d) => s + d.minutes, 0));
 const weekActiveDays = computed(() => weekDays.value.filter((d) => d.minutes > 0).length);
 /* 周视图格子（2026-11-08）：与月视图同一个网格组件，所以统一成 cal__cell 的形状
-   （日号 + 分钟/待点亮），周几由共用表头承担，不再每格左上角各印一个「一/二/三」 */
+   （日号 + 分钟/今天），周几由共用表头承担，不再每格左上角各印一个「一/二/三」 */
 const weekCells = computed(() => weekDays.value);
 
 /* 月度数据游标已退役（2026-10-05）：sessions 改拉「近 90 天」滚动窗口，
@@ -2103,7 +2105,8 @@ onMounted(() => {
 }
 .week__note svg { flex-shrink: 0; color: var(--amber); }
 .week__note--achv svg { color: var(--accent); }
-/* 成就提示分三段（名称 / 条件 / 进度）：窄屏只在段边界折行，「· 进度」整体带走。 */
+/* 成就提示分三段（名称 / 条件 / 进度）：窄屏只在段边界折行，「进度 4/5」整体带走；
+   两段之间靠 8px 间距分家，不再用「·」——它在 320 会成为新行的第一个字符。 */
 .week__note-text { min-width: 0; }
 .week__note-goal { margin-left: 8px; }
 .week__note-progress { white-space: nowrap; }
@@ -2430,8 +2433,9 @@ a.btn-primary { text-decoration: none; }
   .sheet__scroll { padding: 12px 14px 20px; }
   /* 30px 对拇指偏小（贴弹层右上角、周边无别的手势目标），抬到 36px */
   .sheet__close { width: 36px; height: 36px; }
-  /* 列间距 5→3：375 下七列每格从 40.6 放到 42.3，今天那格的「待点亮」（12px 三字 = 36px）
-     才装得下——否则差 0.8px 被 text-overflow: ellipsis 切成「待点…」。 */
+  /* 列间距 5→3：375 下七列每格从 40.6 放到 42.3，格内文字多留 2px。
+     2026-11-25：今日格文案由「待点亮」收成「今天」——320 下格子内宽只有 29px，
+     三字 36px 会被省略成「待…」；两字在任何一档都完整。 */
   .cal__grid { column-gap: 3px; }
   .cal__wks { column-gap: 3px; }
 }

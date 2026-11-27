@@ -10,8 +10,8 @@
       <div class="learn__title">
         <strong>{{ taskTitle || '课堂' }}</strong>
         <small>
-          {{ pathName }}
-          <template v-if="stageProgress"> · 第 {{ stageProgress.index }} / {{ stageProgress.total }} 节</template>
+          <span v-if="pathName" class="learn__pathname">{{ pathName }}<template v-if="stageProgress"> · </template></span>
+          <template v-if="stageProgress">第 {{ stageProgress.index }} / {{ stageProgress.total }} 节</template>
         </small>
       </div>
       <div class="learn__head-right">
@@ -4849,6 +4849,14 @@ onBeforeUnmount(() => {
     /* 26 字任务名两行时避免「…出什么 / 岔子」这种末行只剩两字的孤行 */
     text-wrap: balance;
   }
+}
+/* 320 档（2026-11-25 走查）：返回钮 + 两颗动作占掉 ~99px，标题区只剩 149px，
+   26 字任务名两行仍被截成「…形态错…」。这一档放宽到三行（页头约 +18px）；
+   副标题里的路径名在这个宽度必被省略，退回钮已指向路径详情，故只留「第 N / M 节」
+   ——节次是这页独有、截掉就找不回来的信息。 */
+@media (max-width: 360px) {
+  .learn__title strong { -webkit-line-clamp: 3; }
+  .learn__title .learn__pathname { display: none; }
 }
 </style>
 

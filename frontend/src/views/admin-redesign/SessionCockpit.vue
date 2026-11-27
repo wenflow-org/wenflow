@@ -687,7 +687,7 @@
             <div v-if="wrapupStateRows.length" class="cp-state">
               <div class="cp-state__head">
                 <span class="cp-state__title">评估与控制态</span>
-                <span class="cp-state__hint">本课判定 → 池化落库 → 下节课控制面</span>
+                <span class="cp-state__hint">本课判定 → 写入记录 → 下节课控制面</span>
               </div>
               <div v-for="row in wrapupStateRows" :key="row.label" class="cp-state__row">
                 <span class="cp-state__label">{{ row.label }}</span>
@@ -1823,7 +1823,7 @@ const learnStageByKey = computed(() => {
   const firstCheckpoint = list.findIndex((entry) => !!entry.checkpoint)
   if (firstCheckpoint > 0) map.set(list[firstCheckpoint].key, '检查点')
   const last = list.length - 1
-  if (last > 0 && list[last].message) map.set(list[last].key, '收束')
+  if (last > 0 && list[last].message) map.set(list[last].key, '完成')
   return map
 })
 const CHECKPOINT_TYPE_LABEL: Record<string, string> = {
@@ -2690,9 +2690,9 @@ const wrapupStateRows = computed<Array<{ label: string; value: string; note: str
   if (stateParts.length) {
     const at = firstText(st.timestamp)
     rows.push({
-      label: '落库状态',
+      label: '记录状态',
       value: stateParts.join(' · '),
-      note: `同量纲池化（历史先验 + 本节观测）${at ? ` · ${formatTime(at)}` : ''}`,
+      note: `同量纲汇总（历史默认值 + 本节观测）${at ? ` · ${formatTime(at)}` : ''}`,
     })
   }
 
@@ -4186,7 +4186,7 @@ async function copyRawJson() {
   color: var(--mk-blue-text); background: var(--mk-blue-bg-strong); border: 1px solid var(--mk-line);
 }
 .cp-transcript__message.is-learner .cp-msg__avatar {
-  color: var(--mk-teal-text, var(--mk-teal)); background: rgba(45, 212, 191, 0.16);
+  color: var(--mk-teal); background: rgba(45, 212, 191, 0.16);
 }
 .cp-msg__body { display: grid; gap: 3px; flex: 1; min-width: 0; }
 /* 课堂阶段锚点：与总结页同口径，只在开场/白板/检查点/收束出现 */
@@ -4198,7 +4198,7 @@ async function copyRawJson() {
 .cp-stage__label { font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: 0.04em; color: var(--mk-blue-text); }
 /* 白板更新提示：图本身由 TeachingFigure 渲染，这里只标出“这一轮摆板了” */
 .cp-board-update { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
-.cp-transcript__message .cp-board-update__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-teal-text, var(--mk-teal)); }
+.cp-transcript__message .cp-board-update__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-teal); }
 .cp-transcript__message .cp-board-update__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
 /* 2026-11-09 微调（图4 学习阶段课堂对话流）：真实模式（session-real）学习者消息卡向右缩进
    12% + 深蓝底，与左侧教师卡拉开区分度。仅给真实模式的「学习者」卡加 is-real-learner 修饰类，

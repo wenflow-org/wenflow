@@ -3,11 +3,10 @@
     <V2Nav />
 
     <main class="detail__main">
-      <!-- 面包屑 -->
+      <!-- 面包屑：只留返回链。当前页名紧接在下方的 hero h1 里原样出现，
+           再在面包屑尾巴复读一遍就是同一行字连出两次（2026-11-25 全站走查）。 -->
       <div class="crumbs">
         <router-link to="/learning-paths" class="crumbs__back">‹ 路径列表</router-link>
-        <span class="crumbs__sep">/</span>
-        <span class="crumbs__current">{{ pathTitle || '路径详情' }}</span>
       </div>
 
       <!-- 加载 -->
@@ -2017,7 +2016,6 @@ onBeforeUnmount(() => {
    手机档已由文末媒体查询抬到 44px，两档不一致。补 min-height，配色/字号不动。 */
 .crumbs__back { font-weight: 600; color: var(--muted); cursor: pointer; padding: 5px 0; display: inline-flex; align-items: center; min-height: 36px; }
 .crumbs__back:hover { color: var(--blue-deep); }
-.crumbs__current { color: var(--ink); font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumbs__toggle { flex: 0 0 auto; margin-left: auto; }
 
 .card {
@@ -2514,11 +2512,6 @@ onBeforeUnmount(() => {
 /* ===== 移动端适配 ===== */
 @media (max-width: 1100px) {
   .crumbs { flex-wrap: wrap; row-gap: 6px; }
-}
-/* 2026-11-24 走查：窄屏面包屑的当前页与下方 h1 完全同名，白占一行；只留返回链。 */
-@media (max-width: 640px) {
-  .crumbs__sep,
-  .crumbs__current { display: none; }
 }
 
 /* ===== 补充说明调整弹窗 ===== */
