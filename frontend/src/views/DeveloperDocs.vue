@@ -61,7 +61,7 @@
           <p class="docs-lead">Windows + PowerShell 是一等开发环境，Node ≥ 18。全部命令在项目根目录执行。</p>
 
           <div class="code">
-            <div class="code__head"><span>终端</span><button @click="copy($event)">复制</button></div>
+            <div class="code__head"><span>终端</span><button type="button" @click="copy($event)">复制</button></div>
             <pre><code>git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
 
@@ -117,7 +117,7 @@ npm run dev</code></pre>
             <div class="mini">
               <span class="mini__k">前端</span>
               <strong>Vue 3 + TS + Vite 5</strong>
-              <p>Element Plus + Pinia。学习者前台（v2）与 Admin 控制台（admin-redesign）两套界面。</p>
+              <p>TypeScript + Pinia。学习者前台（v2）与 Admin 控制台（admin-redesign）两套界面。</p>
             </div>
             <div class="mini">
               <span class="mini__k">后端</span>
@@ -132,7 +132,7 @@ npm run dev</code></pre>
             <div class="mini">
               <span class="mini__k">AI</span>
               <strong>OpenAI SDK</strong>
-              <p>指向 DeepSeek 兼容 API。模型与密钥走后台「连接与安全」，不入库源码。</p>
+              <p>指向 DeepSeek 兼容 API。模型与密钥走后台「系统设置」，不入库源码。</p>
             </div>
           </div>
 
@@ -152,7 +152,7 @@ npm run dev</code></pre>
             </div>
             <div class="table__row"><code class="mono">JWT_SECRET</code><span>≥ 32 字符，启动校验，缺失即崩</span></div>
             <div class="table__row"><code class="mono">DATABASE_URL</code><span>开发默认 <code>file:./dev.db</code></span></div>
-            <div class="table__row"><code class="mono">AI_API_URL / AI_API_KEY / AI_MODEL</code><span>DeepSeek 兼容服务，也可在控制台「连接与安全」页在线改</span></div>
+            <div class="table__row"><code class="mono">AI_API_URL / AI_API_KEY / AI_MODEL</code><span>DeepSeek 兼容服务，也可在控制台「系统设置」页在线改</span></div>
             <div class="table__row"><code class="mono">INIT_ADMIN_PASSWORD</code><span>首次启动播种管理员（≥12 位强密码）</span></div>
           </div>
         </section>
@@ -163,7 +163,7 @@ npm run dev</code></pre>
           <p class="docs-lead">Skill 是平台唯一的 LLM 能力单元：一个 TS handler + 一份 Prompt 资产。</p>
 
           <div class="code">
-            <div class="code__head"><span>backend/src/skills/ 结构（简化）</span><button @click="copy($event)">复制</button></div>
+            <div class="code__head"><span>backend/src/skills/ 结构（简化）</span><button type="button" @click="copy($event)">复制</button></div>
             <pre><code>backend/src/skills/
 ├── index.ts                 # skillHandlers 注册表（全部 handler 在此登记）
 ├── goal-conversation/       # 目标对话（conversational）
@@ -292,9 +292,9 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="mini"><strong>Skill 目录 / 抽屉</strong><p>统计排序、运行配置（路由/重试/超时）、试跑、协议规则、生效 Prompt。</p></div>
             <div class="mini"><strong>Skill 详情页</strong><p><code>/admin/skills?view=skill&amp;id=&lt;id&gt;</code>：只读概览（状态/版本/字段路由）+ 可编辑设计区块（协议发布、试跑、版本回滚、运行时、工程、字段路由）。</p></div>
             <div class="mini"><strong>Prompt Dry Run</strong><p>候选编译三视图（产物/候选/diff）+ 字段契约编辑。</p></div>
-            <div class="mini"><strong>日志三件套</strong><p>执行日志（重试时间线/导出）、Prompt 调用、事件中心 + Trace 瀑布。</p></div>
+            <div class="mini"><strong>执行日志</strong><p>执行日志（重试时间线/导出/Prompt 调用/事件中心）+ Trace 瀑布。</p></div>
             <div class="mini"><strong>虚拟学习者</strong><p>辅助模拟/仿真、一键快速代学、传播报告。</p></div>
-            <div class="mini"><strong>连接与安全</strong><p>模型接入、网络策略、可靠性预算与调用读数。</p></div>
+            <div class="mini"><strong>系统设置</strong><p>模型接入、网络策略、可靠性预算、数据导出与访问注册。</p></div>
           </div>
         </section>
 
@@ -330,7 +330,7 @@ prompts/                     # 仓库根，与 backend/ 同级
         <section id="testing" class="docs-sec">
           <h2>测试与质量</h2>
           <div class="code">
-            <div class="code__head"><span>常用命令</span><button @click="copy($event)">复制</button></div>
+            <div class="code__head"><span>常用命令</span><button type="button" @click="copy($event)">复制</button></div>
             <pre><code># 后端（backend/）
 npm test                 # Jest（__tests__/**/*.test.ts，超时 10s）
 npm run lint             # ESLint
@@ -370,7 +370,8 @@ const initialHash = typeof window !== 'undefined' ? window.location.hash.slice(1
 const active = ref(initialHash || 'quickstart')
 
 async function copy(e: MouseEvent) {
-  const block = (e.currentTarget as HTMLElement).closest('.code')
+  const btn = e.currentTarget as HTMLButtonElement | null
+  const block = btn?.closest('.code')
   const text = block?.querySelector('pre')?.textContent || ''
   if (!text) {
     toast.error('没有可复制的内容')
@@ -378,34 +379,54 @@ async function copy(e: MouseEvent) {
   }
   try {
     await navigator.clipboard.writeText(text)
+    if (btn) {
+      const prev = btn.dataset.label || btn.textContent || '复制'
+      btn.dataset.label = prev
+      btn.textContent = '已复制'
+      window.setTimeout(() => {
+        btn.textContent = btn.dataset.label || '复制'
+      }, 1800)
+    }
     toast.success('已复制')
   } catch {
     toast.error('复制失败，请手动选择')
   }
 }
 
+let scrollRaf = 0
+
 function onScroll() {
-  const secs = document.querySelectorAll('.docs-sec')
-  /* scrollY 是视觉 px，offsetTop 是布局 px；.v2-page 在 ≥1600 视口有 zoom，
-     直接比较会让章节高亮越往下越提前。 */
-  const zoom = resolveVisualScale(document.querySelector('.v2-page') as HTMLElement | null) || 1
-  const y = window.scrollY / zoom + 120
-  let current = 'quickstart'
-  secs.forEach((s) => {
-    if (y >= (s as HTMLElement).offsetTop) current = s.id
+  if (scrollRaf) return
+  scrollRaf = window.requestAnimationFrame(() => {
+    scrollRaf = 0
+    const secs = document.querySelectorAll('.docs-sec')
+    /* scrollY 是视觉 px，offsetTop 是布局 px；.v2-page 在 ≥1600 视口有 zoom，
+       直接比较会让章节高亮越往下越提前。 */
+    const zoom = resolveVisualScale(document.querySelector('.v2-page') as HTMLElement | null) || 1
+    const y = window.scrollY / zoom + 120
+    let current = 'quickstart'
+    secs.forEach((s) => {
+      if (y >= (s as HTMLElement).offsetTop) current = s.id
+    })
+    active.value = current
   })
-  active.value = current
 }
 
 onMounted(() => {
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
 })
-onUnmounted(() => window.removeEventListener('scroll', onScroll))
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll)
+  if (scrollRaf) {
+    window.cancelAnimationFrame(scrollRaf)
+    scrollRaf = 0
+  }
+})
 </script>
 
 <style scoped>
-.docs { min-height: 100vh; }
+.docs { min-height: calc(100vh / var(--vp-zoom, 1)); }
 
 /* ---------- 顶栏 ---------- */
 .docs-nav {
@@ -451,8 +472,10 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   min-height: 36px;
   padding: 0 6px;
   border-radius: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 .docs-nav__links a:hover { color: var(--blue); background: var(--mk-surface-2); }
+.docs-nav__links a:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .docs-nav__links a.on { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, var(--surface)); }
 .docs-nav__back {
   display: inline-flex;
@@ -465,8 +488,11 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   font-size: 12.5px;
   font-weight: 700;
   text-decoration: none;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 .docs-nav__back:hover { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.docs-nav__back:active { transform: scale(0.98); }
+.docs-nav__back:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 /* ≤860：章节导航不再整排隐藏（手机上原先没有任何目录入口），改为顶栏第二行横向滚动；
    侧栏仍收起，避免长目录吃掉正文高度。 */
 @media (max-width: 860px) {
@@ -558,8 +584,10 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   font-size: 13px;
   font-weight: 600;
   border-left: 2px solid transparent;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 .docs-side__group a:hover { background: var(--mk-surface-2); color: var(--ink); }
+.docs-side__group a:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .docs-side__group a.on {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
@@ -693,8 +721,11 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   border-radius: 6px;
   font-size: 12px;
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 .code__head button:hover { border-color: #3f5a82; color: #cfe1f7; }
+.code__head button:active { transform: scale(0.98); }
+.code__head button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .code pre {
   margin: 0;
   padding: 14px 16px;
@@ -794,8 +825,27 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   color: var(--faint);
   font-size: 12px;
 }
-.docs-foot a { color: var(--muted); text-decoration: none; padding: 5px 0; }
+.docs-foot a { color: var(--muted); text-decoration: none; padding: 5px 0; transition: color 0.15s ease; }
 .docs-foot a:hover { color: var(--blue); }
+.docs-foot a:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+
+@media (max-width: 640px) {
+  .table__row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 10px 12px;
+  }
+  .table__row--head {
+    display: none;
+  }
+  .api__row {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 6px 10px;
+  }
+  .api__row span:last-child {
+    grid-column: 1 / -1;
+  }
+}
 
 /* ===== 暗色模式 =====
    基础规则已全部令牌化（--surface/--line/--canvas/--ink/--muted/--faint 与 color-mix(--blue/--green/--amber) 派生），

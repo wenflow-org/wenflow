@@ -203,12 +203,11 @@ function text(x: number, y: number, s: unknown, cls = 't-label', anchor = 'middl
   return `<text x="${x}" y="${y}" class="${cls}" text-anchor="${anchor}" ${extra}>${esc(s)}</text>`;
 }
 
-/** 标题：一条短强调线放在标题下方——廉价但有效的「结构感」，不增加任何信息。 */
+/** 标题：保持纯净排版，不额外叠加装饰色块。 */
 function titleBlock(title: string | null | undefined, x = 12): string[] {
   if (!title) return [];
   return [
     text(x, T.fontTitle + 6, title, 't-title', 'start'),
-    `<rect x="${x}" y="${T.fontTitle + 12}" width="22" height="2.5" rx="1.25" fill="${T.accent}"/>`,
   ];
 }
 

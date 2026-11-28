@@ -45,6 +45,7 @@
         </button>
       </div>
     </div>
+    <div v-if="menuOpen" class="mknav__backdrop" aria-hidden="true" @click="closeMenu" />
     <Transition name="mknav-drawer">
       <div v-if="menuOpen" class="mknav__drawer mknav__shell">
         <router-link
@@ -71,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Moon, Sun } from 'lucide-vue-next'
 import { useIsDark } from '@/composables/useIsDark';
 import { applyDocumentTheme, writeTheme } from '@/utils/theme';
@@ -109,11 +110,20 @@ function onNavHome() {
   closeMenu()
 }
 
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && menuOpen.value) closeMenu()
+}
+
 watch(menuOpen, (open) => {
   document.body.style.overflow = open ? 'hidden' : ''
 })
 
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+})
+
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
   document.body.style.overflow = ''
 })
 </script>
@@ -242,8 +252,8 @@ onUnmounted(() => {
   font-weight: 800;
   text-decoration: none;
   border: 1px solid transparent;
-  /* 平面化后按钮已无彩色投影，transition 里一并去掉 box-shadow，只留 :active 用到的 transform */
-  transition: transform 0.18s var(--ease);
+  /* 平面化后按钮已无彩色投影，transition 里一并去掉 box-shadow，只留 :active 用到的 transform 与悬停色彩过渡 */
+  transition: transform 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease);
   width: fit-content;
 }
 /* 「友好而平」：取消 hover 上浮。悬停只允许改背景/描边/文字，位移一律不做，
@@ -260,7 +270,6 @@ onUnmounted(() => {
 .mknav__btn--primary {
   color: var(--wf-text-on-primary);
   background: var(--blue);
-  transition: transform 0.18s var(--ease), background 0.18s var(--ease);
 }
 /* 悬停改用 darker 蓝档（--blue-deep 即 --wf-color-primary-dark），不给投影 */
 .mknav__btn--primary:hover {
@@ -288,6 +297,11 @@ onUnmounted(() => {
   background: var(--btn-ghost-bg);
   border-color: var(--line);
 }
+.mknav__btn--ghost:hover {
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 28%, var(--line));
+  color: var(--blue-deep);
+}
 .mknav__burger {
   display: none;
   width: 42px;
@@ -296,6 +310,15 @@ onUnmounted(() => {
   border-radius: var(--mk-radius-md);
   background: var(--burger-bg);
   cursor: pointer;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.mknav__burger:hover {
+  background: color-mix(in srgb, var(--blue) 6%, var(--burger-bg));
+  border-color: color-mix(in srgb, var(--blue) 28%, var(--line));
+}
+.mknav__burger:focus-visible {
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 .mknav__burger span {
   display: block;
@@ -315,34 +338,20 @@ onUnmounted(() => {
 .mknav__burger--open span:nth-child(3) {
   transform: translateY(-6px) rotate(-45deg);
 }
+.mknav__backdrop {
+  display: none;
+}
 .mknav__drawer {
   display: none;
 }
 .mknav-drawer-enter-active,
 .mknav-drawer-leave-active {
-  transition: opacity 0.24s var(--ease), transform 0.24s var(--ease);
+  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
 }
 .mknav-drawer-enter-from,
 .mknav-drawer-leave-to {
   opacity: 0;
-  transform: translateY(-10px);
-}
-
-/* 原型 wf-rise 入场编排：顶栏 0.6s 上浮（reduced-motion 由 main.css 全局压到瞬时） */
-@media (prefers-reduced-motion: no-preference) {
-  .mknav {
-    animation: mknav-rise 0.6s var(--ease) both;
-  }
-}
-@keyframes mknav-rise {
-  from {
-    opacity: 0;
-    transform: translateY(26px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  transform: translateY(-8px);
 }
 
 @media (max-width: 1023px) {
@@ -367,10 +376,22 @@ onUnmounted(() => {
   .mknav__burger {
     display: block;
   }
+  .mknav__backdrop {
+    display: block;
+    position: fixed;
+    inset: 65px 0 0;
+    z-index: 29;
+    background: var(--wf-overlay);
+  }
   .mknav__drawer {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 31;
     display: grid;
     gap: 8px;
-    margin: 0 auto 14px;
+    margin: 0 auto;
     padding: 16px;
     border-radius: var(--mk-radius-xl);
     background: var(--drawer-bg);

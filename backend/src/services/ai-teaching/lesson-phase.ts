@@ -31,6 +31,7 @@
  */
 import type { LessonContract, LessonEvidence } from './lesson-contract';
 import { evaluateLessonContract, isKcMentioned } from './lesson-contract';
+import type { LessonAnchor } from './lesson-anchor';
 
 export type LessonPhase = 'orient' | 'build' | 'integrate' | 'transfer' | 'audit' | 'close';
 
@@ -235,6 +236,8 @@ export interface LessonPhaseTurnContext {
   taughtText: string;
   /** 任务验收标准（收束时让学生对照） */
   acceptanceCriteria: string | null;
+  /** 课堂锚（主问题 + 自然过关判据 + 学习者基线） */
+  anchor?: LessonAnchor | null;
   /** 本回合是否已强制收口（契约终检额度用尽等） */
   forcedClose?: boolean;
   /**
@@ -382,9 +385,12 @@ export function resolveLessonPhaseTurn(
         : enterPhase(state, 'build', 1);
     }
   } else if (state.phase === 'build') {
+    const holdNoviceCompact = state.profile === 'compact'
+      && ctx.anchor?.learnerBaseline === 'novice'
+      && state.phaseTurns < 2;
     if (!ctx.isResume && skip) {
       state = enterPhase(state, state.profile === 'compact' ? 'transfer' : 'integrate', state.segments.length);
-    } else if (!ctx.isResume && (state.phaseTurns >= BUILD_SEGMENT_TURN_CAP || state.segmentDone)) {
+    } else if (!ctx.isResume && !holdNoviceCompact && (state.phaseTurns >= BUILD_SEGMENT_TURN_CAP || state.segmentDone)) {
       state = state.segment < state.segments.length
         ? enterPhase(state, 'build', state.segment + 1)
         : advanceFrom('build');
@@ -503,10 +509,16 @@ function buildDirective(
         '4–6 句；不出小测、不讲机制、不亮答案。',
       ].join('\n');
     }
+    const anchor = ctx.anchor;
+    const isNovice = anchor?.learnerBaseline === 'novice';
+    const anchorLine = anchor
+      ? `本节主问题：「${anchor.mainQuestion}」。${isNovice ? `学生未接触过本材料/零基础${anchor.baselineNote ? `（${anchor.baselineNote}）` : ''}：先用 2–3 句大白话交代背景语境（作者在解决什么问题、本节在全篇的起点位置），不要假设他看过原书/学过前序概念。` : ''}`
+      : '';
     return [
       head,
-      '本轮只做三件事（预训练：先认识部件，不讲机制）：',
-      `① 先用一句话接住学生这句话，不展开讲"为什么"；`,
+      anchorLine,
+      '本轮只做三件事（教师主导领读：先立语境与指路，不讲机制）：',
+      `① 先用一句话接住学生这句话，不展开讲"为什么"；禁止把后台短标签（如「还原某根据」）当口号念出来，**禁止把后台验收标准当考纲清单逐条念给学生**（如「这节要做的就两件事：一是…二是…至少一个具体依据」）；若本课带材料，明确指明「现在先只看哪一句/哪一小段」，由你带着走，不要让零基础学生对着整段原文自己摸；`,
       boardReveal === 'none' ? '本课没有板书：不要提「板/图/看上面」。' : '',
       boardReveal === 'skeleton'
         ? `② 板上现在只有行列名的空骨架（格子会随讲解一行一行填上）：对着行列名把本课的几个部件点名——${segmentNames}，只说名字和它们在板上的位置，不讲谁产生谁、谁决定谁；`
@@ -514,8 +526,8 @@ function buildDirective(
           ? `② 把本课的几个部件点名：${segmentNames}——只说名字，不讲谁产生谁、谁决定谁；`
           : `② 板上已是全图：逐个指认本课的几个部件——${segmentNames}——只说名字和位置，不讲它们之间的关系；`,
       boardReveal === 'whole' || boardReveal === 'full'
-        ? '③ 问一个带候选的预测题（二选一/三选一，明说"猜错没关系，先猜"）：只问板上读不出来的关系（谁导致谁/谁先谁后），不要问板上已经写明的事实——那是查表，不是猜。'
-        : '③ 问一个带候选的预测题（二选一/三选一，明说"猜错没关系，先猜"），让学生先猜——这是用来暴露直觉的，不是检测。',
+        ? '③ 抛一个聚焦的开放式思考问题（只问板上读不出来的关系或作者意图，不要问板上已经写明的事实——那是查表，不是思考；不要用「猜错没关系：是A还是B」式送分二选一）。'
+        : '③ 抛一个聚焦的开放式思考问题，让学生用自己的话先说第一反应（这是用来打开思路的，不是检测；不要用「猜错没关系：是A还是B」式送分二选一）。',
       '本轮不出小测、不讲机制、不亮结论；4–6 句。',
       '不要把上一句刚讲明的关系，换一个同义问法再问一遍（2026-11-27 真课：「后面那半句是被理由撑着的，还是拿来撑别人的？」——上一行刚说完「后面那半句是他想让你认下的」）。要问就问一个需要新判断的对象：材料里的另一组、换一个说法、或换个条件。',
     ].join('\n');
@@ -529,18 +541,24 @@ function buildDirective(
     // 每段收尾的学生动作按段轮转（2026-11-26 真课实录）：原来三段都写「用自己的话复述这一段」，
     // 模型照着连问三次「你用自己的话说一遍：X 这一行在回答什么问题」——同一动作逐行过堂，
     // 学生只是在换台词重复同一件事。预测 → 复述 → 换例判断，三种动作用在不同段上。
+    const isNovice = ctx.anchor?.learnerBaseline === 'novice';
+    const preferOpenBuild = !isNovice || state.segment > 1 || ctx.studentMessage.trim().length >= 16;
     const askAction = lastSegment
       ? '给一个本课材料里换个对象或条件的小例子，让他判断这一步还成不成立；'
       : state.segment % 3 === 1
-        ? `猜下一段「${nextTitle}」会怎样——给一个二选一或填空，让他先说，再讲；`
+        ? `猜下一段「${nextTitle}」会怎样——${preferOpenBuild ? '让他用自己的话先预判关键条件或转折，不要给送分二选一' : '给一个有真实分歧的简短预判或开放小问，让他先说，再讲'}；`
         : state.segment % 3 === 2
           ? '让他用自己的话把这一段压成一句（限一句，不超过 30 字）；'
           : '给一个换了对象或条件的小例子，让他判断这一步还成不成立；';
+    const anchorCue = ctx.anchor?.criteria?.length
+      ? `本节要帮学生真正搞懂「${ctx.anchor.mainQuestion}」，过关标准：${ctx.anchor.criteria.map((c) => c.text).join('；')}。`
+      : '';
     return [
       head,
       `本段：「${title}」${boardReveal === 'partial' ? '——板上这一轮刚露出这一段。' : ''}`,
+      anchorCue,
       where,
-      `① 讲清本段：每句话只指一个格子或一个元素，指板时用板上写着的行列名原文（不说"第几行/第几列"），3–5 句；`,
+      `① 讲清本段：每句话只指一个格子或一个元素，指板时用板上写着的行列名原文（不说"第几行/第几列"），${isNovice ? '4–7 句（学生零基础，先把材料原句的来龙去脉和为什么这样讲透，不要两句话敷衍抛题）' : '3–5 句'}；`,
       rowsInSegment > 1
         ? `本段板书上有 ${rowsInSegment} 行（${title}）：按板的行序逐行讲到（每行 2–3 句），这 ${rowsInSegment} 行都讲完再停——不要只讲第一行就跳到下一段，也不要留下某一行没人讲。`
         : '',
@@ -593,7 +611,7 @@ function buildDirective(
       integrate: state.exploratory
         ? `出 control.checkpoint：type=short_answer，只问一件事——从这几段里挑两段，判断它们是不是在回答同一个问题（点明是哪两段 + 一句判断依据）。题干只留一个问号，不要把几段挨个问一遍。expectedKeywords 给 2–3 组，每组只放这句判断必然会写到的词（同义写法用 | 并列）。本次整合只讲「每条各自在回答什么问题」，不要用「从 A 到 B 一路变/进步」的叙事（除非材料本身就是时间线）——几条并列的说法不要硬排成演变。`
         : `出 control.checkpoint：type=short_answer，只问一件事——挑一条能横跨两段的因果，问「为什么」或「如果缺了这一段，后面哪一步就立不住」，让他一两句话回答（对着板上的全图）。题干只留一个问号，不要「先…再…最后…」式多问。expectedKeywords 给 2–3 组，每组只放一句正确回答必然会写到的词（同义写法用 | 并列）——他这一句话要能全中。`,
-      transfer: '出 control.checkpoint：给一个本课没出现过的新情境（换对象/装置/条件，不换知识点），让学生用刚建的口径自己判断并说明依据——选择题或简答均可，简答要成句解释。题干必须自包含（条件写全），答案不能从板上一眼读走。涉及同位素标记/守恒类的题：写清时间尺度（如「短时间内」），并确认答案不会因为二次参与而翻案（例：¹⁸O 生成的水可再作为反应物进入下一段）。',
+      transfer: '出 control.checkpoint：给一个本课没出现过的新情境（换对象/装置/条件，不换知识点），让学生用刚建的口径自己判断并说明依据——选择题或简答均可，简答要成句解释。题干必须自包含（条件写全），答案不能从板上一眼读走。若出选择题：正确选项禁止把刚讲过的原话整句照抄，干扰项必须是常见误解或表面混淆，禁止用一眼就能排除的荒谬/态度评判选项（如「素质低/骂人」）。涉及同位素标记/守恒类的题：写清时间尺度（如「短时间内」），并确认答案不会因为二次参与而翻案（例：¹⁸O 生成的水可再作为反应物进入下一段）。',
       audit: '出 control.checkpoint：给一句本课常见的错误说法（可取自本课出现过的误区），让学生"指出错在哪、依据是什么"——简答，或"下面哪个说法有问题"的选择题。学生挑对要明确肯定：能看出说法哪里不成立，比答对一道题更值钱。',
     };
     return [
@@ -632,9 +650,12 @@ function buildDirective(
       '不要自己宣布任务完成。',
     ].filter(Boolean).join('\n');
   }
+  const criteriaLine = ctx.anchor?.criteria?.length
+    ? ctx.anchor.criteria.map((c) => c.text).join('；')
+    : (ctx.acceptanceCriteria ? ctx.acceptanceCriteria.slice(0, 80) : '');
   return [
     head,
-    `让学生自己收：用 3 句话说清本课主线，对照任务验收标准${ctx.acceptanceCriteria ? `（${ctx.acceptanceCriteria.slice(0, 80)}）` : ''}说哪条做到了、哪条还没有，再给一个下一步。`,
+    `让学生自己收：用 3 句话说清本课主线，对照验收标准${criteriaLine ? `（${criteriaLine}）` : ''}说哪条做到了、哪条还没有，再给一个下一步。`,
     '老师不代答、不补充讲解、不发小测（结课另有终检）。',
     // 2026-11-26 外审（Case A3 第 12 回合 / Case B3 末回合）：学生说「今天就到这里」时还有一道题
     // 挂在他那儿没答，老师只留一句「下次接着练从它开始」就收课——那次检测既没发生也没结论，

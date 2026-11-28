@@ -157,6 +157,8 @@ function resetToDefault() {
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
+  transform-origin: top right;
+  animation: mk-pop-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-cols__head {
   display: flex;
@@ -180,6 +182,7 @@ function resetToDefault() {
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-cols__item:hover { background: var(--mk-graph-flow-bg); } /* #f0f5ff/暗#252627 的成对令牌，字面量+暗色覆写退役 */
 /* 视口强制收起的列：禁用态（不撒谎的「不可勾」），悬停说明见 UNAVAILABLE_HINT */

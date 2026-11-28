@@ -133,7 +133,8 @@ describe('V2LearningPage 课堂生命周期状态回归', () => {
 
     const w = mountPage();
     await flushPromises();
-    expect(w.find('.learn__finishbtn').exists()).toBe(true);
+    expect(w.find('.ready').exists()).toBe(true);
+    expect(w.find('.learn__finishbtn').exists()).toBe(false);
     expect(w.find('.lessonbar').exists()).toBe(true);
 
     // 点击恢复条上的「重新开始」
@@ -203,7 +204,7 @@ describe('V2LearningPage 课堂生命周期状态回归', () => {
     const w = mountPage();
     await flushPromises();
 
-    await w.find('.learn__finishbtn').trigger('click');
+    await w.find('.ready__go').trigger('click');
     await flushPromises();
 
     expect(w.find('.settle').exists()).toBe(true);

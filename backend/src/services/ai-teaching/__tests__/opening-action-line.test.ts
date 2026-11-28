@@ -181,7 +181,7 @@ describe('确定性开场不再输出万能空话', () => {
       taskKcs: [{ kcId: 'kc-1', name: '把一段话拆成前提与结论的论证骨架' }],
     } as unknown as TeachingScenarioContext;
     const chips = buildOpeningActionChips(longContext, 'self-assess');
-    expect(chips.map((c) => c.text)).toEqual(['先讲这一回合', '拿这一回合试一小步', '跳过自评，直接练']);
+    expect(chips.map((c) => c.text)).toEqual(['先讲背景和要点', '拿个例子试一小步', '跳过自评，直接练']);
     expect(chips.map((c) => c.text).join('|')).not.toMatch(/…|\.{3}/);
   });
 
@@ -311,5 +311,27 @@ describe('ensureOpeningActionLine：message 与 question 不重复承载同一�
     expect(result.message).toBe('');
     expect(result.question).toBe('');
     expect(result.quickReplies.length).toBeGreaterThan(0);
+  });
+
+  it('message 已直出具体问题且 quickReplies 为空时，不强塞无关的兜底动作按钮', () => {
+    const result = ensureOpeningActionLine({
+      message: '按《乡土本色》口径判一下：牧民随水草一年搬四次家，能不能说他们「土气」？',
+      question: '',
+      quickReplies: [],
+      mode: 'self-assess',
+    }, context);
+    expect(result.question).toBe('');
+    expect(result.quickReplies).toEqual([]);
+  });
+
+  it('message 已直入主题并抛出开放问题时，即使模型附带了 quickReplies 也一并清空', () => {
+    const result = ensureOpeningActionLine({
+      message: '《文字下乡》不是替乡下人辩解，而是拆「不识字 = 愚」这一跳。你觉得从「不识字」跳到「智力低」中间到底漏了什么条件？',
+      question: '',
+      quickReplies: [{ text: '先拆第一段' }, { text: '看「面对面」那句' }],
+      mode: 'example-first',
+    }, context);
+    expect(result.question).toBe('');
+    expect(result.quickReplies).toEqual([]);
   });
 });

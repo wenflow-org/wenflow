@@ -72,8 +72,8 @@
           </label>
           <p v-if="!pickerRows.length" class="mat-upload__picker-empty">
             {{ libraryExpanded && !libraryItems.length
-              ? '资料库还没有文件。用下方「上传新文件」传一份（支持 PDF / Word / PPT / Excel / TXT / MD / CSV）。'
-              : '还没挂载资料——要带的话，点「从资料库选择」挑一份，或直接上传新文件。' }}
+              ? '资料库暂无文件，支持上传 PDF、Office、TXT、MD 或 CSV。'
+              : '还没挂载资料，可从资料库选择或上传新文件。' }}
           </p>
         </div>
         <footer class="mat-upload__picker-foot">
@@ -83,7 +83,7 @@
           <button type="button" class="mat-upload__picker-upload" :disabled="uploading" @click="inputRef?.click()">
             {{ uploading ? '上传中…' : '上传新文件' }}
           </button>
-          <span class="mat-upload__picker-hint">挂载的资料会随本次目标进入路径生成 · <router-link to="/library" class="mat-upload__picker-lib">管理资料库</router-link></span>
+          <span class="mat-upload__picker-hint">随本次目标进入路径生成 · <router-link to="/library" class="mat-upload__picker-lib">管理资料库</router-link></span>
           <button type="button" class="mat-upload__picker-done" @click="closePicker">完成</button>
         </footer>
       </div>
@@ -256,7 +256,7 @@ async function addFiles(files: File[]) {
   // 上传成功 → 自动挂载（受上限约束：满了不再追加并提示）
   const room = Math.max(0, PATH_LIMIT - attached.value.length);
   if (uploaded.length > room) {
-    error.value = `最多挂载 ${PATH_LIMIT} 份资料，已挂载前 ${room} 份，其余保留在资料库（可稍后在这里调整）。`;
+    error.value = `最多挂载 ${PATH_LIMIT} 份，已挂载前 ${room} 份，其余已存入资料库。`;
   }
   const toAttach = uploaded.slice(0, room);
   if (toAttach.length > 0) {

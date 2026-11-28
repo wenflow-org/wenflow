@@ -70,7 +70,7 @@ describe('V2LearningPage 课堂契约：学生端撤卡片、结课浮层保留'
 
   it('完成入口不提前摆出：知识点未全掌握且契约未达标时不显示', () => {
     expect(source).toContain('const canCompleteLesson = computed');
-    expect(source).toContain('v-if="canCompleteLesson"');
+    expect(source).toContain('v-if="canCompleteLesson && !showReadyBanner"');
     expect(source).toMatch(/allKpMastered[\s\S]{0,800}canCompleteLesson/);
     // 提前离开只走 ⋯ 菜单的「结束学习（不计入完成）」；文案与反馈页共用同一常量
     expect(source).toContain('END_WITHOUT_FINISH_LABEL');

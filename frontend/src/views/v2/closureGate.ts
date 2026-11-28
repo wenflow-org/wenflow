@@ -29,7 +29,7 @@ export interface ClosureGateCopy {
 }
 
 /** 持久出口：结束学习不计入完成（服务端 end_only）。课堂页与反馈页共用同一文案。 */
-export const END_WITHOUT_FINISH_LABEL = '结束学习（不计入完成）'
+export const END_WITHOUT_FINISH_LABEL = '提前结束（不计完成）'
 
 /** 课堂页「仍然完成结算」只对末问门禁开放（未答小测/末次检查仍硬拦）。 */
 export const CLOSURE_GATE_CODES: ClosureGateCode[] = [
@@ -54,13 +54,13 @@ export const CLOSURE_GATE_COPY: Record<ClosureGateCode, ClosureGateCopy> = {
     title: '先回答老师的问题',
     action: 'composer',
     actionLabel: '去回答',
-    guide: '回答它之后就能结算。若老师这一轮又以新问题收尾，这里会再拦一次。也可以点「仍然完成结算」（那一问会记进本次总结的待验证清单），或选「结束学习」（总结照常生成，本次不计入完成）。'
+    guide: '回答后可结算（若老师继续提问会再拦）；也可「仍然完成结算」（该问记入待验证）或提前结束（不计完成）。'
   },
   FINALIZATION_PENDING_CHECKPOINT: {
     title: '先完成这道小测',
     action: 'checkpoint',
     actionLabel: '去作答',
-    guide: '先答完这道小测。等老师讲完这一轮，再来结算课堂。'
+    guide: '答完本轮小测后再结算。'
   },
   FINALIZATION_LAST_CHECKPOINT_FAILED: {
     title: '先把最后一道小测处理完',
@@ -93,6 +93,6 @@ export function resolveClosureGateMessage(code: string, message?: string | null)
   if (text) return text
   if (code === 'FINALIZATION_PENDING_CHECKPOINT') return '还有一道题没有作答，先完成这道题再结束课堂'
   if (code === 'FINALIZATION_LAST_CHECKPOINT_FAILED') return '最后一道检查题还没答对，先再试一次或跳过它'
-  if (code === 'LESSON_CONTRACT_NOT_MET') return '本课还有契约目标未达成，继续学习或选择「结束学习（不计入完成）」。'
+  if (code === 'LESSON_CONTRACT_NOT_MET') return '本课尚有核心目标未完成，请继续学习或提前结束。'
   return '先完成课内问答，再结束课堂。'
 }

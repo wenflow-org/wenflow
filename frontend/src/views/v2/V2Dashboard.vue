@@ -146,7 +146,7 @@
           <section v-if="pageState !== 'attention' && probeCardVisible" class="card probe">
             <div class="action__eyebrow">
               <span>隔日小测</span>
-              <span class="action__from">检验前几天学的内容还记得多少，答错不影响进度</span>
+              <span class="action__from">检验近期所学，答错不影响进度</span>
             </div>
             <template v-if="probeError">
               <p class="probe__error" role="alert">到期小测暂时取不到，稍后再来。</p>
@@ -178,7 +178,7 @@
                       @click="answerProbe(p, probeAnswers[i], i)"
                     >提交</button>
                   </div>
-                  <p v-if="p.attempts > 0" class="probe__meta">这是第 {{ p.attempts + 1 }} 次作答，按最近一次判定。</p>
+                  <p v-if="p.attempts > 0" class="probe__meta">第 {{ p.attempts + 1 }} 次作答，以最新一次为准</p>
                 </template>
               </div>
             </template>
@@ -191,9 +191,6 @@
             </div>
             <h2 class="action__title">{{ retryCopy.title }}</h2>
             <p class="action__desc">{{ retryCopy.reason }}</p>
-            <div class="action__meta">
-              <span class="tag">已完成的学习进度会保留</span>
-            </div>
             <div class="action__footer">
               <button type="button" class="btn-primary" :disabled="retrying" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
                 <span v-if="retrying" class="spinner spinner--sm"></span>
@@ -213,9 +210,6 @@
             </div>
             <h2 class="action__title">路径正在生成，稍等一下</h2>
             <p class="action__desc">生成完成后，这里会直接出现今日行动。</p>
-            <div class="action__meta">
-              <span class="tag">信息已保留</span>
-            </div>
             <div class="action__footer">
               <span class="btn-primary btn-primary--off" title="路径生成中，暂不可重试">
                 <span class="spinner spinner--sm"></span>
@@ -1795,7 +1789,7 @@ onMounted(() => {
 .budget__num { flex: none; color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* 进度条：6px + 蓝→青渐变（原实色 #10b981 已退役） */
 .budget__bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
-.budget__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.budget__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width var(--wf-duration-slow) var(--mk-ease-out); }
 
 /* ---------- 今日复习（2026-09-27 收敛为单行计划条） ----------
    原 16 项逐条列表 + 强度条 + 五种数字口径的样式整体退役；
@@ -1889,7 +1883,6 @@ onMounted(() => {
 }
 .action__reason svg { width: 13px; height: 13px; flex: none; margin-top: 2px; }
 .action__reason span { min-width: 0; }
-.action__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 状态小签（2026-11-06 去肥胖化）：原 5/11 内边距 + 全圆胶囊 + 1px 描边，
    读作「能点的药丸」而它们是纯状态说明。统一为紧凑方签：22px 高 / 1px 6px 内边距 /
    6px 圆角 / 无描边，只靠柔和半透明底色区分——与 v2.css 的全局 `.v2-page .tag`
@@ -1936,13 +1929,6 @@ onMounted(() => {
   transition: transform 0.18s ease, background 0.18s ease;
 }
 .btn-primary:not(:disabled):active { transform: scale(0.98); }
-/* 次按钮（查看详情）：同一套内嵌按钮尺寸，仅材质不同 */
-.btn-ghost {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: 32px; padding: 0 14px; border-radius: var(--mk-radius-md);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer;
-}
 .action__today { display: flex; align-items: center; gap: 10px; min-width: 0; }
 /* P1-6（2026-10-04）：span 须可收缩（flex-shrink+min-width:0+ellipsis），否则 nowrap 文案
    在 390 视口把整行撑出屏（实测溢出 107px、「去处理」按钮落在屏外不可点） */
@@ -1972,7 +1958,7 @@ onMounted(() => {
 }
 .action__control b { color: var(--blue-deep); font-weight: 800; white-space: nowrap; }
 .action__today-bar { flex: 1; min-width: 0; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
-.action__today-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.action__today-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width var(--wf-duration-slow) var(--mk-ease-out); }
 .action__examples { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 快捷示例（空态卡的点击建议）：2026-11-07 用户走查两处——
    ① 虚线边框（dashed）在 UI 语言里是「未添加 / 拖拽上传占位」，不是「可点的快捷入口」，
@@ -2015,7 +2001,7 @@ onMounted(() => {
    避免分隔线+进度条重新悬在半空。 */
 .path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; margin-top: auto; }
 .path__progress { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
-.path__progress i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.path__progress i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width var(--wf-duration-slow) var(--mk-ease-out); }
 .path__nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 </style>
 

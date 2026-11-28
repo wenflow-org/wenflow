@@ -378,7 +378,7 @@ main {
   cursor: pointer;
   width: fit-content;
   /* 平面化后按钮已无投影，transition 里一并去掉 box-shadow */
-  transition: transform 0.2s var(--ease);
+  transition: transform 0.2s var(--ease), background 0.2s var(--ease), border-color 0.2s var(--ease), color 0.2s var(--ease);
 }
 /* 「友好而平」：取消 hover 上浮，悬停只允许改背景/描边/文字；
    按压反馈留给 :active 的 scale(0.98)。 */
@@ -390,7 +390,6 @@ main {
 .hn-btn--primary {
   color: var(--text-on-primary);
   background: var(--blue);
-  transition: transform 0.2s var(--ease), background 0.2s var(--ease);
 }
 .hn-btn--primary:hover {
   background: var(--blue-deep);
@@ -401,10 +400,19 @@ main {
   background: var(--surface);
   border-color: var(--line);
 }
+.hn-btn--ghost:hover {
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 28%, var(--line));
+  color: var(--blue-deep);
+}
 .hn-btn--light {
   color: var(--blue-deep);
   background: var(--surface);
   border-color: var(--line);
+}
+.hn-btn--light:hover {
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 32%, var(--line));
 }
 .hn-btn--lg {
   min-height: 52px;
@@ -490,12 +498,12 @@ main {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
-  font-size: 13px;
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: var(--ink);
 }
 .hn-chip {
-  font-size: 12px;
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
@@ -507,7 +515,7 @@ main {
   background: color-mix(in srgb, var(--green) 12%, transparent);
 }
 .hn-bubble {
-  font-size: 13px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.55;
   margin-bottom: 10px;
 }
@@ -576,7 +584,7 @@ main {
   gap: 4px;
   margin-top: 8px;
   padding: 14px;
-  border-radius: var(--mk-radius-modal);
+  border-radius: var(--mk-radius-lg);
   background: color-mix(in srgb, var(--blue) 5%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--blue) 18%, transparent);
 }
@@ -586,7 +594,7 @@ main {
   color: var(--blue-deep);
 }
 .hn-stage__result strong {
-  font-size: 15px;
+  font-size: var(--mk-fs-emphasis);
 }
 .hn-stage__result em {
   font-style: normal;
@@ -601,6 +609,10 @@ main {
 .hn-stage__result {
   transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
 }
+.hn-bubble--ai p,
+.hn-tags {
+  transition: opacity 0.35s var(--ease);
+}
 .hn-demo--off {
   opacity: 0;
   transform: translateY(10px);
@@ -609,6 +621,7 @@ main {
 /* 只隐藏可见性、不撤出布局：回复的高度从第一帧就占住，打字态不会把卡片撑开 */
 .hn-demo--hidden {
   visibility: hidden;
+  opacity: 0;
 }
 .hn-typing__dots {
   /* 覆盖在常驻回复的中心，不参与高度计算 */
@@ -703,7 +716,7 @@ main {
 }
 .rv .hn-stage__prog i {
   width: 0;
-  transition: width 1.1s var(--ease) 0.25s;
+  transition: width 0.8s var(--ease) 0.15s;
 }
 .rv-in .hn-stage__prog i {
   width: var(--w, 0);
@@ -761,7 +774,7 @@ main {
 }
 .hn-band__side p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--mk-fs-body);
   line-height: 1.7;
   color: var(--muted);
 }
@@ -859,11 +872,11 @@ main {
   background: var(--blue);
 }
 .hn-flow__grid strong {
-  font-size: 15px;
+  font-size: var(--mk-fs-emphasis);
 }
 .hn-flow__grid p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--muted);
   max-width: 100%;
@@ -897,7 +910,7 @@ main {
 }
 .hn-desk__copy > p {
   margin: 0 0 18px;
-  font-size: 16px;
+  font-size: var(--mk-fs-emphasis);
   line-height: 1.75;
   color: var(--muted);
   max-width: 38ch;
@@ -912,7 +925,7 @@ main {
   border-left: 2px solid color-mix(in srgb, var(--blue) 22%, var(--line));
 }
 .hn-desk__copy li {
-  font-size: 14px;
+  font-size: var(--mk-fs-body);
   line-height: 1.6;
   color: var(--muted);
 }
@@ -926,7 +939,7 @@ main {
 }
 .hn-state__metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -934,7 +947,7 @@ main {
   display: grid;
   gap: 3px;
   padding: 12px 14px;
-  border-radius: var(--mk-radius-modal);
+  border-radius: var(--mk-radius-lg);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -950,6 +963,7 @@ main {
 .hn-state__metrics .hn-state__form {
   font-size: 12px;
   line-height: 1.3;
+  align-self: center;
   /* 12px 小字给深一档的绿（--green 是 5.0:1，这里 7.1:1 更稳，走查 2026-09-27） */
   color: var(--green-deep);
 }
@@ -992,7 +1006,7 @@ main {
 .hn-end p {
   margin: 0;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--mk-fs-emphasis);
   line-height: 1.7;
 }
 .hn-end__acts {
@@ -1115,6 +1129,12 @@ main {
     font-size: 34px;
     line-height: 1.08;
   }
+  .hn-state__metrics {
+    gap: 8px;
+  }
+  .hn-state__metrics > div {
+    padding: 10px 8px;
+  }
 }
 
 /* ---------- 超大屏（2K/4K）：随视口放大容器与字号，避免整页缩在中间 ---------- */
@@ -1124,7 +1144,7 @@ main {
    3840 变 17 个」的根源 —— 规则 13 就是为此而设，本档原来 8 处全部在违规。
    现在改成覆写三个角色 token，一次声明让全页文本同步放大；
    展示型字号（hero h1 / 副文案）不在文本带内，保留各自的字面量。 */
-@media (min-width: 2000px) {
+@media (min-width: 2400px) {
   /* 档位文本尺度：×1.15（与 admin 的 4K 档倍率同口径） */
   /* 2026-11-04 修：三条自定义属性原为裸写（无选择器），解析器会把紧随其后的
      .hn-shell 规则整条丢弃；补挂 .hn 选择器让声明合法，后续 .hn-shell 恢复正常。 */
@@ -1221,9 +1241,8 @@ main {
   .hn-desk__copy > p {
     max-width: 34ch;
   }
-  /* .hn-desk__copy li 继承基础档 --mk-fs-body（16.10），本档只放大内边距 */
-  .hn-desk__copy li {
-    padding: 16px 18px;
+  .hn-desk__copy ul {
+    gap: 18px;
   }
   .hn-state__metrics b {
     font-size: 24px;

@@ -27,14 +27,14 @@
             class="btn-primary evaluation-head__complete"
             :disabled="completeTaskBusy"
             @click="handleAction('complete-task')"
-          >完成任务</button>
+          >{{ completeTaskBusy ? '提交中…' : '完成任务' }}</button>
           <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
         </div>
         <ImmersiveMenu>
           <button type="button" class="evaluation-head__pop-item" :disabled="exportingImage" @click="pickHeadMenu('image')">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
           <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">{{ EXPORT_PDF_LABEL }}</button>
-          <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('continue')">继续练习</button>
-          <button v-if="!taskCompleted" type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('complete')">完成任务</button>
+          <button type="button" class="evaluation-head__pop-item" :disabled="completeTaskBusy" @click="pickHeadMenu('continue')">继续练习</button>
+          <button v-if="!taskCompleted" type="button" class="evaluation-head__pop-item" :disabled="completeTaskBusy" @click="pickHeadMenu('complete')">{{ completeTaskBusy ? '提交中…' : '完成任务' }}</button>
           <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('back')">返回学习路径</button>
         </ImmersiveMenu>
       </header>
@@ -67,21 +67,23 @@
       </section>
 
       <section v-else-if="error" class="evaluation-error">
-        <p>{{ error }}</p>
         <!-- 终态未完成（failed/discarded/superseded，2026-11-05 UX 审计）：重试只会重拉同一
              份空态、发不出任何生成类请求（走查 resource 实证）——明说「无产物可重试」并
              撤下误导性的「重试」按钮，退路给「返回学习路径」。进行中/结算中的错误态保留
              重试（重拉确实可能在课堂结束后拿到新结果）。 -->
         <template v-if="terminalIncompleteSession">
-          <p>本次课堂没有正常完成，评估没有可重试的产物。已保存的进度不会丢，可以返回学习路径。</p>
+          <p>本次课堂未正常完成，暂无评估结果，已保存的进度不受影响。</p>
           <div class="evaluation-error__actions">
             <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
           </div>
         </template>
-        <div v-else class="evaluation-error__actions">
-          <button type="button" class="btn-primary" @click="fetchEvaluation">重试</button>
-          <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
-        </div>
+        <template v-else>
+          <p>{{ error }}</p>
+          <div class="evaluation-error__actions">
+            <button type="button" class="btn-primary" @click="fetchEvaluation">重试</button>
+            <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
+          </div>
+        </template>
       </section>
 
       <template v-else-if="sessionDetail">
@@ -90,11 +92,11 @@
           <strong v-else-if="isTimeoutFallback">本次会话未正常结束，已为你保留基础学习记录</strong>
           <strong v-else-if="wrapupSummaryDegraded">本次课堂总结为简化版本，可重新生成完整版</strong>
           <strong v-else>课堂总结已生成，详细表现分析暂不可用</strong>
-          <p>不影响你保存进度、完成任务或查看本次对话。</p>
           <!-- 课堂未正常完成（未完结、无总结产物）：「重试」只会重拉同一份空态、拉不出
                新产物（实测仅重发一次 detail 请求）。明说事实并给退路，不再让用户在
                同一空态里反复点重试（2026-11-05 UX 审计） -->
-          <p v-if="incompleteSession">本次课堂没有正常完成，评估没有可重试的产物。对话记录与已保存的进度都在，可以直接回看，或返回学习路径。</p>
+          <p v-if="incompleteSession">无评估产物可重试，对话记录和已保存进度均可继续查看。</p>
+          <p v-else>不影响你保存进度、完成任务或查看本次对话。</p>
           <!-- 降级 ≠ 终点（2026-10-12）：重试守卫与管理端同源（完结+退化+冷却），后台执行立即返回，
                前端按 regeneratedAt 变化轮询收结果，不挂长请求 -->
           <div v-if="canRetryWrapup" class="evaluation-degraded__actions">
@@ -103,7 +105,7 @@
               class="evaluation-degraded__retry"
               :disabled="regenBusy || regenPolling"
               @click="retryWrapup"
-            >{{ regenPolling ? '正在重新生成…' : '重新生成完整总结' }}</button>
+            >{{ regenBusy || regenPolling ? '正在重新生成…' : '重新生成完整总结' }}</button>
             <span v-if="regenNotice" class="evaluation-degraded__notice" role="status">{{ regenNotice }}</span>
           </div>
         </section>
@@ -158,7 +160,7 @@
           <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--link" aria-label="返回学习路径" :disabled="completeTaskBusy" @click="handleAction('end')">返回</button>
           <!-- 已结算的任务不再给「完成任务」（2026-11-04 移动吸底条与桌面卡对齐）：桌面卡已在 taskCompleted 时
                收起该按钮，此处若常驻会与「下面两项不会重复推进」提示矛盾并允许重复提交结算 -->
-          <button v-if="!taskCompleted" type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--primary" :disabled="completeTaskBusy" @click="handleAction('complete-task')">完成任务</button>
+          <button v-if="!taskCompleted" type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--primary" :disabled="completeTaskBusy" @click="handleAction('complete-task')">{{ completeTaskBusy ? '提交中…' : '完成任务' }}</button>
         </div>
 
         <div id="sec-feedback">
@@ -175,9 +177,6 @@
             <div class="evaluation-transcript-card__intro">
               <p class="evaluation-transcript-card__kicker">本次学习</p>
               <h2>课堂回看</h2>
-              <p v-if="transcriptEntries.length" class="evaluation-transcript-card__sub">
-                按时间顺序完整回放老师讲解、你的作答、白板更新与小测。
-              </p>
               <div v-if="transcriptEntries.length" class="evaluation-transcript-card__stats">
                 <span>{{ transcriptTotalCount }} 条对话</span>
                 <span v-if="transcriptBoardCount">白板更新 {{ transcriptBoardCount }} 次</span>
@@ -247,7 +246,6 @@
                     />
                     <div v-if="entry.message.figures?.length" class="evaluation-transcript-board-label">
                       <span>白板更新</span>
-                      <span>课堂里这一轮摆出的图</span>
                     </div>
                     <TeachingFigure
                       v-for="(f, fi) in (entry.message.figures || [])"
@@ -1077,7 +1075,7 @@ const handleAdvisoryAction = async (action: string) => {
 
   const ok = await askConfirm({
     title: '调整当前路径',
-    message: '这会根据你最近的学习情况调整当前路径的后续阶段，已完成任务会保留不变。',
+    message: '将调整当前路径的后续阶段，已完成任务不受影响。',
     confirmText: '调整路径',
     danger: false,
   });
@@ -1231,18 +1229,18 @@ onUnmounted(() => {
 @media (prefers-reduced-motion: no-preference) {
   .evaluation-head,
   .evaluation-degraded,
-  .evaluation-shell .completion-card,
-  .evaluation-shell .session-feedback,
+  .evaluation-shell :deep(.completion-card),
+  .evaluation-shell :deep(.session-feedback),
   .evaluation-transcript-card {
     animation: eval-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .evaluation-degraded { animation-delay: 0.06s; }
-  .evaluation-shell .completion-card { animation-delay: 0.1s; }
+  .evaluation-shell :deep(.completion-card) { animation-delay: 0.1s; }
   /* 对话转录：逐条上浮（动画延迟由行内 style 提供，最多 500ms） */
   .evaluation-transcript-item {
     animation: eval-rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  .evaluation-shell .session-feedback { animation-delay: 0.2s; }
+  .evaluation-shell :deep(.session-feedback) { animation-delay: 0.2s; }
   .evaluation-transcript-card { animation-delay: 0.28s; }
 }
 @keyframes eval-rise {
@@ -1250,14 +1248,25 @@ onUnmounted(() => {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.evaluation-shell.is-exporting .evaluation-head,
+.evaluation-shell.is-exporting .evaluation-degraded,
+.evaluation-shell.is-exporting :deep(.completion-card),
+.evaluation-shell.is-exporting :deep(.session-feedback),
+.evaluation-shell.is-exporting .evaluation-transcript-card,
+.evaluation-shell.is-exporting .evaluation-transcript-item {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
 .evaluation-degraded {
   padding: 14px 18px;
   /* ≤1100 密度在下方媒体块覆写 */
-  border: 1px solid var(--color-warning-border);
-  border-left: 4px solid var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--amber) 38%, var(--line));
+  border-left: 4px solid var(--amber);
   border-radius: 12px;
-  background: var(--color-warning-bg);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface));
+  color: var(--ink);
 }
 
 .evaluation-degraded strong {
@@ -1268,7 +1277,7 @@ onUnmounted(() => {
 
 .evaluation-degraded p {
   margin: 0;
-  color: var(--text-secondary);
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -1285,16 +1294,25 @@ onUnmounted(() => {
   padding: 7px 14px;
   font-size: 13px;
   font-weight: 600;
-  /* 文字用 dark 档：#f4aa46 在 warning-bg 上对比度不足（learning-components 同场景口径） */
-  color: var(--color-warning-dark);
+  color: var(--amber-ink);
   background: transparent;
-  border: 1px solid var(--color-warning-border);
+  border: 1px solid color-mix(in srgb, var(--amber) 38%, var(--line));
   border-radius: 8px;
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 
 .evaluation-degraded__retry:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+}
+
+.evaluation-degraded__retry:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.evaluation-degraded__retry:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 
 .evaluation-degraded__retry:disabled {
@@ -1304,7 +1322,7 @@ onUnmounted(() => {
 
 .evaluation-degraded__notice {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--muted);
 }
 
 .evaluation-head {
@@ -1320,7 +1338,6 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: var(--wf-shadow-raised);
 }
 
 .evaluation-head__actions {
@@ -1346,9 +1363,10 @@ onUnmounted(() => {
   border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .evaluation-head__pop-item:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--mk-surface-2);
   color: var(--blue-deep);
 }
 .evaluation-head__pop-item:disabled {
@@ -1453,6 +1471,14 @@ onUnmounted(() => {
   100% { background-position: -200% 0; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .evaluation-loading .sk-bar,
+  .evaluation-loading__summary i,
+  .evaluation-loading__card i {
+    animation: none;
+  }
+}
+
 @media (max-width: 640px) {
   .evaluation-loading__summary { grid-template-columns: repeat(2, 1fr); }
 }
@@ -1469,7 +1495,6 @@ onUnmounted(() => {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: var(--wf-shadow-raised);
   background-image: none;
 }
 
@@ -1642,7 +1667,6 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: var(--wf-shadow-raised);
   display: grid;
   /* minmax(0,1fr)：宽表格 max-content 撑破链的中间层（P0，根因注释见 .evaluation-transcript-list） */
   grid-template-columns: minmax(0, 1fr);
@@ -1757,11 +1781,21 @@ onUnmounted(() => {
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 
 .evaluation-transcript-card .evaluation-transcript-toggle:not(:disabled):hover {
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
   color: var(--blue-deep);
+}
+
+.evaluation-transcript-card .evaluation-transcript-toggle:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.evaluation-transcript-card .evaluation-transcript-toggle:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 
 .evaluation-transcript-toggle__caret {
@@ -1828,9 +1862,9 @@ onUnmounted(() => {
 }
 
 .evaluation-transcript-avatar--user {
-  color: var(--accent-ink, var(--blue-deep));
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 22%, var(--line));
 }
 
 .evaluation-transcript-avatar--peer {
@@ -1838,9 +1872,9 @@ onUnmounted(() => {
 }
 
 .evaluation-transcript-avatar--checkpoint {
-  color: var(--green, #16a34a);
-  background: color-mix(in srgb, var(--green, #16a34a) 10%, var(--surface));
-  border-color: color-mix(in srgb, var(--green, #16a34a) 20%, var(--line));
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--green) 20%, var(--line));
 }
 
 .evaluation-transcript-item__main {
@@ -1857,12 +1891,12 @@ onUnmounted(() => {
 .evaluation-transcript-item--user .evaluation-transcript-item__main {
   border-radius: 16px 4px 16px 16px;
   border-color: color-mix(in srgb, var(--blue) 22%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  background: color-mix(in srgb, var(--blue) 7%, var(--surface));
 }
 
 .evaluation-transcript-item--checkpoint .evaluation-transcript-item__main {
   border-radius: 16px;
-  border-color: color-mix(in srgb, var(--green, #16a34a) 22%, var(--line));
+  border-color: color-mix(in srgb, var(--green) 22%, var(--line));
 }
 
 /* 伴学在老师回合里的插话：挂在老师主文下方，不另起一条对话计数 */
@@ -1994,8 +2028,8 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
-.evaluation-transcript-checkpoint__verdict.is-pass { color: var(--green, #16a34a); }
-.evaluation-transcript-checkpoint__verdict.is-fail { color: var(--red, #dc2626); }
+.evaluation-transcript-checkpoint__verdict.is-pass { color: var(--green); }
+.evaluation-transcript-checkpoint__verdict.is-fail { color: var(--red); }
 
 .evaluation-transcript-empty {
   padding: 20px;
@@ -2140,6 +2174,17 @@ onUnmounted(() => {
     padding: 0 0 16px;
   }
 
+  .evaluation-head,
+  .evaluation-degraded,
+  .evaluation-shell :deep(.completion-card),
+  .evaluation-shell :deep(.session-feedback),
+  .evaluation-transcript-card,
+  .evaluation-transcript-item {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   .evaluation-loading,
   .evaluation-error {
     display: none;
@@ -2148,14 +2193,6 @@ onUnmounted(() => {
   .evaluation-transcript-card .evaluation-transcript-toggle {
     display: none;
   }
-}
-
-/* ---- 暗色模式：投影档位随主题自动翻转（--wf-shadow-raised 在暗色下即深色投影），
-   不再需要这里手写一份 rgba(0,0,0,…) 覆写（对齐 v2.css .card） ---- */
-[data-theme='dark'] .evaluation-head,
-[data-theme='dark'] .evaluation-transcript-card,
-[data-theme='dark'] .evaluation-shell :deep(.completion-card) {
-  box-shadow: var(--wf-shadow-raised);
 }
 </style>
 
@@ -2461,15 +2498,28 @@ onUnmounted(() => {
   font-family: inherit;
   white-space: nowrap;
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
+.evaluation-ctabar__btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  color: var(--blue-deep);
+}
+.evaluation-ctabar__btn:not(:disabled):active { transform: scale(0.98); }
+.evaluation-ctabar__btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .evaluation-ctabar__btn:disabled { opacity: 0.55; cursor: default; }
 .evaluation-ctabar__btn--link { flex: 0 0 auto; border-color: transparent; background: none; color: var(--muted); }
+.evaluation-ctabar__btn--link:not(:disabled):hover { border-color: transparent; color: var(--ink); }
 .evaluation-ctabar__btn--primary {
   flex: 1.15 1 0;
   border-color: transparent;
   /* 主按钮实心化：去掉 linear-gradient 与配套的蓝色发光投影，
      层级由浮条自身的 overlay 投影承担，按钮不再自己发光。 */
   background: var(--blue);
+  color: var(--text-on-primary);
+}
+.evaluation-ctabar__btn--primary:not(:disabled):hover {
+  border-color: transparent;
+  background: var(--blue-deep);
   color: var(--text-on-primary);
 }
 

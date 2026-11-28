@@ -175,7 +175,7 @@ export async function applyPathStructuralEdit(input: PathStructuralEditInput): P
     if (input.op === 'insert_task') {
       const milestone = await tx.milestones.findFirst({
         where: { id: input.milestoneId, learningPathId: input.pathId },
-        select: { id: true },
+        select: { id: true, title: true },
       });
       if (!milestone) {
         throw new PathMutationConflictError('阶段不存在或不属于该路径', 'PATH_STRUCTURAL_EDIT_STAGE_NOT_FOUND');
@@ -207,16 +207,19 @@ export async function applyPathStructuralEdit(input: PathStructuralEditInput): P
         });
       }
       const now = new Date();
+      const normalizedTitle = normalizeTitle(input.title);
+      const defaultDesc = `围绕「${normalizedTitle}」展开学习与练习${milestone.title ? `（所属阶段：${milestone.title}）` : ''}。`;
+      const defaultCriteria = `能用自己的话讲清「${normalizedTitle}」的核心要点，并完成一次独立检验。`;
       await tx.subtasks.create({
         data: {
           id: `st_manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           milestoneId: input.milestoneId,
           userId: input.userId,
-          title: normalizeTitle(input.title),
-          description: String(input.description || '').trim(),
+          title: normalizedTitle,
+          description: String(input.description || '').trim() || defaultDesc,
           taskType: String(input.taskType || 'practice').trim() || 'practice',
           estimatedMinutes: normalizeMinutes(input.estimatedMinutes),
-          acceptanceCriteria: '',
+          acceptanceCriteria: defaultCriteria,
           order: insertIndex,
           status: 'todo',
           cognitiveLoad: input.cognitiveLoad || 'medium',

@@ -58,6 +58,7 @@
       </label>
 
       <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
+        <span v-if="loading" class="spinner spinner--sm" aria-hidden="true"></span>
         {{ loading ? '正在登录…' : '登录' }}
       </button>
 
@@ -261,6 +262,7 @@ onMounted(() => {
   padding: 5px 8px;
   min-height: 36px;
   border-radius: var(--mk-radius-md);
+  transition: color 0.15s ease;
 }
 .switch button:hover { text-decoration: underline; }
 
@@ -278,6 +280,8 @@ onMounted(() => {
   align-items: center;
   min-height: 36px;
   padding: 0 6px;
+  border-radius: var(--mk-radius-md);
+  transition: color 0.15s ease, background 0.15s ease;
 }
 .forgot-link:hover {
   color: var(--blue-deep);
@@ -319,9 +323,16 @@ onMounted(() => {
   position: absolute;
   left: 7px; top: 3px;
   width: 6px; height: 11px;
-  border: solid #fff;
+  border: solid var(--wf-text-on-primary);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .errorbar, .notice, .field__error { animation: login-alert-in 0.18s var(--mk-ease-out) both; }
+}
+@keyframes login-alert-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
 }
 </style>
 
@@ -340,7 +351,10 @@ onMounted(() => {
   color: var(--faint);
   cursor: pointer;
   display: grid; place-items: center;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 
-.field__eye:hover { color: var(--blue-deep); background: rgba(52, 120, 246, 0.07); }
+.field__eye:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 7%, transparent); }
+.field__eye:active { transform: translateY(-50%) scale(0.94); }
+.v2-page .field__eye:focus-visible { outline-offset: -2px; }
 </style>

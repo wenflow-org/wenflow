@@ -78,7 +78,7 @@ describe('LearningEvaluationPage 结算门禁恢复', () => {
     // 与课堂页共用同一份门禁文案（closureGate.ts），不再各写一套
     expect(block.text()).toContain('先回答老师的问题');
     expect(block.text()).toContain('去回答');
-    expect(block.text()).toContain('结束学习（不计入完成）');
+    expect(block.text()).toContain('提前结束（不计完成）');
     expect(block.text()).toContain('暂不完成，返回学习路径');
     // 恢复卡是唯一出口：常规动作栏隐藏，也不再叠一条 Toast
     expect(w.find('.completion-actions').exists()).toBe(false);
@@ -108,7 +108,7 @@ describe('LearningEvaluationPage 结算门禁恢复', () => {
     expect(block.text()).toContain('还差几步才能完成本节课');
     expect(block.text()).toContain('独立证据不足');
 
-    const endOnly = block.findAll('button').find((b) => b.text().includes('结束学习（不计入完成）'));
+    const endOnly = block.findAll('button').find((b) => b.text().includes('提前结束（不计完成）'));
     expect(endOnly, '每条门禁都应给同一颗持久出口').toBeTruthy();
     await endOnly!.trigger('click');
     await flushPromises();

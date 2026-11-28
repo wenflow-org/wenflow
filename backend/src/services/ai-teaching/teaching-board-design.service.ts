@@ -45,6 +45,7 @@ export interface BoardDesignRequest {
   kindHint?: string | null;
   questionIntent: BoardIntent;
   lastTeacherReply?: string | null;
+  lessonAnchor?: { mainQuestion: string; criteria: string[] } | null;
   instruction: string;
 }
 

@@ -188,6 +188,7 @@
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
 }
+.v2-page .uc-field__input:focus-visible { outline: none; }
 
 .uc-field__input:disabled {
   opacity: 0.6;

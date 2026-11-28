@@ -1,7 +1,7 @@
 <template>
   <div class="learn v2-page" :class="{ 'learn--quiz': !!checkpoint }" :style="vvh ? { '--vvh': `${vvh}px` } : undefined">
     <!-- 沉浸式头部 -->
-    <header class="learn__head" :class="{ 'learn__head--with-board': !!currentBoard }">
+    <header class="learn__head" :class="{ 'learn__head--with-board': hasSideRail }">
       <!-- 返回改为纯图标钮（2026-11-06 走查）：文字版与右侧两行标题只隔 18px，读成一坨；
            现在 32×32 图标钮 + 右侧一条细竖线，标题有了自己的左边界 -->
       <button type="button" class="learn__back" aria-label="返回路径详情" title="返回路径详情" @click="goBack">
@@ -24,7 +24,7 @@
              开课 0/4 就摆「完成」会读成催进度或可随时结课；提前离开用 ⋯ 菜单的
              「结束学习（不计入完成）」，两者语义分开。 -->
         <button
-          v-if="canCompleteLesson"
+          v-if="canCompleteLesson && !showReadyBanner"
           type="button"
           class="learn__finishbtn"
           aria-label="完成本节"
@@ -37,12 +37,12 @@
           ref="kpBtn"
           type="button"
           class="learn__kpbtn"
-          :aria-label="`知识点 ${masteredCount}/${knowledgePoints.length}，${kpOpen ? '收起' : '打开'}知识点面板`"
+          :aria-label="`知识点 ${displayMasteredCount}/${knowledgePoints.length}，${kpOpen ? '收起' : '打开'}知识点面板`"
           :aria-expanded="kpOpen"
           aria-controls="learn-kp-panel"
           title="知识点进度"
           @click="toggleKp"
-        ><span class="learn__kpbtn-text">知识点</span><b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
+        ><span class="learn__kpbtn-text">{{ lessonAnchor ? '本节要点' : '知识点' }}</span><b>{{ displayMasteredCount }}/{{ knowledgePoints.length }}</b></button>
         <!-- 顶栏「学习中」裸绿字撤除（2026-11-06 走查）：用户本来就在课堂里，这行绿字
              既不解释状态、又与两侧胶囊/按钮抢宽度。正常态整条让位；只有**异常**（开课失败
              红字 / 锁定课琥珀字）才显形——那是用户必须知道的，藏在 ⋯ 菜单里不合适。 -->
@@ -59,29 +59,69 @@
              现在只留 3 个单行项 + 已结算时的反馈入口，高度约减半。 -->
         <ImmersiveMenu mask>
           <div class="learn__menu-group">
-            <span v-if="!session" class="learn__menu-label">本节还没有开起来，先返回路径详情处理解锁或重开。</span>
+            <span v-if="!session" class="learn__menu-label">本节尚未开启，请先返回路径详情</span>
             <!-- 未达到完课条件时，完成入口收进 ⋯：不在页头提前催「完成」；
-                 点它会走同一套契约门禁，缺什么由页内提示逐条说明。达标后页头出现 CTA，
+                 点它会走同一套契约门禁，缺什么由页内提示逐条说明。达标后由底部收束条或页头承接，
                  这条自动退场，避免双入口。 -->
             <button
               v-if="session && !completed && !extensionMode && !canCompleteLesson"
               type="button"
               class="learn__menu-item"
               @click="completeAndSettle()"
-            >完成本节（计入进度）</button>
-            <button type="button" class="learn__menu-item" v-if="session" @click="pauseAndLeave">暂停并离开</button>
-            <button type="button" class="learn__menu-item" v-if="session && !completed" @click="endSession">{{ END_WITHOUT_FINISH_LABEL }}</button>
+            >
+              <span class="learn__menu-lead">
+                <svg class="learn__menu-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>
+                <span>完成本节</span>
+              </span>
+              <span class="learn__menu-meta">计入进度</span>
+            </button>
+            <button type="button" class="learn__menu-item" v-if="session" @click="pauseAndLeave">
+              <span class="learn__menu-lead">
+                <svg class="learn__menu-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></svg>
+                <span>暂离本节</span>
+              </span>
+              <span class="learn__menu-meta">保留进度</span>
+            </button>
+            <button type="button" class="learn__menu-item" v-if="session && !completed" @click="endSession">
+              <span class="learn__menu-lead">
+                <svg class="learn__menu-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
+                <span>提前结束</span>
+              </span>
+              <span class="learn__menu-meta">不计完成</span>
+            </button>
             <!-- 已结算：不给「说明文字」，给一个真动作（copy:check §6「变控件」） -->
-            <button type="button" class="learn__menu-item" v-if="session && completed" @click="goToFeedback">查看本次学习反馈</button>
+            <button type="button" class="learn__menu-item" v-if="session && completed" @click="goToFeedback">
+              <span class="learn__menu-lead">
+                <svg class="learn__menu-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+                <span>查看学习反馈</span>
+              </span>
+            </button>
             <!-- 重新开始依赖活会话（2026-11-03 锁课走查）：没开起来时点它只会空转 -->
-            <button type="button" class="learn__menu-item learn__menu-item--danger" v-if="session" @click="restart">重新开始本节</button>
+            <button type="button" class="learn__menu-item learn__menu-item--danger" v-if="session" @click="restart">
+              <span class="learn__menu-lead">
+                <svg class="learn__menu-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                <span>重学本节</span>
+              </span>
+            </button>
           </div>
-          <div class="learn__menu-group">
+          <div class="learn__menu-group learn__menu-group--sep">
             <!-- 联网补充资料开关（2026-11-23 同轮复调配套）：用户级偏好，开课时固化进会话；
                  菜单里改对下一节课生效，不骗「本节立即」 -->
-            <button type="button" class="learn__menu-item" @click="toggleWebSupplement">
-              {{ webSupplementAllowed ? '联网补充资料：开（点击切换闭卷·下节生效）' : '联网补充资料：闭卷模式（点击开启·下节生效）' }}
+            <button
+              type="button"
+              class="learn__menu-item"
+              title="切换后对下一节课生效"
+              @click="toggleWebSupplement"
+            >
+              <span class="learn__menu-lead">
+                <svg class="learn__menu-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+                <span>联网查资料</span>
+              </span>
+              <span class="learn__menu-pill" :class="{ 'learn__menu-pill--on': webSupplementAllowed }">
+                {{ webSupplementAllowed ? '已开启' : '已关闭' }}
+              </span>
             </button>
+            <span class="learn__menu-foot">联网设置切换后下节生效</span>
           </div>
         </ImmersiveMenu>
         <!-- 知识点浮窗：锚在头部入口下方的非模态浮窗（不再是从左侧压满全高的抽屉）。
@@ -94,17 +134,24 @@
             <span class="kp__head-main">
               <!-- 标题左侧的空心圆环撤除（2026-11-06 走查）：它和下方每条知识点前的进度圈
                    长得一模一样，标题因此读成「一个列表项」；进度秤已在下面那条进度条里 -->
-              <strong>本节知识点</strong>
+              <strong>{{ lessonAnchor ? '本节要点' : '本节知识点' }}</strong>
             </span>
             <span class="kp__head-meta">
               <!-- 外面按钮已写「知识点 0/2」；面板里只要纯文字读数，不要胶囊底与 ▾ 三角 -->
               <span
                 class="kp__chip kp__chip--mastered"
-                :class="{ 'kp__chip--empty': !masteredCount, 'kp__chip--none': !knowledgePoints.length }"
-              >{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
+                :class="{ 'kp__chip--empty': !displayMasteredCount, 'kp__chip--none': !knowledgePoints.length }"
+              >{{ displayMasteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
             </span>
           </button>
           <div class="kp__body">
+            <div v-if="lessonAnchor" class="kp__anchor">
+              <span class="kp__anchor-label">本节聚焦</span>
+              <p class="kp__anchor-q">{{ lessonAnchor.mainQuestion }}</p>
+              <ul v-if="lessonAnchor.criteria.length" class="kp__anchor-list">
+                <li v-for="c in lessonAnchor.criteria" :key="c.id">{{ c.text }}</li>
+              </ul>
+            </div>
             <div class="kp__bar"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
             <!-- 视图切换：列表（默认）/ 图谱。图谱按需加载——只在切过去时才发请求 -->
             <div class="kp__views" role="tablist" aria-label="知识点视图" @keydown="onKpViewKeydown">
@@ -126,7 +173,7 @@
             <template v-if="kpView === 'graph'">
               <p v-if="graphError" class="kp__hint kp__hint--err">{{ graphError }}</p>
               <MkLoading v-else-if="graphLoading" inline />
-              <p v-else-if="!graphNodes.length" class="kp__hint">这条路径还没有概念图数据——路径生成完成后会出现在这里。也可以先用「列表」查看已收录的知识点。</p>
+              <p v-else-if="!graphNodes.length" class="kp__hint">暂无概念图，可先切回「列表」查看。</p>
               <MkGraph
                 v-else
                 :nodes="graphNodes"
@@ -205,7 +252,7 @@
       </div>
     </div>
 
-    <div v-else class="learn__body" :class="{ 'learn__body--with-board': !!currentBoard }">
+    <div v-else class="learn__body" :class="{ 'learn__body--with-board': hasSideRail }">
       <!-- 中：导师对话。知识点浮窗相对页头定位，绝对定位不占用对话区高度。 -->
       <section class="tutor" :class="{ 'tutor--kp-open': kpOpen, 'tutor--phase': !!(lessonPhase || currentBoard) }">
         <div v-if="!online" class="tutor__offline" role="alert">
@@ -322,7 +369,7 @@
                   @keydown.esc="cancelEdit"
                 ></textarea>
                 <div class="msg__edit-actions">
-                  <span class="msg__edit-hint">原消息会保留，修正内容作为新一轮发送</span>
+                  <span class="msg__edit-hint">作为新一轮发送，原消息保留</span>
                   <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(m)" @keydown.enter="saveEdit(m)" @keydown.space.prevent="saveEdit(m)">修正后重发</span>
                   <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit" @keydown.space.prevent="cancelEdit">取消</span>
                 </div>
@@ -368,12 +415,27 @@
                 @mouseleave="onBubbleLeave"
               >
                 <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="htmlFor(m)" @click="onCodeCopy"></div>
-                <!-- 本课材料卡（2026-11-27）：材料是独立引用，不混进老师气泡——
-                     「老师说一段人话 + 系统贴一段文档」会被读成两张皮。 -->
-                <div v-if="mi === 0 && openingMaterial" class="msg__material">
-                  <div class="msg__material-head">{{ openingMaterial.title || '本课材料' }}</div>
-                  <pre class="msg__material-body">{{ openingMaterial.text }}</pre>
-                </div>
+                <!-- 本课材料卡（2026-11-27）：短靶子（≤320 字）直接亮出；长材料在开场默认折叠，避免信息墙压垮首屏，进入正文后完整常驻左栏。 -->
+                <template v-if="mi === 0 && openingMaterial">
+                  <div v-if="isShortOpeningMaterial || openingMaterialExpanded" class="msg__material">
+                    <div class="msg__material-head">
+                      <span>{{ openingMaterial.title || '本课材料' }}</span>
+                      <button
+                        v-if="!isShortOpeningMaterial"
+                        type="button"
+                        class="msg__material-collapse"
+                        @click="openingMaterialExpanded = false"
+                      >收起</button>
+                    </div>
+                    <pre class="msg__material-body">{{ openingMaterial.text }}</pre>
+                  </div>
+                  <button
+                    v-else
+                    type="button"
+                    class="msg__material-toggle"
+                    @click="openingMaterialExpanded = true"
+                  >展开查看本节完整材料</button>
+                </template>
                 <!-- 教学配图（owner 口径：图片是一种特殊的文字）——由老师给的一段文字生成，内联在回复里；
                      文本仍自洽：不看图也能继续。 -->
                 <div v-if="m.images && m.images.length" class="msg__visuals">
@@ -653,10 +715,10 @@
         <!-- 结束提示：完成条件已满足时，不让「可以收课了」只藏在页头一颗小按钮里。
              门禁/结算浮层出现时让位，避免同一屏三条指令抢焦点。 -->
         <Transition name="gate-pop">
-          <div v-if="lessonReadyToFinish && !settleBlock && !finalizing" class="ready" role="region" aria-label="本节完成提示">
+          <div v-if="showReadyBanner" class="ready" role="region" aria-label="本节完成提示">
             <div class="ready__body">
               <strong>{{ allKpMastered ? '本节知识点已全部掌握' : '本节目标已达成' }}</strong>
-              <span>可以完成本节，系统会生成本次学习总结。</span>
+              <span>已完成本节核心检验。可以完成本节，系统会生成本次学习总结。</span>
             </div>
             <button type="button" class="btn-primary ready__go" @click="completeAndSettle()">完成本节</button>
           </div>
@@ -802,7 +864,7 @@
             </span>
             <h2>{{ finishHeading }}</h2>
             <p v-if="finishAction === 'end_only'" class="finish__notcounted">
-              本次不计入完成，任务进度与里程碑保持不变。学习总结仍可在反馈里查看。
+              本次不计入完成，任务进度与里程碑保持不变。
             </p>
             <p>{{ wrapupText || '这次学习已经记录。' }}</p>
             <div v-if="finishStats.length" class="finish__stats">
@@ -831,13 +893,51 @@
       </section>
       <!-- 桌面常驻板书区（2026-11-26 空间邻近）：有板书的任务课在宽屏下左板右聊，
            讲解句与它指的行同屏；窄屏仍用阶段条里的「板书」弹层（不挤压对话）。 -->
-      <aside v-if="currentBoard" class="boardrail" aria-label="本课板书">
+      <aside v-if="hasSideRail" class="boardrail" aria-label="课堂辅助区">
         <div class="boardrail__head">
-          <span class="boardrail__title">本课板书</span>
-          <span v-if="boardFocusLabel" class="boardrail__focus">{{ boardFocusLabel }}</span>
+          <div v-if="currentBoard && openingMaterial" class="boardrail__tabs" role="tablist" aria-label="辅助工作区">
+            <button
+              type="button"
+              role="tab"
+              class="boardrail__tab"
+              :class="{ 'boardrail__tab--on': boardTab === 'board' }"
+              :aria-selected="boardTab === 'board'"
+              @click="boardTab = 'board'"
+            >板书</button>
+            <button
+              type="button"
+              role="tab"
+              class="boardrail__tab"
+              :class="{ 'boardrail__tab--on': boardTab === 'material' }"
+              :aria-selected="boardTab === 'material'"
+              @click="boardTab = 'material'"
+            >材料</button>
+          </div>
+          <span v-else-if="openingMaterial" class="boardrail__title">本课材料</span>
+          <span v-else class="boardrail__title">本课板书</span>
+          <span v-if="!currentBoard && openingMaterial" class="boardrail__focus">对照阅读</span>
+          <span v-else-if="boardTab === 'board' && boardFocusLabel" class="boardrail__focus">{{ boardFocusLabel }}</span>
         </div>
+        <p v-if="(boardTab === 'material' || !currentBoard) && openingMaterial" class="boardrail__hint">随讲解对照查看，不必一口气读完</p>
+        <p v-else-if="boardTab === 'board' && boardPhaseHint" class="boardrail__hint">{{ boardPhaseHint }}</p>
         <div class="boardrail__body">
-          <TeachingFigure :figure="currentBoard" :focus-segment="boardFocusSegment" />
+          <div v-if="(boardTab === 'material' || !currentBoard) && openingMaterial" class="boardrail__material">
+            <div v-if="openingMaterial.title" class="boardrail__material-head">{{ openingMaterial.title }}</div>
+            <pre class="boardrail__material-body">{{ openingMaterial.text }}</pre>
+          </div>
+          <TeachingFigure v-else-if="currentBoard" :figure="currentBoard" :focus-segment="boardFocusSegment" />
+        </div>
+        <div v-if="currentBoard && boardTab === 'board' && boardAnchorItems.length && !completed" class="boardrail__anchors">
+          <span class="boardrail__anchors-label">点条目追问</span>
+          <div class="boardrail__anchors-list">
+            <button
+              v-for="item in boardAnchorItems"
+              :key="item"
+              type="button"
+              class="boardrail__anchor-chip"
+              @click="quoteBoardItem(item)"
+            >{{ item }}</button>
+          </div>
         </div>
       </aside>
     </div>
@@ -1107,6 +1207,7 @@ const webSupplementAllowed = ref(localStorage.getItem(WEB_SUPPLEMENT_KEY) !== '0
 function toggleWebSupplement(): void {
   webSupplementAllowed.value = !webSupplementAllowed.value;
   localStorage.setItem(WEB_SUPPLEMENT_KEY, webSupplementAllowed.value ? '1' : '0');
+  toast.info(webSupplementAllowed.value ? '已开启联网查资料（下节课生效）' : '已关闭联网查资料，切为闭卷模式（下节课生效）');
 }
 const interactionMeta = useInteractionMeta();
 
@@ -1269,8 +1370,8 @@ const settleSteps = computed<Array<{ key: string; label: string; state: 'done' |
   return steps
 })
 const settleNote = computed(() => settleAutoEnter.value
-  ? '学习总结由 AI 生成，通常需要 30–60 秒。完成后会自动进入学习反馈，请不要关闭页面。'
-  : '学习总结由 AI 生成，通常需要 30–60 秒。完成后会显示本次学习总结，请不要关闭页面。')
+  ? '约需 30–60 秒，完成后会自动进入学习反馈，请勿关闭页面。'
+  : '约需 30–60 秒，完成后会显示本次学习总结，请勿关闭页面。')
 function startSettleProgress(mode: 'complete' | 'end', autoEnter: boolean) {
   settleMode.value = mode
   settleAutoEnter.value = autoEnter
@@ -1528,6 +1629,7 @@ const openingSceneDone = ref(false);
 const knowledgePoints = ref<Array<Record<string, any>>>([]);
 /** 课堂契约与实时报告（2026-11-19）：最低必须完成集 + 支线预算 + 停车区。 */
 const lessonContract = ref<LessonContract | null>(null);
+const lessonAnchor = computed(() => lessonContract.value?.anchor ?? null);
 const lessonReport = ref<LessonReport | null>(null);
 const exitTicket = ref<ExitTicket | null>(null);
 const branchInfo = ref<{
@@ -1554,11 +1656,83 @@ const boardFocusSegment = computed<number | null>(() => {
 const boardFocusLabel = computed(() => {
   const summary = lessonPhase.value;
   if (!summary) return '';
+  if (completed.value || lessonReadyToFinish.value) return '完成';
   if (boardFocusSegment.value) return `第 ${boardFocusSegment.value}/${summary.segmentCount || boardFocusSegment.value} 段`;
   return summary.label || '';
 });
+const boardPhaseHint = computed(() => {
+  if (completed.value || lessonReadyToFinish.value || lessonPhase.value?.phase === 'close') {
+    return '整课知识骨架复盘，可对照总结回顾';
+  }
+  const phase = lessonPhase.value?.phase;
+  if (phase === 'orient') return '先认清板上核心部件，不用急着记结论';
+  if (phase === 'build') return '顺着板面骨架，把前后关系串起来';
+  if (phase === 'integrate') return '把各条分线合回同一张完整结构';
+  if (phase === 'audit') return '对照板面，找出最容易判断错的环节';
+  if (phase === 'transfer') return '带着这套骨架，去判断新的情境';
+  return '';
+});
 /** 板书放大层（常驻入口在顶部阶段条） */
 const boardOpen = ref(false);
+const boardAnchorItems = computed<string[]>(() => {
+  const board = currentBoard.value;
+  if (!board || !board.spec || typeof board.spec !== 'object') return [];
+  const spec = board.spec as Record<string, unknown>;
+  const raw: string[] = [];
+  if (board.kind === 'matrix') {
+    const labels = Array.isArray(spec.rowLabels) ? spec.rowLabels : [];
+    const revealed = Array.isArray(spec.rowRevealed) ? spec.rowRevealed : null;
+    const anyRevealed = revealed ? revealed.some((v) => v === true) : false;
+    labels.forEach((label, idx) => {
+      if (typeof label !== 'string' || !label.trim()) return;
+      if (!revealed || !anyRevealed || revealed[idx] === true) raw.push(label.trim());
+    });
+  } else if (board.kind === 'state-strip') {
+    const frames = Array.isArray(spec.frames) ? spec.frames : [];
+    const revealed = Array.isArray(spec.frameRevealed) ? spec.frameRevealed : null;
+    const anyRevealed = revealed ? revealed.some((v) => v === true) : false;
+    frames.forEach((frame, idx) => {
+      const label = frame && typeof frame === 'object' ? (frame as { label?: unknown }).label : null;
+      if (typeof label !== 'string' || !label.trim()) return;
+      if (!revealed || !anyRevealed || revealed[idx] === true) raw.push(label.trim());
+    });
+  } else if (board.kind === 'concept-map' || board.kind === 'cycle') {
+    const nodes = Array.isArray(spec.nodes) ? spec.nodes : [];
+    nodes.forEach((node) => {
+      const label = node && typeof node === 'object' ? (node as { label?: unknown }).label : null;
+      if (typeof label === 'string' && label.trim()) raw.push(label.trim());
+    });
+  } else if (board.kind === 'tree') {
+    const branches = Array.isArray(spec.branches) ? spec.branches : [];
+    branches.forEach((branch) => {
+      const label = branch && typeof branch === 'object' ? (branch as { label?: unknown }).label : null;
+      if (typeof label === 'string' && label.trim()) raw.push(label.trim());
+    });
+  } else if (board.kind === 'venn') {
+    (['left', 'right', 'overlap'] as const).forEach((side) => {
+      const part = spec[side];
+      const head = part && typeof part === 'object' ? (part as { head?: unknown }).head : null;
+      if (typeof head === 'string' && head.trim()) raw.push(head.trim());
+    });
+  }
+  return Array.from(new Set(raw)).slice(0, 6);
+});
+function quoteBoardItem(label: string) {
+  if (completed.value || finalizing.value) return;
+  const prefix = `关于「${label}」，`;
+  if (!input.value.trim()) {
+    input.value = prefix;
+  } else if (!input.value.includes(`「${label}」`)) {
+    input.value = `${input.value.trimEnd()} ${prefix}`;
+  }
+  nextTick(() => {
+    const el = composerEl.value;
+    if (el) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  });
+}
 const PHASE_LABELS: Array<{ phase: LessonPhaseName; label: string }> = [
   { phase: 'orient', label: '点名' },
   { phase: 'build', label: '建构' },
@@ -1574,16 +1748,19 @@ const phaseSteps = computed(() => {
   const steps = current.profile === 'compact'
     ? PHASE_LABELS.filter((step) => step.phase !== 'integrate' && step.phase !== 'audit')
     : PHASE_LABELS;
+  const effectivePhase: LessonPhaseName = (completed.value || lessonReadyToFinish.value) && steps.some((s) => s.phase === 'close')
+    ? 'close'
+    : current.phase;
   const passed = new Set(current.passedPhases || []);
+  const currentIndex = steps.findIndex((item) => item.phase === effectivePhase);
   return steps.map((step, index) => {
-    const currentIndex = steps.findIndex((item) => item.phase === current.phase);
-    const done = step.phase !== current.phase && (passed.has(step.phase) || index < currentIndex);
-    const isCurrent = step.phase === current.phase;
+    const done = step.phase !== effectivePhase && (passed.has(step.phase) || index < currentIndex);
+    const isCurrent = step.phase === effectivePhase;
     return {
       ...step,
       done,
       current: isCurrent,
-      detail: isCurrent && current.phase === 'build' && (current.segmentCount || 0) > 1
+      detail: isCurrent && effectivePhase === 'build' && (current.segmentCount || 0) > 1
         ? `${current.segment || 1}/${current.segmentCount}`
         : '',
     };
@@ -1620,6 +1797,22 @@ const currentBoard = computed(() => {
   if (index < 0) return null;
   return msgs.value[index].figures?.find((f) => f.board === true) ?? null;
 });
+const openingMaterialExpanded = ref(false);
+const isShortOpeningMaterial = computed(() => (openingMaterial.value?.text.length ?? 0) <= 320);
+const hasSideRail = computed(() => !!(currentBoard.value || openingMaterial.value));
+const boardTab = ref<'board' | 'material'>('board');
+watch([openingMaterial, currentBoard], ([mat, board], [prevMat, prevBoard]) => {
+  if (mat !== prevMat) {
+    openingMaterialExpanded.value = false;
+  }
+  if (mat && !board) {
+    boardTab.value = 'material';
+  } else if (board && !prevBoard) {
+    boardTab.value = 'board';
+  } else if (!mat) {
+    boardTab.value = 'board';
+  }
+}, { immediate: true });
 /** 内联到消息下的图：板书只留最新一块，其它图（一次性配图）照常 */
 function inlineFigures(m: ChatMsg, mi: number): TeachingFigurePayload[] {
   const figures = Array.isArray(m.figures) ? m.figures : [];
@@ -1773,9 +1966,8 @@ const introLayout = computed(
  */
 function buildPostQuizReplies(): string[] {
   const point = lastTaughtPoint.value.trim();
-  if (!point) return ['换种方式再讲一遍', '再出一道同类题'];
-  const name = point.length > 12 ? `${point.slice(0, 12)}…` : point;
-  return [`换个说法讲「${name}」`, `再出一道「${name}」的题`];
+  if (!point || point.length > 6) return ['换个角度再讲一遍', '再练一道新情境题'];
+  return [`换个说法讲「${point}」`, `再出一道「${point}」的题`];
 }
 
 /** 小测答完后的续接动作（见 watch(checkpoint) 内注释）；发送任意消息即清 */
@@ -1788,7 +1980,23 @@ const postQuizReplies = ref<string[]>([]);
    触发条件取「有待答小测时用户又发出一条消息」：这是唯一确定的「越过」信号，不引入计时器
    （用户在读题时不会误报）。换题或卡片收起即复位。 */
 const checkpointWalkedPast = ref(false);
-const allKpMastered = computed(() => knowledgePoints.value.length > 0 && masteredCount.value >= knowledgePoints.value.length);
+const displayMasteredCount = computed(() => {
+  const total = knowledgePoints.value.length;
+  if (!total) return 0;
+  if (lessonReport.value?.met !== true) return masteredCount.value;
+  const indKcs = new Set(lessonReport.value.independentKcs || []);
+  let verifiedCount = 0;
+  for (const kp of knowledgePoints.value) {
+    const name = String(kp?.name || '').trim();
+    const id = String(kp?.id || kp?.kcId || '').trim();
+    if (kp?.status === 'mastered' || (name && indKcs.has(name)) || (id && indKcs.has(id))) {
+      verifiedCount += 1;
+    }
+  }
+  if (verifiedCount === 0 && total === 1) verifiedCount = 1;
+  return Math.min(total, Math.max(masteredCount.value, verifiedCount));
+});
+const allKpMastered = computed(() => knowledgePoints.value.length > 0 && displayMasteredCount.value >= knowledgePoints.value.length);
 /* 完课入口不提前摆在页头（2026-11-20 用户走查：0/4 知识点时就给「完成」读作催进度/可随时结课）：
    知识点全部掌握或课堂契约已达标后才出现；想提前离开走 ⋯ 菜单的「结束学习（不计入完成）」，
    两条语义分开——完成=已学完并计入进度，结束=不结算。 */
@@ -1849,6 +2057,10 @@ const lessonReadyToFinish = computed(() =>
   && !typing.value
   && !checkpoint.value
   && (knowledgePoints.value.length > 0 || lessonReport.value?.met === true)
+)
+/** 底部绿色收束条实际在场时，顶栏不再重复摆第二颗「完成本节」 */
+const showReadyBanner = computed(() =>
+  lessonReadyToFinish.value && !settleBlock.value && !finalizing.value
 )
 
 /* 课堂契约卡（2026-11-19）：主线覆盖/独立证据/支线/停车区。契约是“最低必须完成集”，
@@ -3159,7 +3371,7 @@ async function completeAndSettle(opts: { confirmOpenQuestion?: boolean } = {}) {
     /* 弹窗标题跟触发它的那颗按钮同名（顶栏「完成本节」）：入口改名后弹窗还叫旧名，
        用户会以为自己点错了按钮（2026-11-06 走查） */
     title: '完成本节',
-    message: '确认当前任务已学完？将结算任务并计入里程碑与路径进度，同时生成本次学习总结。',
+    message: '结算后计入路径进度，并生成本次学习总结。',
     confirmText: '完成并结算',
     danger: false,
   });
@@ -3194,7 +3406,7 @@ async function endSession() {
   if (actionBusy.value) return;
   const ok = await askConfirm({
     title: END_WITHOUT_FINISH_LABEL,
-    message: '结束本次学习？将生成本次学习总结，但当前任务不会计入完成进度（里程碑/路径进度不动）。',
+    message: '将生成本次学习总结，当前任务不计入完成进度。',
     confirmText: '结束学习',
     danger: false,
   });
@@ -3576,9 +3788,10 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--surface); color: var(--muted);
   cursor: pointer;
-  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
-.learn__back:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); }
+.learn__back:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); background: color-mix(in srgb, var(--blue) 6%, var(--surface)); }
+.learn__back:active:not(:disabled) { transform: scale(0.98); }
 .learn__title { display: grid; gap: 3px; min-width: 0; border-left: 1px solid var(--line); padding-left: 16px; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .learn__title small { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3606,9 +3819,14 @@ onBeforeUnmount(() => {
   padding: 0 11px; border-radius: 8px;
   height: 32px;
   cursor: pointer; white-space: nowrap;
-  transition: background 0.14s ease, border-color 0.14s ease;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .learn__kpbtn:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); border-color: color-mix(in srgb, var(--blue) 44%, transparent); }
+.learn__kpbtn[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 52%, transparent);
+}
+.learn__kpbtn:active:not(:disabled) { transform: scale(0.98); }
 .learn__kpbtn b { font-weight: 800; font-variant-numeric: tabular-nums; }
 /* 结课入口：常驻头部、低于知识点入口权重；副文案在 title 里给「可计入进度」 */
 .learn__finishbtn {
@@ -3616,8 +3834,10 @@ onBeforeUnmount(() => {
   color: var(--ink); background: var(--surface);
   border: 1px solid var(--line); border-radius: 8px;
   padding: 0 12px; height: 32px; cursor: pointer; white-space: nowrap;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
-.learn__finishbtn:hover { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
+.learn__finishbtn:hover { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); background: color-mix(in srgb, var(--blue) 5%, var(--surface)); color: var(--blue-deep); }
+.learn__finishbtn:active:not(:disabled) { transform: scale(0.98); }
 /* 窄屏用的短标签；桌面保留完整「完成本节」 */
 .learn__finishbtn-short { display: none; }
 /* 连接态：降为纯文字（原型顶栏只有一行状态字，不再挂绿胶囊） */
@@ -3659,11 +3879,11 @@ onBeforeUnmount(() => {
   /* 选择器写满三节：v2.css 的 `.v2-page.learn .learn__body`（≥1280）权重更高，
      否则 1440 的列宽会被旧 1120 帽覆盖（2026-10-29 同类事故）。 */
   .v2-page.learn .learn__body.learn__body--with-board {
-    max-width: 1440px;
+    max-width: 1520px;
     display: grid;
-    grid-template-columns: 420px minmax(0, 1fr);
+    grid-template-columns: 440px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
-    column-gap: 18px;
+    column-gap: 20px;
     align-items: stretch;
   }
   /* 宽屏板书已常驻在左栏：阶段条右侧的「板书」弹层入口是重复动作，
@@ -3672,14 +3892,15 @@ onBeforeUnmount(() => {
   /* 阶段条通栏：它自己就是滚动区的顶栏，不能被内容列的 880 上限截成一条缝。 */
   .learn__body--with-board .tutor__scroll > .lessonbar { max-width: none; }
   .learn__body--with-board .tutor { height: 100%; min-height: 0; }
-  /* 页头与加宽后的正文列对齐：500 规则按 900 列居中，正文放到 1440 后会左移一截。 */
+  /* 页头与加宽后的正文列对齐：500 规则按 900 列居中，正文放到 1520 后会左移一截。 */
   .v2-page.learn .learn__head.learn__head--with-board {
-    padding-left: max(30px, calc((100% - 1440px) / 2 + 30px));
-    padding-right: max(30px, calc((100% - 1440px) / 2 + 30px));
+    padding-left: max(30px, calc((100% - 1520px) / 2 + 30px));
+    padding-right: max(30px, calc((100% - 1520px) / 2 + 30px));
   }
-  /* 外宽放到 1440 后，内层 720 阅读帽会让右列空出一整块；板课把内容列同步放到 880
-     （仍短于 940 列的可用宽度，行长不至于变成运维日志）。 */
+  /* 外宽放到 1520 后，内容列同步放到 880，开场气泡与快选共用同一 880 基线。 */
   .learn__body--with-board .tutor__scroll > *,
+  .learn__body--with-board .tutor__scroll--intro .msg--ai,
+  .learn__body--with-board .tutor__scroll--intro .replies,
   .learn__body--with-board .composer__box,
   .learn__body--with-board .tutor > .oscene,
   .learn__body--with-board .tutor > .tutor__offline,
@@ -3708,11 +3929,28 @@ onBeforeUnmount(() => {
   }
   /* 同一块板不在聊天流里重复一次：宽屏以常驻区为准 */
   .learn__body--with-board .board-inline { display: none; }
+  /* 宽屏材料已固定在左栏，不在开场聊天气泡里再占一屏 */
+  .learn__body--with-board .msg__material,
+  .learn__body--with-board .msg__material-toggle { display: none; }
 }
-.boardrail__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
+.boardrail__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
 .boardrail__title { font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+.boardrail__tabs { display: inline-flex; padding: 2px; border-radius: var(--mk-radius-pill); background: color-mix(in srgb, var(--ink) 5%, var(--surface)); gap: 2px; }
+.boardrail__tab { border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: var(--mk-radius-pill); cursor: pointer; transition: background .15s, color .15s; }
+.boardrail__tab--on { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
 .boardrail__focus { color: var(--blue-deep); font-weight: 700; }
+.boardrail__hint { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .boardrail__body { min-height: 0; }
+.boardrail__body :deep(.teaching-figure) { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; overflow-x: hidden; }
+.boardrail__body :deep(.teaching-figure__canvas svg) { width: 100%; max-width: 100%; height: auto; }
+.boardrail__material { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: var(--mk-radius-modal); background: color-mix(in srgb, var(--ink) 3%, var(--surface)); border: 1px solid var(--line); }
+.boardrail__material-head { font-size: 12px; font-weight: 700; color: var(--ink); }
+.boardrail__material-body { margin: 0; font-family: inherit; font-size: 13px; line-height: 1.65; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.boardrail__anchors { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.boardrail__anchors-label { font-size: var(--mk-fs-micro); color: var(--muted); font-weight: 600; }
+.boardrail__anchors-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.boardrail__anchor-chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12px; line-height: 1.3; padding: 4px 10px; border-radius: var(--mk-radius-pill); cursor: pointer; transition: border-color .15s, background .15s, color .15s; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.boardrail__anchor-chip:hover { border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); background: color-mix(in srgb, var(--blue) 7%, var(--surface)); color: var(--blue-deep); }
 
 /* ---------- 知识点浮窗（锚在头部入口下方，不占对话布局高度） ---------- */
 .kp {
@@ -3776,15 +4014,32 @@ onBeforeUnmount(() => {
   .kp-mask {
     display: block;
     position: fixed; inset: 0; z-index: 69;
-    background: color-mix(in srgb, #000 35%, transparent);
+    background: var(--wf-overlay);
   }
 }
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.kp__anchor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--mk-radius-lg);
+  border: 1px solid var(--line);
+  background: var(--mk-surface-2);
+}
+.kp__anchor-label { font-size: 11px; font-weight: 700; color: var(--blue-deep); letter-spacing: .02em; }
+.kp__anchor-q { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.45; color: var(--ink); }
+.kp__anchor-list { margin: 0; padding-left: 16px; display: grid; gap: 4px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .kp__bar { height: 6px; border-radius: 999px; background: var(--bar-track); overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 /* 视图切换（列表/图谱）：轻量分段控件，走既有 token（mk token 深浅主题自动跟随，2026-09-25 深色修复） */
 .kp__views { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--mk-surface-2); align-self: flex-start; }
-.kp__view { border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--faint); }
+.kp__view {
+  border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--faint);
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
+}
+.kp__view:hover:not(.kp__view--on) { color: var(--ink); }
+.kp__view:active:not(:disabled) { transform: scale(0.98); }
 .kp__view--on { background: var(--surface); color: var(--blue-deep); box-shadow: var(--wf-shadow-raised); }
 .kp__hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
 .kp__hint--err { color: var(--red-ink); }
@@ -3797,6 +4052,7 @@ onBeforeUnmount(() => {
   padding: 8px;
   border-radius: var(--mk-radius-lg);
   border: 1px solid transparent;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .kp__item--current { background: color-mix(in srgb, var(--blue) 6%, transparent); border-color: color-mix(in srgb, var(--blue) 20%, transparent); }
 .kp__mark {
@@ -3853,9 +4109,17 @@ onBeforeUnmount(() => {
 .tutor__empty strong { font-size: 15px; color: var(--muted); }
 .tutor__empty p { margin: 0; font-size: 13px; }
 
-/* 首屏短会话构图：只有开场白时把它在消息区垂直居中，空白变成上下留白。
-   2026-11-25 起顶部不再有知识点胶囊，居中组里只剩开场白。 */
-.tutor__scroll--intro { justify-content: center; }
+/* 首屏开场构图：顶部自然起排并让开场白、材料卡与快选按钮对齐同一阅读列，消除左偏错位。 */
+.tutor__scroll--intro { justify-content: flex-start; padding-top: 28px; }
+.tutor__scroll--intro .msg--ai,
+.tutor__scroll--intro .replies { max-width: 840px; width: 100%; margin-left: auto; margin-right: auto; }
+.tutor__scroll--intro .msg--ai .msg__content { width: 100%; }
+.tutor__scroll--intro .msg--ai .msg__bubble { width: 100%; max-width: none; }
+.msg__material-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.msg__material-collapse { border: 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; padding: 0; }
+.msg__material-collapse:hover { color: var(--blue-deep); }
+.msg__material-toggle { display: inline-flex; align-items: center; width: fit-content; align-self: flex-start; margin-top: 8px; padding: 5px 12px; border: 1px solid var(--line); border-radius: var(--mk-radius-pill); background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1.4; font-weight: 500; cursor: pointer; transition: border-color .15s, color .15s; }
+.msg__material-toggle:hover { border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); color: var(--blue-deep); }
 
 /* 断网提示条：网络断开时固定在对话区顶部 */
 .tutor__offline {
@@ -3894,8 +4158,10 @@ onBeforeUnmount(() => {
   border: 0; background: var(--blue); color: var(--text-on-primary);
   font: inherit; font-size: 12px; font-weight: 700;
   padding: 5px 14px; border-radius: var(--mk-radius-pill); cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .tutor__resume-go:hover { background: color-mix(in srgb, var(--blue-deep) 85%, var(--blue)); }
+.tutor__resume-go:active:not(:disabled) { transform: scale(0.98); }
 .tutor__resume-go:disabled { opacity: 0.6; cursor: default; }
 .tutor__resume-restart {
   border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
@@ -3903,16 +4169,20 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
   font: inherit; font-size: 12px; font-weight: 700;
   padding: 4px 12px; border-radius: var(--mk-radius-pill); cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .tutor__resume-restart:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.tutor__resume-restart:active:not(:disabled) { transform: scale(0.98); }
 .tutor__resume-close {
   display: grid; place-items: center;
   width: 44px; height: 44px;
   border: 0; border-radius: var(--mk-radius-sm);
   background: transparent; color: var(--faint);
   cursor: pointer; flex: 0 0 auto;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .tutor__resume-close:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--muted); }
+.tutor__resume-close:active:not(:disabled) { transform: scale(0.98); }
 /* 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场 */
 .finish__contract { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 /* 结束学习（不计入完成）与「本节完成」共用同一张浮层：必须把「没有计入」写在标题下，
@@ -3962,7 +4232,10 @@ onBeforeUnmount(() => {
   border: 0; background: none; padding: 4px 2px;
   font: inherit; font-size: 12px; font-weight: 700; color: var(--blue);
   cursor: pointer;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
+.oscene__expand:hover { color: var(--blue-deep); text-decoration: underline; }
+.oscene__expand:active:not(:disabled) { transform: scale(0.98); }
 /* 续课卡压成单行：阶段条已经说明「课到哪」，这里只留入口与重开；
    展开的 lead/summary 会把顶部吃掉三分之一，首屏看不到对话（2026-11-26 目检）。 */
 .oscene--resume {
@@ -4033,8 +4306,10 @@ onBeforeUnmount(() => {
   border: 0; background: transparent; color: var(--muted);
   font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
   padding: 4px 2px;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .oscene__restart:hover { color: var(--red-ink); text-decoration: underline; }
+.oscene__restart:active:not(:disabled) { transform: scale(0.98); }
 .oscene__restart:disabled { opacity: 0.6; cursor: default; }
 .oscene__actions { display: flex; align-items: center; gap: 10px 14px; margin-top: 2px; flex-wrap: wrap; }
 /* 暗色：底色/描边已全部令牌化，自动翻转，原逐条暗色字面量覆写退役 */
@@ -4051,6 +4326,7 @@ onBeforeUnmount(() => {
   font: inherit; font-size: 12px; font-weight: 700;
   cursor: pointer;
   box-shadow: var(--wf-shadow-overlay);
+  animation: v2-jump-in var(--mk-dur-fast) var(--mk-ease-out);
   transition: color 0.15s ease;
 }
 /* hover 只变色（不再有居中位移，也就不需要保留 transform） */
@@ -4108,6 +4384,11 @@ onBeforeUnmount(() => {
   background: var(--surface);
   resize: vertical;
   outline: none;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out);
+}
+.msg__edit-input:focus {
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  box-shadow: var(--mk-focus-ring);
 }
 .msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
 /* 追加语义说明（2026-11-21）：让「修正后重发」不再被读成改写历史 */
@@ -4117,18 +4398,22 @@ onBeforeUnmount(() => {
   padding: 5px 14px;
   border-radius: var(--mk-radius-pill);
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), filter var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .msg__edit-save {
   color: var(--text-on-primary);
   /* 实色主按钮（原蓝渐变退役）；按压反馈用 scale(.98)，替掉原先的 hover 抬升 */
   background: var(--blue);
 }
+.msg__edit-save:hover { filter: brightness(1.06); }
 .msg__edit-save:not(:disabled):active { transform: scale(0.98); }
 .msg__edit-cancel {
   color: var(--muted);
   border: 1px solid var(--line);
   background: var(--surface);
 }
+.msg__edit-cancel:hover { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--ink); background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
+.msg__edit-cancel:active { transform: scale(0.98); }
 .msg__bubble {
   padding: 12px 16px;
   /* 2026-11-25 阅读版式：14→14.5、行高 1.65→1.75，段落间距 8→10；
@@ -4151,8 +4436,11 @@ onBeforeUnmount(() => {
   text-align: left; cursor: pointer;
   border: 1px solid var(--line); border-radius: 8px; /* 圆角阶梯：控件 */
   background: var(--surface); color: inherit;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
-.msg__supplement:hover { border-color: var(--blue); }
+.msg__supplement:hover { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 4%, var(--surface)); }
+.msg__supplement:active:not(:disabled) { transform: scale(0.98); }
+.msg__supplement:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .msg__supplement-tag {
   justify-self: start; padding: 1px 6px; border-radius: 999px;
   background: var(--blue); color: var(--text-on-primary); font-size: 12px; font-weight: 700;
@@ -4160,11 +4448,11 @@ onBeforeUnmount(() => {
 .msg__supplement-title { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg__supplement-topic { font-size: 12px; color: var(--muted); }
 /* 补充材料弹层 */
-.supmodal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(15, 23, 42, .45); }
-.supmodal__card { width: min(640px, 100%); max-height: calc(80vh / var(--vp-zoom, 1)); display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; /* 圆角阶梯：弹层 */ box-shadow: var(--wf-shadow-modal); }
+.supmodal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--wf-overlay); animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out); }
+.supmodal__card { width: min(640px, 100%); max-height: calc(80vh / var(--vp-zoom, 1)); display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; /* 圆角阶梯：弹层 */ box-shadow: var(--wf-shadow-modal); animation: v2-modal-in var(--mk-dur) var(--mk-ease-out); }
 .supmodal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .supmodal__head strong { font-size: 14px; }
-.supmodal__close { border: 0; background: transparent; font-size: 14px; cursor: pointer; color: var(--muted); }
+.supmodal__close { border: 0; border-radius: var(--mk-radius-sm); background: transparent; font-size: 14px; cursor: pointer; color: var(--muted); transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out); }
 .supmodal__body { padding: 12px 16px 16px; overflow-y: auto; }
 .supmodal__text, .supmodal__loading { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
 /* 补充资料弹窗已全部令牌化（--surface/--line/--muted/--ink），投影走 --wf-shadow-modal 自动翻转，
@@ -4180,6 +4468,10 @@ onBeforeUnmount(() => {
   display: block; width: auto; height: auto; max-width: 100%; max-height: 320px;
   border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
   background: var(--surface);
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out);
+}
+.msg__visual-btn:hover img, .msg__pic:hover img {
+  border-color: color-mix(in srgb, var(--blue) 48%, var(--line));
 }
 .msg__visual figcaption { font-size: 12px; color: var(--faint); line-height: 1.5; }
 /* 用户随消息发的图片（视觉通道 2026-11-12）：缩略图行贴右（与气泡同侧），点击复用
@@ -4194,6 +4486,7 @@ onBeforeUnmount(() => {
   display: block; width: auto; height: auto; max-width: min(180px, 60vw); max-height: 180px;
   border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
   background: var(--surface);
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* 图片加载失败占位（历史图失效等）：不静默烂掉 */
 .msg__pic-broken {
@@ -4207,16 +4500,23 @@ onBeforeUnmount(() => {
   position: fixed; inset: 0; z-index: 96; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px; padding: 20px;
   background: rgba(15, 23, 42, .78);
+  animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .visualmodal img {
   max-width: calc(94vw / var(--vp-zoom, 1)); max-height: calc(82vh / var(--vp-zoom, 1)); width: auto; height: auto;
   background: var(--surface); border-radius: var(--mk-radius-md); box-shadow: var(--wf-shadow-modal);
+  animation: v2-modal-in var(--mk-dur) var(--mk-ease-out);
 }
 .visualmodal__caption { margin: 0; max-width: 940px; color: var(--text-on-primary); font-size: 12.5px; line-height: 1.5; text-align: center; }
 .visualmodal__close {
   position: absolute; top: 14px; right: 14px; width: 36px; height: 36px;
   border: 1px solid color-mix(in srgb, var(--text-on-primary) 35%, transparent); border-radius: 50%;
   background: rgba(15,23,42,.45); color: var(--text-on-primary); font-size: 16px; cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out);
+}
+.visualmodal__close:hover {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: color-mix(in srgb, var(--text-on-primary) 60%, transparent);
 }
 /* P3-40（设计评审）：「问流导师 · 00:37」在 73px 窄容器折行断眉标——nowrap 单行；
    时间戳 tabular-nums 定宽不会撑破气泡 */
@@ -4225,7 +4525,16 @@ onBeforeUnmount(() => {
 /* 消息入场：新气泡浮出（typing 圆点除外） */
 @media (prefers-reduced-motion: no-preference) {
   .msg { animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
-
+  .learn__finishbtn,
+  .tutor__offline,
+  .tutor__resume,
+  .oscene,
+  .opening-line,
+  .replies,
+  .boardrail,
+  .composer__pending-item,
+  .kp-mask,
+  .peer-backdrop { animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out); }
 
   /* 初始化/错误/课堂 三态切换：淡入。
      用 CSS 关键帧而非 Vue Transition —— 关键帧即使不执行，元素也停在默认的可见状态；
@@ -4243,7 +4552,8 @@ onBeforeUnmount(() => {
   .finish-pop-enter-active { transition: opacity .2s ease; }
   .finish-pop-leave-active { transition: opacity .15s ease; }
   .finish-pop-enter-from, .finish-pop-leave-to { opacity: 0; }
-  .finish-pop-enter-active .finish__card { animation: finish-card-in .35s cubic-bezier(0.34, 1.56, 0.64, 1) .05s both; }
+  .finish-pop-enter-active .finish__card,
+  .finish-pop-enter-active .settle__card { animation: finish-card-in .35s cubic-bezier(0.34, 1.56, 0.64, 1) .05s both; }
   .finish-pop-enter-active .finish__ring svg { animation: finish-check-pop .4s cubic-bezier(0.34, 1.56, 0.64, 1) .2s both; }
 
   /* 知识点状态过渡：标记底色渐变 + 勾号弹性 pop */
@@ -4360,8 +4670,10 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--surface) 70%, transparent);
   padding: 0;
   color: var(--muted); cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .peerdock__min:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--ink); }
+.peerdock__min:active:not(:disabled) { transform: scale(0.98); }
 .peerdock__scroll {
   overflow-y: auto; padding: 14px 12px 12px;
   display: grid; gap: 10px; align-content: start;
@@ -4417,7 +4729,7 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .peerdock__follow::before { content: '↳'; margin-right: 5px; color: var(--faint); }
 [data-theme='dark'] .peerdock__follow {
@@ -4425,6 +4737,7 @@ onBeforeUnmount(() => {
   color: var(--blue-ink);
 }
 .peerdock__follow:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); border-color: color-mix(in srgb, var(--blue) 50%, var(--line)); }
+.peerdock__follow:active:not(:disabled) { transform: scale(0.98); }
 .peerdock__follow:disabled { opacity: 0.5; cursor: default; }
 /* 输入条（2026-11-06 走查）：与主界面同形——发送键内嵌在输入盒右端，圆形成一颗图标钮 */
 .peerdock__input {
@@ -4439,6 +4752,7 @@ onBeforeUnmount(() => {
   outline: none;
   background: var(--surface);
   color: var(--ink);
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out);
 }
 .peerdock__input input:focus { border-color: color-mix(in srgb, var(--blue) 50%, transparent); box-shadow: var(--mk-focus-ring); }
 /* 发送键：32 圆形实底（与主界面同形），平台蓝 */
@@ -4449,9 +4763,10 @@ onBeforeUnmount(() => {
   border: 0; border-radius: 50%;
   color: var(--wf-text-on-primary); background: var(--blue);
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: filter var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .peerdock__send:hover:not(:disabled) { filter: brightness(1.05); }
+.peerdock__send:active:not(:disabled) { transform: scale(0.98); }
 .peerdock__send:disabled { opacity: 0.45; cursor: default; }
 /* 伴学悬浮球：平台蓝，和课堂主按钮同一套品牌色 */
 .peerfab {
@@ -4477,7 +4792,7 @@ onBeforeUnmount(() => {
 .peerfab__dot {
   position: absolute; top: 1px; right: 1px;
   width: 13px; height: 13px; border-radius: 50%;
-  background: var(--red); border: 2px solid #fff;
+  background: var(--red); border: 2px solid var(--wf-text-on-primary);
 }
 .peerfab__hint {
   position: absolute; right: calc(100% + 8px); top: 50%;
@@ -4503,7 +4818,7 @@ onBeforeUnmount(() => {
 @media (max-width: 1023px) {
   .peer-backdrop {
     display: block; position: fixed; inset: 0; z-index: 78;
-    background: color-mix(in srgb, #000 45%, transparent);
+    background: var(--wf-overlay);
   }
 }
 @media (max-width: 640px) {
@@ -4696,8 +5011,10 @@ onBeforeUnmount(() => {
   padding: 4px 6px; margin-right: -6px;
   border-radius: var(--mk-radius-sm);
   cursor: pointer;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .checkpoint__skip:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, transparent); }
+.checkpoint__skip:active:not(:disabled) { transform: scale(0.98); }
 .checkpoint__head strong { font-size: 13.5px; line-height: 1.5; }
 .checkpoint__head code { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep); padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: 12.5px; }
 /* 标签是纯文字（原型 .wf-checkpoint__label 不做胶囊），蓝字 + 字距 */
@@ -4719,10 +5036,15 @@ onBeforeUnmount(() => {
   /* 学生答题写的是自然语言，跟全站正文；等宽只给代码/ID */
   font-family: var(--mk-sans);
   font-size: 13px;
+  color: var(--ink);
   resize: none; outline: none;
   background: var(--surface);
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out);
 }
-.checkpoint__input:focus { border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
+.checkpoint__input:focus {
+  border-color: var(--blue);
+  box-shadow: var(--mk-focus-ring);
+}
 .checkpoint__actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .checkpoint__peer { display: none; }
 
@@ -4780,7 +5102,8 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   transition: background 0.15s ease, transform 0.15s ease;
 }
-.composer__send:active { transform: scale(0.98); }
+.composer__send:not(.composer__send--off):hover { filter: brightness(1.06); }
+.composer__send:not(.composer__send--off):active { transform: scale(0.98); }
 .composer__send--off { background: var(--mk-surface-2); color: var(--faint); cursor: default; }
 /* 生成中：同一按钮切换为红色停止态（主流聊天交互，替代原独立 stop-btn）。
    批次 D：红色 28%/36% 两档发光与 135deg 渐变底一并退役 → 纯色危险档。
@@ -4790,7 +5113,7 @@ onBeforeUnmount(() => {
   background: var(--wf-color-danger-dark);
 }
 .composer__send--stop:hover { background: var(--wf-color-danger-dark); filter: brightness(1.08); }
-.composer__send--stop:active { transform: scale(0.97); }
+.composer__send--stop:active:not(:disabled) { transform: scale(0.98); }
 .composer__hint {
   display: flex; align-items: center; justify-content: center;
   gap: 12px; flex-wrap: wrap;
@@ -4816,9 +5139,13 @@ onBeforeUnmount(() => {
   display: grid; place-items: center; padding: 0;
   border: 0; border-radius: 50%;
   background: none; color: var(--muted); cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
-.composer__img-btn:hover { color: var(--blue); }
+.composer__img-btn:hover:not(:disabled) {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+.composer__img-btn:active:not(:disabled) { transform: scale(0.98); }
 .composer__img-btn:disabled { color: var(--faint); cursor: default; }
 .composer__img-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 /* 待发图片 chips（发送前预览）：与输入盒同宽、贴左排布；小图 + 悬浮删除角标 */
@@ -4838,8 +5165,10 @@ onBeforeUnmount(() => {
   padding: 0; border: 1px solid var(--line); border-radius: 50%;
   background: var(--surface); color: var(--muted);
   font-size: var(--mk-fs-micro); line-height: 1; cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 .composer__pending-del:hover { color: var(--wf-color-danger-dark); border-color: var(--wf-color-danger-dark); }
+.composer__pending-del:active:not(:disabled) { transform: scale(0.98); }
 .composer__pending-del:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .composer__pending-note { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
@@ -4878,18 +5207,21 @@ onBeforeUnmount(() => {
 .finish__card h2 { margin: 0; font-size: 20px; }
 .finish__card p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.7; }
 .finish__stats { display: flex; gap: 18px; font-size: 12px; color: var(--muted); }
-.finish__stats b { color: var(--ink); font-size: 15px; margin-right: 3px; }
+.finish__stats b { color: var(--ink); font-size: 15px; margin-right: 3px; font-variant-numeric: tabular-nums; }
 .finish__actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 /* 结算成功后自动进入反馈：倒计时常驻可见，且给「留在此页」这个明确出口 */
 .finish__auto {
   margin: 0; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
   justify-content: center; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .finish__stay {
   border: 0; background: none; padding: 2px 0;
   font-size: 12.5px; font-weight: 700; color: var(--blue);
   cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out);
 }
+.finish__stay:hover { color: var(--blue-deep); }
 
 /* ---------- 结算进度浮层（#115：60s 静默 → 可见阶段 + 计时） ---------- */
 .settle {
@@ -4930,20 +5262,21 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--canvas) 45%, var(--surface));
   text-align: left;
 }
-.settle__step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.settle__step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); transition: color var(--mk-dur-fast) var(--mk-ease-out); }
 .settle__step--active { color: var(--ink); font-weight: 600; }
 .settle__step--done { color: var(--muted); }
 .settle__mark {
   width: 20px; height: 20px; flex: none;
   display: grid; place-items: center; border-radius: 50%;
   border: 1px solid var(--line); background: var(--surface); color: var(--green);
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out);
 }
 .settle__step--active .settle__mark { border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); }
 .settle__step--done .settle__mark { border-color: color-mix(in srgb, var(--green) 38%, var(--line)); background: color-mix(in srgb, var(--green) 10%, var(--surface)); }
 .settle__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
 .settle__label { flex: 1 1 auto; min-width: 0; }
 .settle__state { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--blue); flex: none; }
-.settle__meta { margin: 0; font-size: 12.5px; color: var(--muted); }
+.settle__meta { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .settle__note {
   margin: 0; padding-top: 10px; border-top: 1px dashed var(--line);
   font-size: 12px; color: var(--muted); line-height: 1.7;
@@ -4973,7 +5306,10 @@ onBeforeUnmount(() => {
   border: 0; border-radius: 999px; padding: 7px 12px;
   background: var(--mk-amber-fill); color: var(--mk-on-fill);
   font-size: 12.5px; font-weight: 700; cursor: pointer;
+  transition: filter var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
+.gate__go:hover { filter: brightness(1.06); }
+.gate__go:active:not(:disabled) { transform: scale(0.98); }
 /* 「仍然完成结算」：与「去回答」同域但低一级权重（描边文字钮）——它是一条明确但非首选的出口，
    主路径仍是先回答。与「返回」类次级动作同口径，不用第二颗实心块抢注意力。 */
 .gate__still {
@@ -4981,23 +5317,29 @@ onBeforeUnmount(() => {
   border-radius: 999px; padding: 6px 11px;
   background: transparent;
   color: var(--ink); font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .gate__still:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.gate__still:active:not(:disabled) { transform: scale(0.98); }
 /* 持久出口「结束学习（不计入完成）」：所有门禁同一颗，描边中性色，低于「去回答」主路径。 */
 .gate__end {
   border: 1px solid var(--line);
   border-radius: 999px; padding: 6px 11px;
   background: transparent;
   color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .gate__end:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+.gate__end:active:not(:disabled) { transform: scale(0.98); }
 .gate__end:disabled { opacity: .55; cursor: default; }
 .gate__close {
   width: 26px; height: 26px; border: 0; border-radius: 50%;
   background: transparent; color: var(--muted);
   font-size: 12px; cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .gate__close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.gate__close:active:not(:disabled) { transform: scale(0.98); }
 /* 结束提示条：完成条件满足后常驻在输入区上方，用成功色轻提示，不抢小测/门禁 */
 .ready {
   margin: 8px 14px 0;
@@ -5195,22 +5537,40 @@ onBeforeUnmount(() => {
    4 项就顶到 240px。现在全是单行项，内边距收到 6px，单条约 30px 高。
    .learn__menu-sep / .learn__menu-item-main / .learn__menu-status / .learn__menu-state
    均随双行结构一起删除（模板不再引用）。 */
-.learn__menu-group { display: grid; gap: 1px; }
+.learn__menu-group { min-width: 224px; display: grid; gap: 2px; }
+.learn__menu-group--sep { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 .learn__menu-label {
   padding: 6px 12px 3px;
-  font-size: 12px; font-weight: 800; letter-spacing: 0.06em;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
   color: var(--faint);
 }
 .learn__menu-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 6px 12px; border-radius: var(--mk-radius-md);
-  font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--muted);
+  font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--ink);
   cursor: pointer; white-space: nowrap;
   text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
+.learn__menu-lead { display: inline-flex; align-items: center; gap: 8px; }
+.learn__menu-icon { flex: none; color: var(--faint); transition: color 0.15s ease; }
+.learn__menu-meta { font-size: 12px; font-weight: 400; color: var(--faint); }
+.learn__menu-pill {
+  padding: 2px 8px; border-radius: var(--mk-radius-pill);
+  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.3;
+  background: var(--mk-surface-2); color: var(--faint);
+}
+.learn__menu-pill--on {
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue-deep);
+}
+.learn__menu-foot { padding: 4px 12px 2px; font-size: var(--mk-fs-micro); color: var(--faint); }
+.learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 95%, var(--ink)); color: var(--ink); }
+.learn__menu-item:hover .learn__menu-icon { color: var(--ink); }
 .learn__menu-item--danger { color: var(--red-ink); }
+.learn__menu-item--danger .learn__menu-icon { color: var(--red-ink); }
 .learn__menu-item--danger:hover { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); color: var(--red-ink); }
+.learn__menu-item--danger:hover .learn__menu-icon { color: var(--red-ink); }
 .checkpoint__option {
   position: relative;
   display: flex; align-items: center; gap: 10px;
@@ -5221,9 +5581,10 @@ onBeforeUnmount(() => {
   font-size: 13px; color: var(--ink);
   background: var(--surface);
   cursor: pointer;
-  transition: border-color .14s ease, background .14s ease, color .14s ease;
+  transition: border-color .14s ease, background .14s ease, color .14s ease, transform .14s ease;
 }
-.checkpoint__option:hover { border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.checkpoint__option:not(.checkpoint__option--lock):hover { border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.checkpoint__option:not(.checkpoint__option--lock):active { transform: scale(0.98); }
 .checkpoint__option:focus-within { outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 2px; }
 /* 原生 radio/checkbox 保留在 DOM（a11y + 测试），视觉交给字母方块 */
 .checkpoint__option input {
@@ -5240,6 +5601,7 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
+  transition: background .14s ease, border-color .14s ease, color .14s ease;
 }
 .checkpoint__text { flex: 1; min-width: 0; line-height: 1.5; }
 .checkpoint__option--on {
@@ -5482,7 +5844,7 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
   font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.4;
   cursor: pointer;
-  transition: background .14s ease, border-color .14s ease;
+  transition: background .14s ease, border-color .14s ease, transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* 蓝点前缀与下划线感一并撤除（用户点名）：短签本身就是按钮，不需要再画一个项目符号 */
 .reply__text { min-width: 0; }
@@ -5490,7 +5852,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--blue) 11%, transparent);
   border-color: color-mix(in srgb, var(--blue) 46%, transparent);
 }
-.reply:active { transform: none; }
+.reply:active:not(:disabled) { transform: scale(0.98); }
 .reply:disabled { cursor: default; opacity: .55; }
 </style>
 
@@ -5752,7 +6114,10 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 0;
   list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.lessonbar__steps::-webkit-scrollbar { display: none; }
 .lessonbar__step {
   display: flex;
   align-items: center;
@@ -5763,6 +6128,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out);
 }
 .lessonbar__dot {
   flex: none;
@@ -5770,6 +6136,7 @@ onBeforeUnmount(() => {
   height: 6px;
   border-radius: 50%;
   background: var(--line);
+  transition: background var(--mk-dur-fast) var(--mk-ease-out);
 }
 .lessonbar__step.is-done {
   color: var(--muted);
@@ -5804,11 +6171,14 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .lessonbar__board:hover {
   border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
   color: var(--blue-deep);
 }
+.lessonbar__board:active:not(:disabled) { transform: scale(0.98); }
 @media (max-width: 640px) {
   .lessonbar {
     gap: 6px;
@@ -5832,6 +6202,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   padding: 16px;
   background: rgba(15, 23, 42, 0.72);
+  animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .boardmodal__panel {
   position: relative;
@@ -5842,6 +6213,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--surface);
   border-radius: var(--mk-radius-xl);
+  animation: v2-modal-in var(--mk-dur) var(--mk-ease-out);
 }
 .boardmodal__body {
   overflow: auto;
@@ -5859,5 +6231,11 @@ onBeforeUnmount(() => {
   color: var(--ink);
   font-size: 12px;
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
+}
+.boardmodal__close:hover {
+  border-color: color-mix(in srgb, var(--blue) 35%, var(--line));
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  color: var(--blue-deep);
 }
 </style>

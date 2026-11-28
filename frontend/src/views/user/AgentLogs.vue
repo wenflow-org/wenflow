@@ -3,10 +3,10 @@
     <template #actions>
       <div class="actions">
         <button type="button" class="uc-btn uc-btn--sm" :disabled="exporting" @click="exportLogs('json')">
-          {{ exportingFormat === 'json' ? '导出中...' : '导出 JSON' }}
+          {{ exportingFormat === 'json' ? '导出中…' : '导出 JSON' }}
         </button>
         <button type="button" class="uc-btn uc-btn--sm" :disabled="exporting" @click="exportLogs('csv')">
-          {{ exportingFormat === 'csv' ? '导出中...' : '导出 CSV' }}
+          {{ exportingFormat === 'csv' ? '导出中…' : '导出 CSV' }}
         </button>
         <button type="button" class="uc-btn uc-btn--primary uc-btn--sm" @click="copyDiagnosticsSummary">
           复制排查信息
@@ -130,7 +130,7 @@
               <td class="uc-table__muted">{{ formatDuration(row.durationMs) }}</td>
               <td class="uc-table__muted">{{ formatTokenCount(row.tokensUsed) }}</td>
               <td class="uc-table__muted" :title="`来源：${getModelSourceInfo(row).label}`">{{ getModelSourceInfo(row).display }}</td>
-              <td class="uc-table__muted logs-error-cell">{{ row.error || '-' }}</td>
+              <td class="uc-table__muted logs-error-cell" :title="row.error || undefined">{{ row.error || '-' }}</td>
               <td class="uc-table__muted">{{ formatDate(row.calledAt) }}</td>
               <td class="uc-table__right">
                 <button type="button" class="uc-btn uc-btn--link" :aria-label="`查看「${formatAgentId(row)}」的日志详情`" @click="viewDetail(row)">详情</button>
@@ -340,23 +340,23 @@ const pagination = reactive({
    文案与原 option 逐字一致；success 三态保留 undefined，不能归一成空串。 */
 const AGENT_OPTIONS = [
   { value: '', label: '全部' },
-  { value: 'skill:path-planning', label: 'Path Agent' },
+  { value: 'skill:path-planning', label: '学习路径规划' },
   /* #218：下拉曾挂已废弃 id（teaching-agent / ai-teaching-agent / profile-learner-model-agent，
      线上 0 行），「Agent=AI 授课」恒空。改为 manifest 中的真实 id
      （skill:teaching-turn 是授课真实执行体）。 */
   { value: 'skill:teaching-turn', label: 'AI 授课' },
-  { value: 'skill:profile-state-review', label: 'Learner State Hub' }
+  { value: 'skill:profile-state-review', label: '学习状态复盘' }
 ];
 const CAPABILITY_OPTIONS = [
   { value: '', label: '全部' },
-  { value: 'goal', label: '目标对话' },
+  { value: 'goal', label: '需求收集' },
   { value: 'path', label: '路径规划' },
-  { value: 'teaching', label: '教学讲解' },
+  { value: 'teaching', label: '授课内容' },
   { value: 'tutoring', label: '辅导答疑' },
   /* 与 getCapabilityTypeLabel 的 profile 标签同词（能力列显示「学习者模型」），
      此前筛选项叫「学习画像更新」、表格里叫「学习者模型」，同一类两条名 */
   { value: 'profile', label: '学习者模型' },
-  { value: 'system', label: '系统底层调用' }
+  { value: 'system', label: '平台底层调用' }
 ];
 const SUCCESS_OPTIONS: Array<{ value: boolean | undefined; label: string }> = [
   { value: undefined, label: '全部' },
@@ -1050,7 +1050,6 @@ const copyText = async (text: string, successMessage: string) => {
   border: 1px solid var(--line, #e3e9f4);
   border-radius: 16px;
   background: var(--surface, #fff);
-  box-shadow: var(--mk-shadow-sm);
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -1196,6 +1195,13 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   border-bottom: 1px solid var(--line, #e3e9f4);
 }
 
+.logs-table tbody tr {
+  transition: background-color var(--mk-dur-fast) var(--mk-ease-out);
+}
+.logs-table tbody tr:hover {
+  background: color-mix(in srgb, var(--blue) 4%, transparent);
+}
+
 .logs-error-cell {
   max-width: 200px;
   overflow: hidden;
@@ -1265,6 +1271,17 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   display: flex;
   align-items: center;
   gap: 6px;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
+}
+
+.detail-collapse summary:hover {
+  background: color-mix(in srgb, var(--blue) 6%, var(--canvas));
+  color: var(--blue-deep);
+}
+
+.detail-collapse summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
 }
 
 .detail-collapse summary::after {
@@ -1272,6 +1289,12 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   color: var(--faint, #67758f);
   font-size: var(--mk-fs-micro);
   transition: transform 0.15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-collapse summary::after {
+    transition: none;
+  }
 }
 
 .detail-collapse:not([open]) summary::after {
@@ -1316,8 +1339,8 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
 }
 
 .detail-error-box {
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   /* 墨色走 token：写死的 #c0454a 在暗色下对比度不足 */
   color: var(--red-ink, #c0454a);
   border-radius: var(--mk-radius-lg);

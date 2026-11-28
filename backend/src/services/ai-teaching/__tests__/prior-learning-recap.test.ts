@@ -196,11 +196,13 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
     expect(recap).toBeNull();
   });
 
-  it('无任何前序时回退最近任意完成课（last-any）', async () => {
+  it('无任何前序时回退最近任意完成课（last-any），且仅限当前活跃任务 ID', async () => {
     mockMilestones();
-    mockTasksInMilestone([{ id: 'task-b', title: '任务B' }]);
     prisma.teaching_sessions.findMany.mockReset().mockResolvedValue([]);
-    prisma.subtasks.findMany.mockReset().mockResolvedValue([{ id: 'task-other', title: '其它阶段任务' }]);
+    prisma.subtasks.findMany.mockReset()
+      .mockResolvedValueOnce([{ id: 'task-b', title: '任务B' }]) // 1. tasksInMilestone（当前阶段首位任务）
+      .mockResolvedValueOnce([{ id: 'task-a1', title: '上一阶段任务' }]) // 2. prevMsRecentTaskIds
+      .mockResolvedValueOnce([{ id: 'task-other', title: '其它阶段任务' }]); // 3. activePathTasks（last-any 活跃任务）
     prisma.teaching_sessions.findFirst.mockReset()
       .mockResolvedValueOnce(null)  // 上一阶段无完成课
       .mockResolvedValueOnce({      // last-any 兜底
@@ -210,6 +212,26 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
 
     const { recap } = await fetchPriorLearningRecap(base);
     expect(recap?.relation).toBe('last-any');
+    expect(prisma.teaching_sessions.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        taskId: { in: ['task-other'] },
+      }),
+    }));
+  });
+
+  it('整条重排后当前路径只有当前任务时，last-any 不捞旧路径废弃任务的完成记录', async () => {
+    mockMilestones();
+    prisma.teaching_sessions.findMany.mockReset().mockResolvedValue([]);
+    prisma.subtasks.findMany.mockReset()
+      .mockResolvedValueOnce([{ id: 'task-b', title: '任务B' }]) // 1. tasksInMilestone
+      .mockResolvedValueOnce([{ id: 'task-a1', title: '上一阶段任务' }]) // 2. prevMsRecentTaskIds
+      .mockResolvedValueOnce([{ id: 'task-b', title: '任务B' }]); // 3. activePathTasks 仅含当前任务
+    prisma.teaching_sessions.findFirst.mockReset().mockResolvedValue(null);
+
+    const { recap } = await fetchPriorLearningRecap(base);
+    expect(recap).toBeNull();
+    // 只有 prev-milestone 查过一次 findFirst；last-any 因 activeOtherTaskIds 为空不再查询
+    expect(prisma.teaching_sessions.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it('完全无历史时返回 null', async () => {

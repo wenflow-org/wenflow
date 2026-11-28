@@ -101,6 +101,15 @@ export interface TeachingSession {
   };
 }
 
+export interface LessonAnchor {
+  version: 1;
+  mainQuestion: string;
+  criteria: Array<{ id: string; text: string }>;
+  learnerBaseline?: 'novice' | 'familiar' | 'unknown';
+  baselineNote?: string | null;
+  softConcepts?: string[];
+}
+
 export interface LessonContract {
   version: 1;
   coreKcs: Array<{ kcId: string; name: string }>;
@@ -113,6 +122,7 @@ export interface LessonContract {
     prerequisitePatches: number;
     offTopicInClassTurns: number;
   };
+  anchor?: LessonAnchor;
 }
 
 /** 课末独立终检题（2026-11-19）：与课内检查点分离的结课终检，结果计入独立证据与结课报告 */

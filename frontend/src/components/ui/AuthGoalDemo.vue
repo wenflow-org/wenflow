@@ -3,17 +3,15 @@
     <p class="demo__tagline">说说你最近想解决的事，几轮对话后，得到今天就能开始的第一步。</p>
 
     <div class="demo__chat">
-      <!-- 演示用例（2026-11-07 用户要求：不与物理世界发生交互的场景）：
-           原「每周英文周会发言总是磕绊，想练职场英语」的练习场在现实里（要张嘴、当面练），
-           本产品教不了也验不了；换成整条链在屏幕内完成的一例——取数、拼表、出报表。 -->
-      <div class="demo__msg demo__msg--user anim-msg" style="--d: 400ms">每周要手工合并十几个部门的报表，想用脚本自动跑</div>
+      <!-- 演示用例：纯文本模型可完整教学与检验的通用阅读理解场景 -->
+      <div class="demo__msg demo__msg--user anim-msg" style="--d: 400ms">每周要读三篇英文论文，单词都认识，可一段摘要看完还是抓不住重点</div>
       <div class="demo__msg demo__msg--ai anim-msg" style="--d: 900ms">
         <span class="demo__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
         <div>
-          <p>先确定你这十几张表的差异在哪——是列名一致，还是表头得先对齐？</p>
+          <p>先看你卡在哪一步——是长难句拆不开，还是分不清作者在「引述前人」还是「亮自己结论」？</p>
           <div class="demo__chips">
-            <span class="demo__chip demo__chip--on">表头要对齐</span>
-            <span class="demo__chip">列名一致</span>
+            <span class="demo__chip demo__chip--on">分不清论证结构</span>
+            <span class="demo__chip">长难句拆不开</span>
           </div>
         </div>
       </div>
@@ -28,15 +26,15 @@
       <ul>
         <li class="demo__field demo__field--done anim-field" style="--d: 1300ms">
           <i class="mark mark--done">✓</i>
-          <div><small>想解决的问题</small><strong>多部门月度报表手工合并太耗时</strong></div>
+          <div><small>想解决的问题</small><strong>英文论文摘要读完抓不住核心论证</strong></div>
         </li>
         <li class="demo__field demo__field--done anim-field" style="--d: 1900ms">
           <i class="mark mark--done">✓</i>
-          <div><small>学习动机</small><strong>每月固定要出，想一次做完不再返工</strong></div>
+          <div><small>学习动机</small><strong>每周组会前要快速消化三篇文献</strong></div>
         </li>
         <li class="demo__field demo__field--done anim-field" style="--d: 2200ms">
           <i class="mark mark--done">✓</i>
-          <div><small>背景经验</small><strong>Excel 很熟，Python 只会基础语法</strong></div>
+          <div><small>背景经验</small><strong>词汇量够用，缺段落结构拆解方法</strong></div>
         </li>
         <li class="demo__field demo__field--asking anim-field" style="--d: 2500ms">
           <i class="mark mark--asking"></i>
@@ -119,9 +117,9 @@ const isDark = useIsDark();
   display: grid; gap: 9px;
 }
 .demo__panel-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
-.demo__panel-head span { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
+.demo__panel-head span { font-size: 12px; font-weight: 800; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
 .demo__panel-bar { height: 5px; border-radius: 999px; background: var(--bar-track); overflow: hidden; }
-.demo__panel-bar i { display: block; width: 50%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.demo__panel-bar i { display: block; width: 50%; height: 100%; border-radius: 999px; background: var(--blue); }
 .demo__panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
 .demo__field { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
 .demo__field small { display: block; font-size: 12px; color: var(--faint); font-weight: 700; }

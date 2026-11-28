@@ -168,17 +168,10 @@
           <div class="stages">
             <!-- 极速模式（2026-11-18 方向五）：只显示 core 骨干课；进度仍按全部任务计算。
                  2026-11-20：工具条并入「课程安排」标题行，开关靠右，不再独占一条空行。 -->
-            <div v-if="hasFlexibleTasks" class="stages__toolbar">
+            <div v-if="stages.length" class="stages__toolbar">
               <span class="stages__toolbar-title">
                 课程安排
                 <small>{{ stages.length }} 个阶段</small>
-              </span>
-              <span class="stages__toolbar-actions">
-                <label class="stages__toggle">
-                  <input v-model="coreOnly" type="checkbox" />
-                  <span>⏱ 只看核心主干</span>
-                </label>
-                <small v-if="coreOnly" class="stages__toolbar-note">已隐藏 {{ hiddenFlexibleCount }} 节课，仅筛选显示，不改变学习安排与完成要求</small>
               </span>
             </div>
             <section v-if="!stages.length" class="stages__empty card">
@@ -214,7 +207,7 @@
                   <p v-if="!stageTasks(stage).length" class="stage__pending">
                     课表待解锁 · 学完上一阶段后，会按你的实际表现生成这一阶段的课
                   </p>
-                  <template v-for="task in displayStageTasks(stage)" :key="task.id">
+                  <template v-for="task in stageTasks(stage)" :key="task.id">
                   <div
                     class="task"
                     :class="`task--${taskCls(task)}`"
@@ -279,9 +272,8 @@
                   <div v-if="editingTaskId === task.id" class="task-edit" role="group" aria-label="任务微调">
                     <!-- 第一行：删除（独立在右端，远离下面的插入键）。2026-11-25 去时间化：
                          单课分钟不再由用户微调，避免继续强化「每节课必须撑够 N 分钟」的暗示。 -->
-                    <div class="task-edit__row task-edit__row--split">
+                    <div v-if="task.status === 'todo'" class="task-edit__row task-edit__row--split">
                       <button
-                        v-if="task.status === 'todo'"
                         type="button"
                         class="task-edit__danger"
                         :disabled="structuralEditBusy"
@@ -458,8 +450,6 @@
                   :to="`/learning-path/${lineageSourcePathId}`"
                   class="lineage-link"
                 >查看调整前的路径</router-link>
-                <!-- 与快照回退区（hero 的「回退上次调整」）互相指引：历史在这里看，回退在那边做 -->
-                <p v-if="rollbackAvailable" class="lineage-note">每次调整前的安排都会自动留存。</p>
               </div>
             </section>
                   </aside>
@@ -478,7 +468,7 @@
         <div class="adjust-dialog__head">
           <div>
             <h3 id="adjustDialogTitle" class="adjust-dialog__title">调整这条路径</h3>
-            <p class="adjust-dialog__desc">{{ adjustDialogDesc }}</p>
+            <p v-if="!adjustMode" class="adjust-dialog__desc">选择调整方式</p>
           </div>
           <button type="button" class="adjust-dialog__close" aria-label="关闭" @click="adjustDialogOpen = false">
             <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
@@ -489,7 +479,7 @@
         <div v-if="blockingSessions.length" class="clear-sessions">
           <div class="clear-sessions__head">
             <span class="clear-sessions__tag">还需要一步</span>
-            <p>要调整的范围内还有未结束的课堂。结束它们后我们会自动继续刚才的调整。已结束的课堂不会受影响。</p>
+            <p>请先结束以下未完成课堂，完成后将自动继续调整。</p>
           </div>
           <ul class="clear-sessions__list">
             <li v-for="(s, si) in blockingSessions" :key="s.sessionId || si" class="clear-sessions__item">
@@ -523,7 +513,7 @@
               {{ retryingAfterClear ? '正在继续调整…' : `全部结束（${blockingSessions.length}）并继续` }}
             </button>
           </div>
-          <p class="clear-sessions__hint">按「结束」会把未完成的课堂标记为放弃，不计入学习进度，对话内容仍保留在学习历史中。</p>
+          <p class="clear-sessions__hint">结束的未完成课堂不计入进度，对话记录保留在学习历史。</p>
         </div>
 
         <!-- 场景选择：按 adjustmentPolicy.allowedModes 门控（禁用 + 原因），推荐场景带引导标记 -->
@@ -539,7 +529,7 @@
             <span class="adjust-mode__icon" aria-hidden="true">↺</span>
             <span class="adjust-mode__body">
               <strong>整条路径重新规划<span v-if="isRecommendedEntry('rebuild')" class="adjust-mode__rec">推荐</span></strong>
-              <small>范围、节奏或顺序要整体重排。已完成课堂留在学习历史，但不沿用旧任务。</small>
+              <small>整体重排范围、节奏与顺序，不沿用旧任务。</small>
               <small v-if="!adjustEntryAllowed('rebuild')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('rebuild') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
@@ -554,7 +544,7 @@
             <span class="adjust-mode__icon" aria-hidden="true">⇄</span>
             <span class="adjust-mode__body">
               <strong>只调整还没学的部分<span v-if="isRecommendedEntry('reshape')" class="adjust-mode__rec">推荐</span></strong>
-              <small>已完成的阶段和任务原样保留，只重排当前阶段，或从某个未学阶段起到末尾。</small>
+              <small>保留已完成部分，仅重排当前或后续未学阶段。</small>
               <small v-if="!adjustEntryAllowed('reshape')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('reshape') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
@@ -569,7 +559,7 @@
             <span class="adjust-mode__icon" aria-hidden="true">✦</span>
             <span class="adjust-mode__body">
               <strong>先让 AI 看看怎么调<span v-if="isRecommendedEntry('auto')" class="adjust-mode__rec">推荐</span></strong>
-              <small>结合你的完成情况、掌握度和卡点，先给一版调整建议。你看过再决定，不会直接改路径。</small>
+              <small>按学习表现先出建议，确认后才调整。</small>
               <small v-if="!adjustEntryAllowed('auto')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('auto') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
@@ -579,16 +569,16 @@
         <!-- 场景说明 + 补充输入 -->
         <template v-else>
           <div class="adjust-form__mode-hint" :class="`adjust-form__mode-hint--${adjustMode}`">
-            <template v-if="adjustMode === 'rebuild'">整条重新规划 · 已完成课堂保留</template>
-            <template v-else-if="adjustMode === 'reshape'">只调未学部分 · 已完成原样保留</template>
-            <template v-else>AI 诊断建议 · 先看建议再决定</template>
+            <template v-if="adjustMode === 'rebuild'">整条重新规划</template>
+            <template v-else-if="adjustMode === 'reshape'">只调未学部分</template>
+            <template v-else>AI 诊断建议</template>
             <span class="adjust-form__hint-group">
               <span v-if="isRecommendedEntry(adjustMode)" class="adjust-form__rec">按你的情况推荐</span>
               <button type="button" class="adjust-form__back" @click="adjustMode = null">← 换一种方式</button>
             </span>
           </div>
           <p v-if="adjustMode === 'rebuild' && hasLearningProgress" class="adjust-form__warn">
-            已有学习进度：整条重排会换掉当前安排。已完成课堂仍留在学习历史，但新路径不接着旧任务走。
+            将替换当前安排，已完成记录仍保留在学习历史。
           </p>
 
           <!-- reshape 调整范围：仅当前阶段（老行为） / 当前及之后 / 自选起始阶段 -->
@@ -602,7 +592,7 @@
                 @click="adjustScope = 'next'; adjustFromStage = null"
               >
                 <strong>只改当前阶段</strong>
-                <small>重排你正学到的这一阶段，后面的阶段不动</small>
+                <small>后续阶段不变</small>
               </button>
               <button
                 type="button"
@@ -611,7 +601,7 @@
                 @click="adjustScope = 'rest'; adjustFromStage = null"
               >
                 <strong>从当前阶段改到末尾</strong>
-                <small>从第 {{ firstOpenStageNo || '?' }} 阶段起，把后面还没学的部分一起重排</small>
+                <small>从第 {{ firstOpenStageNo || '?' }} 阶段起全部重排</small>
               </button>
               <!-- 切到 from 即取第一个可选项：select 所见第一项而 v-model 仍为 null 时，
                    提交判空会静默降级成「仅当前阶段」，与用户所见错配 -->
@@ -622,7 +612,7 @@
                 @click="adjustScope = 'from'; adjustFromStage = adjustFromStage ?? reshapeFromOptions[0]?.stageNumber ?? null"
               >
                 <strong>从指定阶段改到末尾</strong>
-                <small>选一个还没学的阶段作为起点，之前的安排不动</small>
+                <small>选定起点，之前不变</small>
               </button>
             </div>
             <div v-if="adjustScope === 'from'" class="adjust-scope__picker">
@@ -703,17 +693,6 @@
                 {{ adjusting ? (adjustMode === 'auto' ? '正在诊断…' : '正在提交…') : adjustConfirmText }}
               </button>
             </div>
-            <p v-if="!adjustText.trim() && !adjusting" class="adjust-form__hint">
-              <template v-if="adjustMode === 'rebuild'">不写也行：直接按原目标重排。想定向调整就写几句。</template>
-              <template v-else>先写几句想怎么调整，点「{{ adjustConfirmText }}」继续。</template>
-            </p>
-            <!-- 回退保障句跟随真实能力（paths/iphone/2）：AI 重排会留存快照 → 承诺成立并给
-                 就地入口（此前入口只挂 hero，审计全 UI 搜索不到「回退」）；无快照（如仅做过
-                 手动微调的旧路径）不再凭空承诺 -->
-            <p class="adjust-form__hint adjust-form__hint--safety">
-              <template v-if="rollbackAvailable">调整前已留快照，可随时回退。</template>
-              <template v-else>调整前会自动留一份快照，完成后可一键回退。</template>
-            </p>
             <p v-if="rollbackAvailable" class="adjust-form__rollback">
               <button type="button" class="btn-ghost" :disabled="rollingBack" @click="confirmRollback">
                 <span v-if="rollingBack" class="spinner spinner--sm"></span>
@@ -1104,7 +1083,7 @@ async function confirmRollback() {
 const lineageOpen = ref(false);
 const lineage = computed(() => (path.value?.replanLineage ?? null) as Record<string, any> | null);
 const REPLAN_MODE_LABELS: Record<string, string> = {
-  overwrite: '覆盖原路径（在原路径上重排）',
+  overwrite: '覆盖原路径',
   new_version: '新版本路径',
 };
 const REPLAN_TRIGGER_LABELS: Record<string, string> = {
@@ -1212,7 +1191,7 @@ function adjustEntryBlockReason(entry: LearnerAdjustEntry): string {
     return adjustPolicyBlockReason(adjustPolicy.value, entry);
   }
   if (entry === 'auto' && !hasLearningProgress.value) {
-    return '还没有学习记录，AI 诊断暂时没有依据。可以先学一节，或用上面两种方式直接调整。';
+    return '还没有学习记录，暂无法诊断。';
   }
   return '';
 }
@@ -1294,15 +1273,8 @@ const reshapeScopeUsable = computed(() => stages.value.some((s) => {
   return !tasks.every((t) => t.status === 'completed') && !tasks.some((t) => t.status === 'in_progress');
 }));
 
-const adjustDialogDesc = computed(() => {
-  if (adjustMode.value === 'rebuild') return '整条重排：范围、节奏或顺序整体重来。';
-  if (adjustMode.value === 'reshape') return '只改还没学的部分：已完成阶段和任务原样保留。';
-  if (adjustMode.value === 'auto') return '先看 AI 建议，确认后才改路径。';
-  return '选择调整方式。已完成的课堂记录会留在学习历史里。';
-});
-
 const adjustPlaceholder = computed(() => {
-  if (adjustMode.value === 'rebuild') return '例如：排得太短、太偏理论，我想多安排实操。';
+  if (adjustMode.value === 'rebuild') return '选填：例如排得太短、太偏理论，想多安排实操…';
   if (adjustMode.value === 'reshape') return '例如：第二阶段太难，想先补基础，或从第 3 阶段起多安排实操。';
   if (adjustMode.value === 'auto') return '例如：最近学得吃力，卡在……。先帮我看看怎么调。';
   return '说说你想怎么调整……';
@@ -1639,24 +1611,16 @@ function stageTasks(stage: Record<string, any>) {
   return (stage.subtasks || stage.tasks || []) as Array<Record<string, any>>;
 }
 
-/** 极速模式：过滤掉 flexible（可跳过）课；整阶段都被过滤时保留原样，避免阶段变空。 */
-const coreOnly = ref(false);
-function displayStageTasks(stage: Record<string, any>) {
-  const tasks = stageTasks(stage);
-  if (!coreOnly.value) return tasks;
-  const core = tasks.filter((task) => task.adjustability !== 'flexible');
-  return core.length ? core : tasks;
-}
-
 /* ---------- 手动结构编辑（#64 P-39） ---------- */
 const editingTaskId = ref<string | null>(null);
 const insertTitle = ref('');
 const structuralEditBusy = ref(false);
 
-/** 只允许进行中的路径与未完成、已解锁的任务微调（已完成任务冻结，避免改写结算口径）。 */
+/** 只允许进行中的路径与尚未开始（todo）且已解锁的任务微调：
+ *  进行中任务已有活跃会话，点插入必撞 409 冲突且不允许删除；已完成任务冻结。 */
 function canEditTask(task: Record<string, any>) {
   return path.value?.status === 'active'
-    && task.status !== 'completed'
+    && task.status === 'todo'
     && taskCls(task) !== 'locked';
 }
 
@@ -1707,7 +1671,7 @@ function insertTaskAfter(stage: Record<string, any>, task: Record<string, any>) 
 async function deleteTask(task: Record<string, any>) {
   const confirmed = await askConfirm({
     title: '删除这个任务',
-    message: `「${task.title || task.displayLabel || '该任务'}」会从本阶段移除，顺序自动重排。只允许删除尚未开始的任务。`,
+    message: `将从本阶段移除「${task.title || task.displayLabel || '该任务'}」并重排顺序。`,
     confirmText: '删除',
     danger: true,
   });
@@ -1765,11 +1729,6 @@ function toggleStage(si: number) {
 
 /* ---------- 进度 ---------- */
 const allTasks = computed(() => stages.value.flatMap((s) => stageTasks(s)));
-const hasFlexibleTasks = computed(() => allTasks.value.some((t) => t.adjustability === 'flexible'));
-const hiddenFlexibleCount = computed(() => stages.value.reduce(
-  (sum, stage) => sum + stageTasks(stage).length - displayStageTasks(stage).length,
-  0,
-));
 const finalDeliverable = computed(() => {
   // 2026-11-20：顶栏「走完会拿到」要读末阶段 goal，而不是 goal 层最初确认的
   // firstDeliverable——后者是路径级最早可见成果，路径生成后可能与末阶段验收脱节
@@ -2340,20 +2299,6 @@ function onWindowResize() {
   font-size: 13px; font-weight: 800; color: var(--ink);
 }
 .stages__toolbar-title small { font-size: 12px; font-weight: 500; color: var(--faint); }
-.stages__toolbar-actions { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
-.stages__toggle {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-md);
-  background: var(--surface);
-  font-size: 12.5px; color: var(--muted);
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-.stages__toggle:hover { color: var(--ink); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); }
-.stages__toggle input { accent-color: var(--blue); }
-.stages__toolbar-note { font-size: var(--mk-fs-micro); color: var(--faint); }
 .stage__pending { margin: 6px 2px 2px; padding: 10px 12px; border-radius: var(--mk-radius-md); font-size: 12.5px; color: var(--faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
@@ -2378,6 +2323,7 @@ function onWindowResize() {
   display: flex; align-items: flex-start; justify-content: center;
   padding: 56px 16px 24px; overflow: auto;
   background: color-mix(in srgb, var(--canvas) 62%, transparent);
+  animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .side-modal {
   /* Teleport 出 .v2-page 后不再继承页面 zoom，由 sideZoom 内联补偿；
@@ -2386,6 +2332,7 @@ function onWindowResize() {
   max-height: min(calc(82vh / var(--side-zoom, 1)), 900px);
   overflow: auto;
   padding: 20px 22px 22px; display: grid; gap: 14px;
+  animation: v2-modal-in var(--mk-dur) var(--mk-ease-out);
 }
 .side-modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .side-modal__head p { margin: 4px 0 0; font-size: 12.5px; color: var(--faint); }
@@ -2496,7 +2443,6 @@ function onWindowResize() {
 .sidecard__bg { border-top: 1px dashed var(--line); padding-top: 8px; }
 /* 调整历史卡：来源路径链接 + 与快照回退区的互引说明 */
 .lineage-link { font-size: 12px; font-weight: 600; color: var(--blue); text-decoration: underline; }
-.lineage-note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; line-height: 1.5; color: var(--faint); }
 .sidecard__bg-head {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; font-weight: 600; letter-spacing: 0.03em; color: var(--faint);
@@ -2574,11 +2520,13 @@ function onWindowResize() {
   align-items: center;
   justify-content: center;
   padding: 20px;
+  animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .adjust-dialog {
   width: 100%;
   max-width: 480px;
   padding: 22px 24px;
+  animation: v2-modal-in var(--mk-dur) var(--mk-ease-out);
 }
 /* tabindex=-1 承接打开移焦：编程性聚焦不画焦点框，键盘 Tab 进入控件时仍正常显示 */
 .adjust-dialog:focus { outline: none; }
@@ -2605,6 +2553,7 @@ function onWindowResize() {
   background: transparent; color: var(--faint);
   display: grid; place-items: center;
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .adjust-dialog__close:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
 /* 三场景卡片选择 */
@@ -2686,17 +2635,6 @@ function onWindowResize() {
   background: color-mix(in srgb, var(--amber) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
   border-radius: var(--mk-radius-lg);
-}
-.adjust-form__hint {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--faint);
-  text-align: right;
-}
-/* 回退保障提示：与操作提示同区、弱化一档 */
-.adjust-form__hint--safety {
-  margin-top: 4px;
-  color: var(--faint);
 }
 /* 面板内回退入口（paths/iphone/2）：承诺「可一键回退」就必须可达，不再只挂 hero。
    尺寸交给 v2.css 的控件档（电脑 32px / 移动 44px），本页不再单独写 min-height 把它压到 36px */
@@ -2929,7 +2867,6 @@ function onWindowResize() {
 }
 /* 弹窗内文字已全部令牌化（--muted/--faint/--amber-ink/--ink），随主题自动翻转，暗色逐条覆写退役 */
 [data-theme='dark'] .adjust-form__warn { color: var(--amber-ink); }
-[data-theme='dark'] .adjust-form__hint,
 [data-theme='dark'] .adjust-scope__picker,
 [data-theme='dark'] .clear-sessions__hint,
 [data-theme='dark'] .ai-advice__chip-label,
@@ -3023,6 +2960,7 @@ function onWindowResize() {
   display: grid; place-items: center;
   padding: 24px;
   background: var(--wf-overlay);
+  animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .reader__card {
   width: min(760px, 100%);
@@ -3034,6 +2972,7 @@ function onWindowResize() {
   border-radius: var(--mk-radius-modal);
   box-shadow: var(--mk-shadow-modal);
   overflow: hidden;
+  animation: v2-modal-in var(--mk-dur) var(--mk-ease-out);
 }
 .reader__card:focus { outline: none; }
 .reader__head {
@@ -3052,6 +2991,7 @@ function onWindowResize() {
   background: transparent;
   font-size: 18px; line-height: 1; color: var(--muted);
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .reader__close:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .reader__body {

@@ -1,12 +1,12 @@
 <template>
   <V2AuthLayout>
-    <form class="reset" @submit.prevent="submit">
+    <form class="reset" :aria-busy="submitting" @submit.prevent="submit">
       <div class="head">
         <h2>{{ hasToken ? '设置新密码' : '找回密码' }}</h2>
         <!-- 不再复述「输入用户名」（label 已说一次，走查 2026-09-27 冗余文案项）；
              也不承诺「发送链接」——当前链路是验证身份后直接设置新密码 -->
-        <p v-if="!hasToken">输入用户名，获取重置密码的方式。</p>
-        <p v-else>输入新密码完成重置，重置后所有已登录设备将退出。</p>
+        <p v-if="!hasToken">提交后将提供重置密码的方式。</p>
+        <p v-else>重置后所有已登录设备将退出。</p>
       </div>
 
       <!-- 带 token 但校验不过（伪造/截断链接）：此前静默降级为找回表单，用户不知道手里的链接已废（走查 2026-09-27 P2） -->
@@ -23,7 +23,7 @@
       </div>
 
       <template v-if="hasToken">
-        <label class="field">
+        <label class="field" :class="{ 'field--error': errors.newPassword }">
           <span class="field__label">新密码</span>
           <span class="field__pwd">
             <input
@@ -38,6 +38,7 @@
               :disabled="submitting"
               :aria-invalid="errors.newPassword ? 'true' : undefined"
               :aria-describedby="errors.newPassword ? 'reset-new-password-error' : undefined"
+              @input="clearFieldError('newPassword')"
             />
             <button type="button" class="field__eye" @click="showPwd = !showPwd" :aria-label="showPwd ? '隐藏密码' : '显示密码'">
               <Eye v-if="showPwd" :size="17" :stroke-width="1.75" />
@@ -47,7 +48,7 @@
           <span v-if="errors.newPassword" id="reset-new-password-error" class="field__error">{{ errors.newPassword }}</span>
         </label>
 
-        <label class="field">
+        <label class="field" :class="{ 'field--error': errors.confirmPassword }">
           <span class="field__label">确认新密码</span>
           <input
             id="reset-confirm-password"
@@ -59,13 +60,14 @@
             :disabled="submitting"
             :aria-invalid="errors.confirmPassword ? 'true' : undefined"
             :aria-describedby="errors.confirmPassword ? 'reset-confirm-password-error' : undefined"
+            @input="clearFieldError('confirmPassword')"
           />
           <span v-if="errors.confirmPassword" id="reset-confirm-password-error" class="field__error">{{ errors.confirmPassword }}</span>
         </label>
       </template>
 
       <template v-else>
-        <label class="field">
+        <label class="field" :class="{ 'field--error': errors.name }">
           <span class="field__label">用户名</span>
           <input
             id="reset-username"
@@ -78,12 +80,14 @@
             :disabled="submitting"
             :aria-invalid="errors.name ? 'true' : undefined"
             :aria-describedby="errors.name ? 'reset-username-error' : undefined"
+            @input="clearFieldError('name')"
           />
           <span v-if="errors.name" id="reset-username-error" class="field__error">{{ errors.name }}</span>
         </label>
       </template>
 
       <button type="submit" class="btn-primary btn-primary--block" :disabled="submitting">
+        <span v-if="submitting" class="spinner spinner--sm" aria-hidden="true"></span>
         {{ submitting ? '提交中…' : (hasToken ? '重置密码' : '提交') }}
       </button>
 
@@ -127,6 +131,11 @@ const form = reactive({
   confirmPassword: ''
 });
 const errors = reactive({ name: '', newPassword: '', confirmPassword: '' });
+
+function clearFieldError(key: 'name' | 'newPassword' | 'confirmPassword') {
+  formError.value = '';
+  if (errors[key]) errors[key] = '';
+}
 /* 错误定位：提交时焦点落到第一个出错的字段（与登录/注册同口径） */
 const nameEl = ref<HTMLInputElement | null>(null);
 const newPasswordEl = ref<HTMLInputElement | null>(null);
@@ -213,6 +222,9 @@ function goLogin() {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
   box-shadow: var(--mk-focus-ring); /* 全站唯一一圈 */
 }
+.field--error .field__input { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
+.field--error .field__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent); }
+.v2-page .field__input:focus-visible { outline: none; }
 .field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
 .btn-primary--block {
@@ -263,6 +275,8 @@ function goLogin() {
   padding: 0 6px;
   display: inline-flex;
   align-items: center;
+  border-radius: var(--mk-radius-md);
+  transition: color 0.15s ease, background 0.15s ease;
 }
 .switch button:hover { text-decoration: underline; }
 
@@ -280,6 +294,17 @@ function goLogin() {
   color: var(--faint);
   cursor: pointer;
   display: grid; place-items: center;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 .field__eye:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 7%, transparent); }
+.field__eye:active { transform: translateY(-50%) scale(0.94); }
+.v2-page .field__eye:focus-visible { outline-offset: -2px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .errorbar, .noticebar, .field__error { animation: reset-alert-in 0.18s var(--mk-ease-out) both; }
+}
+@keyframes reset-alert-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
 </style>

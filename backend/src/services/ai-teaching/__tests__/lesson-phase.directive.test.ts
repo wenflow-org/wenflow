@@ -268,3 +268,21 @@ describe('lesson-phase 指令：一段盖多行时不留行', () => {
     expect(view.directive).not.toContain('本段板书上有');
   });
 });
+
+describe('lesson-phase 指令：提问风格随学习者认知表现动态适配', () => {
+  it('点名阶段由教师主导领读、禁念验收清单，且默认开放式思考问题', () => {
+    const orientOpen = resolveLessonPhaseTurn(null, baseCtx({
+      studentMessage: '先带你拆第一段',
+    }))!;
+    expect(orientOpen.directive).toContain('教师主导领读');
+    expect(orientOpen.directive).toContain('禁止把后台验收标准当考纲清单逐条念给学生');
+    expect(orientOpen.directive).toContain('开放式思考问题');
+    expect(orientOpen.directive).toContain('不要用「猜错没关系：是A还是B」式送分二选一');
+
+    const buildOpen = resolveLessonPhaseTurn(stateIn('build', { segment: 1 }), baseCtx({
+      studentMessage: '一个是谋生手段本身，一个是对他人贬低的评价',
+    }))!;
+    expect(buildOpen.directive).toContain('用自己的话先预判关键条件或转折');
+    expect(buildOpen.directive).toContain('不要给送分二选一');
+  });
+});

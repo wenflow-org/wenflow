@@ -932,7 +932,7 @@ watch(
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: 0.12s ease;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
   margin: 0;
 }
 .mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
@@ -1000,7 +1000,7 @@ watch(
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: 0.12s ease;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mshell__collapse:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
 .mshell__collapse:disabled { cursor: default; opacity: 0.5; }
@@ -1093,6 +1093,7 @@ watch(
   transition: border-color 0.14s ease, color 0.14s ease;
 }
 .mshell__square-btn:hover { border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 40%, transparent); color: var(--mk-blue, #2f6ae0); }
+.mshell__square-btn:active:not(:disabled) { transform: scale(0.98); }
 .mshell__top-crumb { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
 .mshell__top-title {
   font-size: var(--mk-fs-emphasis, 15px);
@@ -1129,6 +1130,7 @@ watch(
   transition: background 0.14s ease, color 0.14s ease;
 }
 .mshell__top-btn:hover { background: var(--mk-hover-surface); color: var(--mk-ink); }
+.mshell__top-btn:active:not(:disabled) { transform: scale(0.98); }
 /* 禁用态视觉（2026-10-06 审核）：刷新钮在 liveLoading 时被 :disabled 禁用却无任何视觉，
    看起来仍可点（与 .mk-btn:disabled{opacity:.65} 同口径）。 */
 .mshell__top-btn:disabled { opacity: 0.5; cursor: default; }
@@ -1199,6 +1201,8 @@ watch(
   display: grid;
   gap: 2px;
   z-index: 60;
+  transform-origin: top center;
+  animation: mshell-pop-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mshell__search-hit {
   display: flex;
@@ -1215,6 +1219,7 @@ watch(
   color: var(--mk-ink);
   cursor: pointer;
   text-align: left;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mshell__search-hit svg { color: var(--mk-muted); flex: none; }
 .mshell__search-hit:hover { background: var(--mk-hover-surface); }
@@ -1321,7 +1326,8 @@ watch(
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mshell__user-menu { animation: none; }
+  .mshell__user-menu,
+  .mshell__search-pop { animation: none; }
 }
 .mshell__user-item {
   display: flex;
@@ -1338,6 +1344,7 @@ watch(
   color: var(--mk-ink);
   cursor: pointer;
   text-align: left;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mshell__user-item svg { color: var(--mk-muted); flex: none; }
 .mshell__user-item:hover { background: var(--mk-hover-surface); }
@@ -1513,7 +1520,7 @@ html[data-theme='dark'] {
     left: 0;
     width: min(280px, 82vw);
     transform: translateX(-100%);
-    transition: transform 0.24s ease;
+    transition: transform var(--mk-dur) var(--mk-ease-out);
     z-index: 210;
   }
   .mshell[data-navopen='true'] .mshell__side { transform: none; box-shadow: var(--mk-shadow-pop); }
@@ -1534,9 +1541,10 @@ html[data-theme='dark'] {
     inset: 0;
     border: 0;
     padding: 0;
-    background: rgba(16, 24, 40, 0.42);
+    background: var(--wf-overlay);
     z-index: 200;
     cursor: pointer;
+    animation: mk-fade-in var(--mk-dur-fast) var(--mk-ease-out);
   }
 }
 

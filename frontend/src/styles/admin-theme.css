@@ -165,6 +165,12 @@ body.admin-session-concealed > #admin-session-validation-shell {
   body.admin-route .ac,
   body.admin-route .ac .mshell { height: calc(100dvh / var(--admin-zoom, 1.3)); min-height: 0; }
 }
+/* 2.5K 等带系统缩放的高分屏（dpr >= 1.2）：不再叠加 CSS zoom，避免双重放大 */
+@media (min-width: 2000px) and (max-width: 2799px) and (min-resolution: 1.2dppx) {
+  body.admin-route .ac { zoom: 1; --admin-zoom: 1; }
+  body.admin-route .ac,
+  body.admin-route .ac .mshell { height: 100dvh; min-height: 0; }
+}
 
 /* ================= 高分屏：用 zoom 阶梯，不用限宽（2026-11-07 二次修正） =================
    ⚠ 当天先试过给 `.mshell__content > *` 加 max-width + margin: 0 auto，4K 实测**不可用**：

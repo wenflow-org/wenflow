@@ -20,14 +20,6 @@
           <h1>从一件真实的小事开始</h1>
           <p>比如「想学 SQL 自己查数据」。问流 AI 先澄清目标，你确认方案后再生成路径。</p>
         </div>
-        <button v-if="live.hasSession()" type="button" class="resume" @click="doResume">
-          <span class="resume__dot"></span>
-          <span class="resume__body">
-            <strong>继续上次的规划</strong>
-            <small>{{ live.failed === 'resume' ? '上次恢复失败' : '会话已保存在本地' }}</small>
-          </span>
-          <span class="resume__go">继续 ›</span>
-        </button>
       </div>
 
       <!-- stopped 与 failed 并行：主动停止不是「连接失败」，用独立文案（useGoalLive.stopped） -->
@@ -125,6 +117,13 @@
         </button>
       </div>
 
+      <button v-if="live.hasSession()" type="button" class="resume" @click="doResume">
+        <span class="resume__dot" aria-hidden="true"></span>
+        <span class="resume__tag">{{ live.failed === 'resume' ? '恢复失败' : '上次规划' }}</span>
+        <span class="resume__title">{{ resumeTitle() }}</span>
+        <span class="resume__go">继续规划 ›</span>
+      </button>
+
       <!-- 最近会话（D14）：此前目标规划没有任何产品内回访入口——入口页无历史列表，
            其它页面只挂裸 /goal-conversation，深链 /goal-conversation/:id 可达但无处可点。
            本地记录最近几次会话的 id + 首句摘要，给出可点的深链回访入口。
@@ -165,8 +164,8 @@
       </div>
     </main>
 
-    <!-- 会话态：work 只在方案弹层打开时放宽到 1180（≥1500 档），会话常态恒 880 居中 -->
-    <main v-else class="work" :class="{ 'work--wide': showProposal }">
+    <!-- 会话态：方案确认弹窗为 fixed 居中浮层，不改变底层工作台宽度，避免打开预览时背景左右跳动 -->
+    <main v-else class="work">
       <!-- 左：信息清单（移动端默认折叠为顶栏，点击展开；桌面端恒展开） -->
       <aside class="panel" :class="{ 'panel--collapsed': !panelExpanded }">
         <button type="button" class="panel__head" :aria-expanded="panelExpanded" @click="togglePanel">
@@ -594,7 +593,7 @@
              单一焦点，声明与「确认/再补充」抢同一块视觉重量；全断面唯一的 AI 声明出口
              是输入框正下方的 .chat__under-hint（移动端由底部导航档接管） -->
         <div v-if="materialCount" class="proposal__note">
-          <span>已挂载 {{ materialCount }} 份资料，将随本次目标进入路径生成。未挂载的资料库文件不会参与生成。</span>
+          <span>已挂载 {{ materialCount }} 份资料，将参与本次路径生成。</span>
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
 
@@ -620,14 +619,9 @@
         <h2 class="proposal__title">正在生成你的路径…</h2>
         <!-- 等待态只讲两件事：还要多久、完成后去哪看。「可以离开」由下方的
              proposal__note 单独承担，同一屏不再说两遍（2026-10-29 全站副文审计） -->
-        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解。完成后会出现在路径列表。</p>
+        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解。</p>
         <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
-        <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
-        <div class="proposal__stream">
-          <span class="proposal__stream-label">生成进度</span>
-          <p class="proposal__stream-text">正在逐项整理方案内容，完成后会自动展示。</p>
-        </div>
-        <div class="proposal__note">可以离开本页，生成进度会保留。</div>
+        <div class="proposal__note">可以离开本页，完成后会出现在路径列表。</div>
         <!-- 回看方案（2026-11-05 UX 审计）：确认后提案浮层即被生成面板取代，原两个重开入口
              都以 stage=proposing 为门槛——生成期再无入口可复查刚确认过的方案。这里给只读回看。 -->
         <button v-if="proposalSnapshot" type="button" class="proposal__stop" @click="openReadOnlyReview">回看已确认的方案</button>
@@ -762,7 +756,7 @@ const INPUT_MAX = 4096;
 /* 短字段双列（2026-11-05 用户裁定）：期望周期 / 可用时间通常只有「30 天」「25 分钟」几个字，
    各占一整行把面板撑到要滚动；这两项改半宽小卡并排，面板一屏更装得下 */
 /* 双视图（初始态/会话态）各自渲染一份的错误条与输入提示，文案收成单源避免改一处漏一处 */
-const ATTACH_HINT = '挂载资料（进入本次路径生成）：从资料库勾选或上传新文件，也可以直接拖到输入框';
+const ATTACH_HINT = '添加资料：从资料库勾选、上传或拖入输入框';
 const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
 /** 生成中发送键变成停止方块：补一句 hover 说明，纯图标按钮不靠自己猜 */
 const STOP_WAIT_HINT = '停止等待回复';
@@ -1031,6 +1025,13 @@ function removeRecentGoal(entry: RecentGoalEntry) {
     在渲染时现取本地会话 id：它随会话开始/重置变化，不挂在响应式源上，函数调用才是最新值。 */
 function visibleRecentGoals(): RecentGoalEntry[] {
   return withoutResumedEntry(recentGoals.value, getGoalConversationCid());
+}
+
+function resumeTitle(): string {
+  if (live.failed === 'resume') return '上次恢复失败，点击重试';
+  const cid = getGoalConversationCid();
+  const match = cid ? recentGoals.value.find((r) => r.id === cid) : undefined;
+  return match?.preview || '继续上次未完成的规划';
 }
 
 watch(recentGoalsUserId, (nextId, previousId) => {
@@ -1738,14 +1739,14 @@ const scenePool = [
     title: '三分钟汇报讲出重点',
     desc: '结论先行、位置可数，被追问也接得住',
     seed: '上周季度评审我讲了三分钟，领导直接打断说没重点。我准备了，但一紧张就想到哪说到哪，想把汇报结构真正练出来',
-    bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
+    bg: 'color-mix(in srgb, var(--red) 12%, transparent)', ink: 'var(--red-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 4h18v11H3V4zm2 2v7h14V6H5zm5 11h4v2h-4v-2z"/></svg>'
   },
   {
     title: '自己写 SQL 取数',
     desc: '取数、分组、对比，不再等排期',
     seed: '我做运营，每次要数据都得等数据组排期。想学会用 SQL 自己查数，取数、分组、同比对比这些能独立写出来',
-    bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
+    bg: 'color-mix(in srgb, var(--green) 12%, transparent)', ink: 'var(--green-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zm8 6.5V12c0 1.7-3.6 3-8 3s-8-1.3-8-3V9.5c1.6 1.2 4.6 2 8 2s6.4-.8 8-2zm0 5V17c0 1.7-3.6 3-8 3s-8-1.3-8-3v-2.5c1.6 1.2 4.6 2 8 2s6.4-.8 8-2z"/></svg>'
   },
   {
@@ -1759,7 +1760,7 @@ const scenePool = [
     title: '通勤听懂行为经济学',
     desc: '锚定、损失厌恶，看懂日常套路',
     seed: '通勤时想了解一点行为经济学，没考虑过用在哪，就是觉得人做决定的方式挺有意思。',
-    bg: 'rgba(49,177,111,.12)', ink: 'var(--green-ink)',
+    bg: 'color-mix(in srgb, var(--green) 12%, transparent)', ink: 'var(--green-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 12 12 4H4v8l8 8 8-8zM7 8a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>'
   },
   {
@@ -1780,7 +1781,7 @@ const scenePool = [
     title: '人教版高中生物《细胞呼吸》',
     desc: '教材同步梳理：场所、过程与实验易混点',
     seed: '我在学人教版高中生物必修一第5章《细胞呼吸的原理和应用》，总是把有氧和无氧呼吸几个阶段的场所、产物和ATP去向混在一起，想按教材把这块彻底理清',
-    bg: 'rgba(49,177,111,.12)', ink: 'var(--green-ink)',
+    bg: 'color-mix(in srgb, var(--green) 12%, transparent)', ink: 'var(--green-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 2.5 1.3 4.7 3.3 5.9L9 20h6l.7-5.1C17.7 13.7 19 11.5 19 9a7 7 0 0 0-7-7zm-1 15v-3.5l-2-2 1.4-1.4 1.6 1.6 1.6-1.6 1.4 1.4-2 2V17h-2z"/></svg>'
   },
   {
@@ -1806,8 +1807,8 @@ function shuffleScenes() {
 .entry {
   flex: 1; width: 100%;
   max-width: 1080px; margin: 0 auto;
-  /* 初始态是完整叙事块：垂直居中落在视口中部，消除底部大片空白 */
-  padding: 40px 28px;
+  /* 初始态是完整叙事块：视觉重心略高于正中，消除底部大片空白 */
+  padding: 32px 28px 10vh;
   display: flex; flex-direction: column; gap: 18px;
   /* safe center：内容比视口高时降级为顶对齐 + 内部滚动，居中布局的经典陷阱是
      overflow 后顶部被裁掉且滚不回去；输入框在内容末尾，必须永远可达
@@ -1834,29 +1835,44 @@ function shuffleScenes() {
 .login-gate p { margin: 0; font-size: 14px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
 .resume {
-  display: inline-flex; align-items: center; gap: 10px;
+  width: 100%; max-width: 640px; margin: 4px auto 0;
+  display: flex; align-items: center; gap: 10px;
   padding: 11px 16px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--accent) 5%, transparent));
-  border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
-  border-radius: 16px; /* 圆角阶梯：卡片 */
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--blue) 26%, var(--line));
+  border-radius: var(--mk-radius-lg);
   font: inherit; text-align: left; cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  min-width: 0;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
-/* 原 hover 的 0 8px 20px 蓝色 12% 发光改为 raised 档：染色光晕下线，
-   抬升层级改由中性阴影承担（border-color 变化仍是允许的 hover 反馈）。 */
-.resume:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); box-shadow: var(--wf-shadow-raised); }
+.resume:hover {
+  border-color: color-mix(in srgb, var(--blue) 48%, transparent);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+}
+.resume:active:not(:disabled) { transform: scale(0.98); }
 .resume__dot {
-  width: 9px; height: 9px; border-radius: 50%;
+  width: 8px; height: 8px; border-radius: 50%;
   background: var(--blue);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 18%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 16%, transparent);
   flex: 0 0 auto;
-  animation: pulse 1.6s ease-in-out infinite;
 }
-.resume__body { display: grid; gap: 1px; }
-.resume__body strong { font-size: 13.5px; }
-.resume__body small { font-size: 12px; color: var(--muted); }
-.resume__go { font-size: 13px; font-weight: 800; color: var(--blue-deep); }
+@media (prefers-reduced-motion: no-preference) {
+  .resume__dot { animation: recent-gen-pulse 1.6s ease-in-out infinite; }
+}
+.resume__tag {
+  flex: none;
+  display: inline-flex; align-items: center; height: 22px; padding: 0 7px;
+  border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue-deep);
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.resume__title {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.resume__go { flex: none; font-size: 13px; font-weight: 700; color: var(--blue-deep); white-space: nowrap; }
 
 /* 最近会话列表（D14）：入口页回访入口；与 hero 同栏限宽，条目 ≥44px 触控带。
    2026-11-07 用户走查：整块降到灵感胶囊下方并「弱化」——去掉卡片描边与白底（那是
@@ -1881,7 +1897,8 @@ function shuffleScenes() {
   transition: background 0.15s ease;
 }
 .recent__item:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
-.recent__preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--muted); }
+.recent__preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--muted); transition: color var(--mk-dur-fast) var(--mk-ease-out); }
+.recent__item:hover .recent__preview { color: var(--ink); }
 .recent__time { flex: none; font-size: 12px; color: var(--faint); }
 /* 生成中行（2026-11-06 走查 图4）：时间位换成蓝色状态字 + 脉点，与生成中状态同一语言。
    宽度与时间字同档（12px），不把省略号压缩到挤字。 */
@@ -1908,8 +1925,14 @@ function shuffleScenes() {
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .recent__row:hover .recent__remove, .recent__remove:focus-visible { opacity: 1; pointer-events: auto; }
-.recent__row:hover .recent__go { opacity: 0; }
+.recent__row:hover .recent__go,
+.recent__row:focus-within .recent__go { opacity: 0; }
 .recent__remove:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+@media (hover: none) {
+  .recent__item { padding-right: 40px; }
+  .recent__go { opacity: 0; }
+  .recent__remove { opacity: 1; pointer-events: auto; width: 36px; height: 36px; }
+}
 
 /* 居中 hero（2026-11-07 用户走查）：整页是一段「居中标题 → 大输入卡 → 底部轻量胶囊」的
    单列叙事；标题左对齐时整块浮在屏幕中央会头重脚轻（用户原话「缩在左上角而且字号偏小」）。
@@ -1941,7 +1964,16 @@ function shuffleScenes() {
   color: var(--red-ink);
   font-size: 13px; font-weight: 600;
 }
-.errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
+.entry > .errorbar { max-width: 640px; width: 100%; margin: 0 auto; }
+.errorbar__retry {
+  padding: 2px 6px;
+  border-radius: var(--mk-radius-xs);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 800;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out);
+}
+.errorbar__retry:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 12%, transparent); }
 .chat__errorbar { margin: 8px 4px 0; }
 
 /* 灵感胶囊（2026-11-07 用户走查）：示例方向从「同宽、同底色、同圆角的卡片」降为一行
@@ -1960,11 +1992,12 @@ function shuffleScenes() {
   border: 0; border-radius: var(--mk-radius-md);
   background: transparent; color: var(--faint);
   font: inherit; cursor: pointer;
-  transition: color .15s ease, background .15s ease;
+  transition: color .15s ease, background .15s ease, transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .cards-nav__btn:hover:not(:disabled) {
   color: var(--muted); background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
+.cards-nav__btn:active:not(:disabled) { transform: scale(0.98); }
 .cards-nav__btn:disabled { opacity: .4; cursor: default; }
 .scene-card {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1976,7 +2009,7 @@ function shuffleScenes() {
   border: 1px solid var(--line);
   border-radius: 999px; /* 胶囊档 */
   font: inherit; font-size: 13px; cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* hover：底色用回该场景自己的浅色调（--sc-bg 由模板按 c.bg 注入，静止态保持透明、
    不抢输入框的底色） */
@@ -1984,6 +2017,7 @@ function shuffleScenes() {
   border-color: color-mix(in srgb, var(--blue) 45%, transparent);
   background: var(--sc-bg);
 }
+.scene-card:active:not(:disabled) { transform: scale(0.98); }
 .scene-card:disabled { opacity: .55; cursor: default; }
 .scene-card__icon { display: grid; place-items: center; flex: 0 0 auto; }
 /* 图标是池子里 width/height=18 的 <svg>：字号收窄必须落在 svg 上，否则 18px 会撑高胶囊 */
@@ -1992,7 +2026,7 @@ function shuffleScenes() {
 .scene-card__body strong { font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; }
 
 /* ---------- 输入区 ---------- */
-.composer { display: grid; gap: 7px; }
+.composer { display: grid; gap: 7px; transition: opacity var(--mk-dur) var(--mk-ease-out); }
 /* 底部渐隐遮罩整套退役（2026-11-06 走查）：26px「透明→--canvas」渐变铺在固定区上方，
    深色下是「黑带」、浅色下是灰蓝脏带，还盖住贴底气泡的末行与下边框（用户三图实证）。
    改为严格 Flex 三段：滚动区在 .chat__dock 上方自然结束（不重叠、无遮罩、无分割线，
@@ -2015,6 +2049,7 @@ function shuffleScenes() {
   padding: 8px;
   min-height: 54px;
   box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* 聚焦：柔和提示 —— 细蓝边 + 全站唯一一圈（原型 .wf-composer__box:focus-within，
    取代原「有内容才高亮」：空输入框聚焦时同样是当前操作焦点） */
@@ -2051,12 +2086,15 @@ function shuffleScenes() {
 /* 拖文件到输入框：整盒高亮 + 居中提示 */
 .composer__box--dropping {
   border-color: var(--blue);
+  border-style: dashed;
   background: color-mix(in srgb, var(--blue) 6%, var(--surface));
 }
 .composer__drop-hint {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center; gap: 6px;
   font-size: 12px; font-weight: 700; color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  border-radius: var(--mk-radius-lg);
   pointer-events: none;
   z-index: 2;
 }
@@ -2095,7 +2133,8 @@ function shuffleScenes() {
   border: 0;
   transition: background 0.15s ease, transform 0.15s ease;
 }
-.composer__send:active { transform: scale(0.98); }
+.composer__send:hover:not(:disabled):not(.composer__send--stop) { background: var(--blue-deep); }
+.composer__send:active:not(:disabled) { transform: scale(0.98); }
 .composer__send--off { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); cursor: default; }
 /* 生成中：同一按钮切换为红色停止态（主流聊天交互）。
    批次 D：红色发光、hover 抬升、以及 135deg 渐变底一并退役 → 纯色危险档。
@@ -2112,7 +2151,7 @@ function shuffleScenes() {
 .composer__send--stop:hover {
   background: var(--wf-color-danger);
 }
-.composer__send--stop:active { transform: scale(0.97); }
+.composer__send--stop:active:not(:disabled) { transform: scale(0.98); }
 .composer__hint {
   /* 居中（2026-11-07 用户走查 图2：与「Enter 发送 · Shift+Enter 换行」合并为同一行居中浅灰小字）；
      与会话态 .chat__under-hint 的居中口径一致，两个态之间切换不再一左一右。 */
@@ -2171,11 +2210,7 @@ function shuffleScenes() {
   box-sizing: border-box;
 }
 
-/* 宽屏（≥1500px）的 1180 放宽档只留给方案弹层态（.work--wide）：
-   会话常态恒 880，原型里更宽的屏也只在方案确认那一步需要横向舒展 */
-@media (min-width: 1500px) {
-  .work.work--wide { max-width: 1180px; gap: 20px; }
-}
+/* 会话常态与方案弹层态保持同宽，弹窗打开时不触发底层网格重排 */
 
 /* ---------- 左：信息清单（移动端默认折叠为头部横条，点击展开；桌面恒展开） ----------
    原型 .wf-goalinfo 自身是白面 + 发丝线 + radius-modal + shadow-sm 的卡片；
@@ -2197,7 +2232,7 @@ function shuffleScenes() {
   cursor: default;
 }
 .panel__head strong { font-size: 14px; }
-.panel__count { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
+.panel__count { font-size: 12px; font-weight: 800; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
 .panel__count-default { font-weight: 600; color: var(--faint); }
 /* 折叠指示箭头：仅移动端显示 */
 .panel__caret { display: none; font-size: 12px; color: var(--faint); flex-shrink: 0; }
@@ -2213,7 +2248,7 @@ function shuffleScenes() {
   background: color-mix(in srgb, var(--line) 55%, transparent);
   overflow: hidden;
 }
-.panel__bar i { display: block; height: 100%; transition: width .4s ease; }
+.panel__bar i { display: block; height: 100%; transition: width var(--wf-duration-slow) var(--mk-ease-out); }
 /* 已确认段：品牌蓝；默认段：中性灰——两者合起来才是「已填」，但视觉权重明确分层 */
 .panel__bar-done { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .panel__bar-default { background: color-mix(in srgb, var(--ink) 16%, transparent); }
@@ -2360,8 +2395,10 @@ function shuffleScenes() {
   background: color-mix(in srgb, var(--blue) 8%, var(--surface)); color: var(--blue-deep);
   border-radius: var(--mk-radius-md);
   font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .chat__show-proposal:hover { background: color-mix(in srgb, var(--blue) 18%, var(--surface)); }
+.chat__show-proposal:active:not(:disabled) { transform: scale(0.98); }
 /* 极简面包屑（2026-11-05 屏效比）：胶囊叠胶囊退役——已完成=青绿 ✓ + 文字压暗（翻篇不抢焦点）、
    进行中=亮白粗体 + 前置呼吸蓝点 + 正下方 2px 指示条、未开始=暗灰序号，步骤间「›」极细连接 */
 .stage-nav__item {
@@ -2403,8 +2440,12 @@ function shuffleScenes() {
 /* 深色模式：当前步呼吸点提亮（--blue #2f6ae0 在黑底上读作深藏青，叠呼吸 0.35 档几乎
    隐形）；用暗色 hover 提亮档 #6a9cf3（token），与用户点名的 #60A5FA 同档 */
 html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-hover); }
-.chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
-.chat__clear:hover { color: var(--red-ink); }
+.chat__clear {
+  font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer;
+  padding: 4px 8px; border-radius: var(--mk-radius-sm);
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), background var(--mk-dur-fast) var(--mk-ease-out);
+}
+.chat__clear:hover { color: var(--red-ink); background: color-mix(in srgb, var(--red) 8%, transparent); }
 
 .chat__scroll {
   flex: 1;
@@ -2416,7 +2457,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
      92%/78% 上限——短回复也变成整幅宽卡片，typing 三点也成一整条横杠。
      改成 flex-start 后由内容决定气泡宽度；用户消息仍靠 .msg--user 的 align-self:flex-end。 */
   align-items: flex-start;
-  transition: filter .2s ease, opacity .2s ease;
+  transition: opacity var(--mk-dur) var(--mk-ease-out), filter var(--mk-dur) var(--mk-ease-out);
   /* 原生滚动条隐藏（2026-11-05 屏效比）：桌面 Windows 的经典粗滚动条在移动视口仿真里
      出戏且挤占右缘；触屏滚动手势/滚轮不受影响，内容可达性不变 */
   scrollbar-width: none;
@@ -2439,6 +2480,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   color: var(--muted);
   font: inherit; font-size: 12px; font-weight: 700;
   cursor: pointer;
+  animation: v2-jump-in var(--mk-dur-fast) var(--mk-ease-out);
   transition: color .15s ease, border-color .15s ease, background .15s ease;
 }
 .chat__jump:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
@@ -2522,7 +2564,8 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   opacity: 0;
   transition: opacity 0.15s ease, color 0.15s ease;
 }
-.msg--user:hover .msg__edit-btn { opacity: 1; }
+.msg--user:hover .msg__edit-btn,
+.msg--user .msg__edit-btn:focus-visible { opacity: 1; }
 .msg--user .msg__edit-btn:hover { color: var(--blue-deep); }
 @media (hover: none) {
   .msg--user .msg__edit-btn {
@@ -2549,6 +2592,12 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   background: var(--surface);
   resize: vertical;
   outline: none;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out);
+}
+.msg__edit-input:focus,
+.msg__edit-input:focus-visible {
+  border-color: var(--blue);
+  box-shadow: var(--mk-focus-ring);
 }
 .msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .msg__edit-save, .msg__edit-cancel {
@@ -2558,18 +2607,22 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* 8px 控件圆角（2026-11-06 审计 §1）：编辑动作是紧凑内嵌按钮，不是全圆胶囊 */
   border-radius: var(--mk-radius-md);
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .msg__edit-save {
   color: var(--text-on-primary);
   /* 实色主按钮（原蓝渐变退役）；按压 scale(.98) 补回交互反馈 */
   background: var(--blue);
 }
+.msg__edit-save:hover { background: var(--blue-deep); }
 .msg__edit-save:not(:disabled):active { transform: scale(0.98); }
 .msg__edit-cancel {
   color: var(--muted);
   border: 1px solid var(--line);
   background: var(--surface);
 }
+.msg__edit-cancel:hover { background: color-mix(in srgb, var(--ink) 5%, var(--surface)); color: var(--ink); }
+.msg__edit-cancel:active { transform: scale(0.98); }
 .msg__bubble {
   /* 原型 .wf-msg p：11/13 内边距、13.5px 行高、16px 圆角基线；
      2026-11-05 屏效比微调：12/14 + 行高 1.55——卡片更紧凑、易读性不降档
@@ -2658,8 +2711,9 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   color: var(--blue-deep);
   font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.45;
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
 }
+.reply:active:not(:disabled) { transform: scale(0.98); }
 /* 前置 6px 蓝点已撤（2026-11-06 走查）：胶囊本体就是可点项，再挂一颗点只是噪声；
    选中态的 ✓ 仍走 ::before（见 .reply--on）。左缘对齐：.replies 的 margin-left 40
    = AI 头像 30 + 列间距 10，与上方 AI 气泡左缘同一条竖线 */
@@ -2701,6 +2755,13 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   border: 1px solid color-mix(in srgb, var(--blue) 34%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .proposal-invite { animation: invite-in var(--mk-dur) var(--mk-ease-out) both; }
+}
+@keyframes invite-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 /* 对话流内联版已退役（2026-11-18 用户复选：确认面板回到输入框上方）。
    保留基础 .proposal-invite 作为坞内条目：左右 16px 与输入区对齐。 */
@@ -2776,6 +2837,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
      1px 模糊在任何设备上都读不出来，只是白白多一次全屏合成；
      遮罩靠 62% 的 canvas 混色表达「压暗隔断」，足够。 */
   z-index: 60;
+  animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* dialog 三段：head（可关） / body（滚动） / foot（贴底不随内容滚） */
 .proposal {
@@ -2787,6 +2849,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   border-radius: 16px; /* 圆角阶梯：弹层 */
   box-shadow: var(--mk-shadow-pop); /* 弹层档 */
   display: flex; flex-direction: column;
+  animation: v2-modal-in var(--mk-dur) var(--mk-ease-out);
 }
 .proposal__head {
   flex: none;
@@ -2802,9 +2865,10 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   color: var(--muted);
   font: inherit; font-size: 17px; line-height: 1;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .proposal__x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 12%, var(--surface)); }
+.proposal__x:active:not(:disabled) { transform: scale(0.98); }
 /* done/generating 态无 head 段：× 钉在卡片右上角，给触屏一个显式关闭出口（此前仅 Esc） */
 .proposal__x--corner { position: absolute; top: 12px; right: 12px; }
 .proposal__body {
@@ -2836,23 +2900,6 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 /* 主按钮吃左 1 : 右 2（终局动作比退路宽），次按钮只按内容宽 */
 .v2-page .proposal__foot .btn-primary { flex: 2 1 0; }
 .proposal--center { position: relative; display: grid; justify-items: center; text-align: center; gap: 12px; padding: 34px 28px; overflow-y: auto; }
-.proposal__stream {
-  width: 100%;
-  text-align: left;
-  padding: 12px 14px;
-  border-radius: var(--mk-radius-xl);
-  background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
-  border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
-  display: grid; gap: 6px;
-}
-.proposal__stream-label { font-size: 12px; font-weight: 800; color: var(--blue-deep); letter-spacing: .04em; }
-.proposal__stream-text {
-  margin: 0;
-  font-size: 12.5px; line-height: 1.7;
-  color: var(--muted);
-  max-height: 120px; overflow-y: auto;
-  white-space: pre-wrap;
-}
 /* 卡片内嵌按钮（2026-11-06 审计 §1 同心圆角）：外卡 16/12 圆角里不再塞全圆胶囊，
    改 8px 控件圆角；高度保 34（审计档 30~34 的上限）——它落在 .proposal--center
    卡片里、窄屏生成态也可见，不去碰 36 触控档（本钮不出现在移动端门禁量测的入口态） */
@@ -2865,9 +2912,10 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
   border-radius: var(--mk-radius-md);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .proposal__stop:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
+.proposal__stop:active:not(:disabled) { transform: scale(0.98); }
 .proposal__eyebrow { display: block; font-size: 12px; font-weight: 800; letter-spacing: .07em; color: var(--blue-deep); }
 .proposal__title { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
 .proposal__generating-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 44ch; }
@@ -2937,7 +2985,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   background: var(--surface);
   font: inherit; font-size: 13px; color: var(--ink);
   cursor: pointer;
-  transition: border-color .15s, background .15s;
+  transition: border-color .15s, background .15s, transform var(--mk-dur-fast) var(--mk-ease-out);
 }
 .probe__opt b {
   flex: none; width: 18px; height: 18px; border-radius: 6px;
@@ -2945,8 +2993,13 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   font-size: 12px;
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--muted);
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
-.probe__opt:hover:not(:disabled) { border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); }
+.probe__opt:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--blue) 40%, var(--line));
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+}
+.probe__opt:active:not(:disabled) { transform: scale(0.98); }
 .probe__opt--on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 7%, var(--surface)); }
 .probe__opt--on b { background: var(--blue); color: var(--text-on-primary); }
 .probe__opt:disabled { cursor: default; opacity: .92; }
@@ -3017,6 +3070,13 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   color: var(--green);
   display: grid; place-items: center;
   box-shadow: 0 0 0 8px color-mix(in srgb, var(--wf-color-success) 7%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .done-ring { animation: done-ring-in var(--mk-dur) var(--mk-ease-out) both; }
+}
+@keyframes done-ring-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
 }
 /* 硬阻断终局：非失败也非成功，中性琥珀提示（令牌派生，随主题翻转） */
 .done-ring--blocked {
@@ -3092,7 +3152,9 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
     background: color-mix(in srgb, var(--surface) 88%, transparent);
     color: var(--muted);
     font-size: 12px;
+    transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
   }
+  .panel__head:active { transform: scale(0.98); }
   .panel__head strong { font-size: 12px; }
   /* 展开箭头是 9px 的字形「▸」，12px 字号下渲染成一个几乎认不出的小点
      （2026-10-07 放大核对：它和「息」字之间还隔着 5px，读起来像个孤立标点）。
@@ -3184,9 +3246,16 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
     position: fixed; inset: 0; z-index: 21;
     pointer-events: auto;
     background: var(--wf-overlay);
-    animation: panel-mask-in 0.16s ease-out both;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .panel__mask { animation: panel-mask-in 0.16s ease-out both; }
+    .panel:not(.panel--collapsed) .panel__body { animation: panel-drop-in var(--mk-dur) var(--mk-ease-out) both; }
   }
   @keyframes panel-mask-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes panel-drop-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: none; }
+  }
   /* 面板紧凑化（.field 已是圆角浅灰块）：块内边距 10→7、gap 9→8、值 13→12.5；
      待补充已收拢为底部两列小标签（todo__tags），行内并排判例随之退役 */
   .field { padding: 7px 10px; grid-template-columns: 16px 1fr; gap: 8px; }
@@ -3360,6 +3429,8 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 @media (min-width: 1024px) and (max-width: 1679.98px) {
   .entry__hero,
   .entry__cards,
+  .entry > .resume,
+  .entry > .errorbar,
   .entry .composer--entry,
   .entry .recent,
   .entry__hero p { max-width: clamp(640px, 62vw, 960px); }
@@ -3417,12 +3488,10 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .panel__body,
 .proposal__body,
 .proposal--center,
-.proposal__stream-text,
 .entry { scrollbar-width: none; }
 .panel::-webkit-scrollbar,
 .panel__body::-webkit-scrollbar,
 .proposal__body::-webkit-scrollbar,
 .proposal--center::-webkit-scrollbar,
-.proposal__stream-text::-webkit-scrollbar,
 .entry::-webkit-scrollbar { width: 0; height: 0; }
 </style>

@@ -110,10 +110,10 @@ function confirm() {
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
   display: grid;
-  animation: mk-pop-in 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+  animation: mk-pop-in var(--mk-dur) var(--mk-ease-out);
 }
 @keyframes mk-pop-in {
-  from { transform: translateY(8px) scale(0.98); opacity: 0.4; }
+  from { transform: translateY(8px) scale(0.98); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
 .mk-confirm__head {

@@ -81,7 +81,7 @@
                     <!-- 三种尺度（2026-11-22 UI 走查，2026-11-23 补单位）：同屏并排的 −5.75 / 1.15 / 6.9 / 23
                          分别是相对量、0-10、0-100、0-100。tooltip 已给每个数带单位；图例只提示
                          「看趋势、不横向比」，不再让用户拿 <20 的整体状态图例去套 6.9 分的疲劳。 -->
-                    <li><b class="dot dot--purple"></b>各指标刻度不同（整体状态 −100~+100、训练负荷 0–10、压力/疲劳 0–100），看曲线趋势即可，不必横向比数值大小</li>
+                    <li><b class="dot dot--purple"></b>各指标量纲不同（状态 −100~+100、负荷 0–10、疲劳 0–100），看各自趋势即可</li>
                     <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
                   </ul>
                 </details>
@@ -333,7 +333,7 @@
                 <p v-if="evidenceHint && !pendingAdjust.length" class="guide__evidence">依据：{{ evidenceHint }}</p>
                 <!-- 诊断自报无证据时建议降级为参考口径（state/iphone/6）：明说建议不再是
                      调整依据，动作按钮已随 hasAdvisoryAction 撤下 -->
-                <p v-if="reviewLacksEvidence" class="guide__evidence guide__evidence--warn">本次没有可依据的课堂证据，AI 建议仅供参考，暂不作为调整依据。</p>
+                <p v-if="reviewLacksEvidence" class="guide__evidence guide__evidence--warn">暂无足够课堂证据，建议仅供参考。</p>
               </template>
             </template>
 
@@ -396,7 +396,6 @@
             <div v-else-if="hasKpiData && hasAdvisoryAction && guideActions[0]" class="advisory__actions">
               <router-link class="adv-btn adv-btn--primary" :to="guideActions[0].resolved">{{ guideActions[0].action }}</router-link>
             </div>
-            <p v-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length === 1 && adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，暂不可确认调整。</p>
             <!-- 回执行（原型 wf-advisory__done）：采用 / 保持成功后就地播报，不靠 toast 一次性带过 -->
             <p v-if="advisoryDone" class="advisory__done" role="status">{{ advisoryDone }}</p>
 
@@ -2058,6 +2057,7 @@ function loadGuidance() {
   background: color-mix(in srgb, var(--blue) 6%, transparent);
   padding: 7px 13px; border-radius: var(--mk-radius-md);
   cursor: pointer; white-space: nowrap;
+  transition: background var(--mk-dur-fast, 120ms) ease;
 }
 .sug__cta:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 /* 2026-09-27 死 CSS 清理：.sug--done / .sug__done 的「已完成」形态模板已无（level 只剩 info/warning/critical） */
@@ -2083,8 +2083,6 @@ function loadGuidance() {
 .advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
 .advisory__multi { margin: 0; font-size: 12.5px; color: var(--muted); }
 .advisory__done { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--green-ink); }
-/* 调整策略禁用「采用建议」的原因行（amber 一档，与预警同色语言） */
-.advisory__blocked { margin: 0; font-size: 12.5px; color: var(--amber-ink, #b45309); }
 /* 次级区块（学习调控）：与正文之间用分隔线分层，卡内再分一层，避免与建议正文糊在一起 */
 .advisory__sub {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
@@ -2111,6 +2109,7 @@ function loadGuidance() {
   /* on-primary token（非硬编码 hex）：亮色下白字压深蓝，暗色下反向取深字压亮蓝 --mk-blue #5b8def */
   color: var(--text-on-primary);
 }
+.adv-btn--primary:not(:disabled):hover { background: var(--wf-color-primary-dark); }
 .adv-btn--primary:not(:disabled):active { transform: scale(0.98); }
 .adv-btn--ghost { background: var(--surface); border-color: var(--line); color: var(--muted); }
 .adv-btn--ghost:not(:disabled):hover {
@@ -2126,7 +2125,7 @@ function loadGuidance() {
 }
 /* 进度条原语（原型 wf-bar 267-268）：6px 轨（--bar-track）+ 蓝→青渐变填充 */
 .wf-bar { height: 6px; border-radius: 999px; background: var(--bar-track, color-mix(in srgb, var(--line) 60%, transparent)); overflow: hidden; }
-.wf-bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.wf-bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width var(--wf-duration-slow, 0.4s) var(--mk-ease-out, ease); }
 /* 逐行进度条样式（.rlist__row 系列）现由复习清单独用；掌握分布已改三色分段条（.mbar），
    其「待学习」灰段见 .mbar__seg--pending（同一条口径：待学习不是进度，用中性灰表达剩余量，
    不与已掌握/进行中的高亮蓝抢权重；2026-11-05 UX 审计 state/iphone/2 的换色理由随迁） */
@@ -2163,6 +2162,7 @@ function loadGuidance() {
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
   padding: 7px 14px; border-radius: var(--mk-radius-md); cursor: pointer;
+  transition: background var(--mk-dur-fast, 120ms) ease;
 }
 .chart__retry:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .chart__empty {
@@ -2349,6 +2349,11 @@ function loadGuidance() {
   margin-left: 8px; padding: 9px 12px; border-radius: var(--mk-radius-md);
   border: 1px solid var(--line); background: var(--surface);
   font-size: var(--mk-fs-micro); font-weight: 700; color: var(--blue-deep); cursor: pointer;
+  transition: background var(--mk-dur-fast, 120ms) ease, border-color var(--mk-dur-fast, 120ms) ease;
+}
+.guide-retry:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
 }
 .guide-retry:disabled { opacity: .6; cursor: default; }
 </style>
@@ -2366,6 +2371,7 @@ function loadGuidance() {
   display: inline-grid; place-items: center;
   width: 22px; height: 22px; border-radius: 50%;
   color: var(--faint); font-size: 14px; line-height: 1;
+  transition: background var(--mk-dur-fast, 120ms) ease, color var(--mk-dur-fast, 120ms) ease;
 }
 .band__help-btn::-webkit-details-marker { display: none; }
 .band__help-btn:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
@@ -2376,6 +2382,13 @@ function loadGuidance() {
   padding: 12px 14px;
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg); box-shadow: var(--mk-shadow-modal);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .band__help[open] .legend { animation: state-pop-in 0.14s var(--mk-ease-out, ease) both; }
+}
+@keyframes state-pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
 }
 /* 2026-11-24 走查：窄屏 ⓘ 跟在标题后（x≈224），326px 弹层向右溢出到 550px，
    右半截被页宽裁掉。窄屏把 ⓘ 推到标题行最右、弹层右对齐，整块落回卡内。 */
@@ -2388,7 +2401,7 @@ function loadGuidance() {
   display: flex; height: 8px; border-radius: 999px; overflow: hidden;
   background: color-mix(in srgb, var(--line) 55%, transparent);
 }
-.mbar__seg { display: block; height: 100%; }
+.mbar__seg { display: block; height: 100%; transition: width var(--wf-duration-slow, 0.4s) var(--mk-ease-out, ease); }
 .mbar__seg--mastered { background: var(--wf-color-success); }
 .mbar__seg--learning { background: var(--blue); }
 .mbar__seg--pending { background: var(--muted); }

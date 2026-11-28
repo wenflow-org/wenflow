@@ -164,7 +164,9 @@
 
             <div class="ob__nav">
               <button type="button" class="ob__back" @click="prev">‹ 上一步</button>
-              <button type="button" class="ob__cta" @click="goDashboard">进入学习台
+              <button type="button" class="ob__cta" :disabled="finishing" @click="goDashboard">
+                <span v-if="finishing" class="spinner spinner--sm" aria-hidden="true"></span>
+                {{ finishing ? '正在进入…' : '进入学习台' }}
                 <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
               </button>
             </div>
@@ -174,7 +176,7 @@
         </Transition>
 
         <!-- 跳过（任意步骤可见） -->
-        <button type="button" class="ob__later" @click="goDashboard">跳过引导</button>
+        <button type="button" class="ob__later" :disabled="finishing" @click="goDashboard">跳过引导</button>
       </section>
     </main>
   </div>
@@ -246,10 +248,18 @@ onMounted(() => {
   }
 })
 
+const finishing = ref(false)
+
 /* 引导只教「怎么用」，目标规划交给 /goal-conversation 自己完成 */
 async function goDashboard() {
-  await markDone()
-  router.replace(safeRedirect.value || '/dashboard')
+  if (finishing.value) return
+  finishing.value = true
+  try {
+    await markDone()
+    router.replace(safeRedirect.value || '/dashboard')
+  } finally {
+    finishing.value = false
+  }
 }
 </script>
 
@@ -330,14 +340,17 @@ async function goDashboard() {
   width: 34px; height: 4px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--line) 70%, transparent);
-  transition: background 0.35s;
+  transition: background-color 0.28s ease, width 0.28s var(--mk-ease-out);
 }
-.ob__progress span.is-on { background: linear-gradient(90deg, var(--blue), var(--blue-deep)); }
+.ob__progress span.is-on { background: var(--blue); }
+.ob__progress span[aria-current="step"] { width: 44px; }
 
 /* 步骤切换动画：原型 wf-screen-in = 纵向 8px 上浮（原 translateX(±14px) 是横向推移） */
-.ob-swap-enter-active,
+.ob-swap-enter-active {
+  transition: opacity 0.22s var(--mk-ease-out), transform 0.22s var(--mk-ease-out);
+}
 .ob-swap-leave-active {
-  transition: opacity 0.24s ease, transform 0.24s ease;
+  transition: opacity 0.14s ease-in, transform 0.14s ease-in;
 }
 .ob-swap-enter-from {
   opacity: 0;
@@ -346,6 +359,11 @@ async function goDashboard() {
 .ob-swap-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob__card { animation: none; }
+  .ob-swap-enter-active,
+  .ob-swap-leave-active { transition: none; }
 }
 
 .ob__page { display: grid; gap: 0; }
@@ -551,6 +569,15 @@ async function goDashboard() {
   background: linear-gradient(90deg, var(--blue), var(--blue-deep));
   border-radius: 999px;
 }
+@media (prefers-reduced-motion: no-preference) {
+  .ob__demo-prog i {
+    animation: ob-prog-fill 0.8s var(--mk-ease-out) 0.15s both;
+  }
+}
+@keyframes ob-prog-fill {
+  from { width: 0; }
+  to { width: var(--w); }
+}
 
 /* 今日行动行（第 3/4 步共用） */
 .ob__demo-action {
@@ -629,14 +656,19 @@ async function goDashboard() {
 /* 底部导航 */
 .ob__nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ob__back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
   font-size: 13px; font-weight: 600;
   color: var(--muted);
   background: none; border: 0;
-  padding: 8px 10px;
+  padding: 6px 10px;
   cursor: pointer;
   border-radius: var(--mk-radius-md);
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 .ob__back:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 6%, transparent); }
+.ob__back:active { transform: scale(0.98); }
 
 .ob__cta {
   display: inline-flex;
@@ -674,6 +706,8 @@ async function goDashboard() {
   font-weight: 700;
   color: var(--blue-deep);
   text-decoration: none;
+  border-radius: var(--mk-radius-md);
+  transition: color 0.15s ease, background 0.15s ease;
 }
 .ob__goal:hover { text-decoration: underline; }
 
@@ -704,6 +738,7 @@ async function goDashboard() {
   .ob__card { padding: 22px 16px 18px; border-radius: var(--mk-radius-modal); }
   .ob__title { font-size: 18px; }
   .ob__progress span { width: 24px; }
+  .ob__progress span[aria-current="step"] { width: 32px; }
   .ob__flow-item { padding: 10px 6px 8px; }
   .ob__flow-item strong { font-size: 12px; }
   .ob__stage small { display: none; }

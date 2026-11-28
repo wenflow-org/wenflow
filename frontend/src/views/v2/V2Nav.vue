@@ -473,6 +473,7 @@ onUnmounted(() => {
   color: var(--ink);
   text-decoration: none;
   cursor: pointer;
+  transition: background var(--mk-dur-fast, 120ms) ease, color var(--mk-dur-fast, 120ms) ease;
 }
 /* 行内直接子图标：统一 15px 裸线图标（主题切换与其余行同规格，2026-11-06 走查拆芯片），
    染 muted + 3.5px 对称边距（图标槽 15 + 3.5×2 = 22，各行文字同一左缘） */

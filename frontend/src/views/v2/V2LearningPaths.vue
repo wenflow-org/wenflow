@@ -132,7 +132,7 @@
                 <!-- 时间锚点（2026-11-11 走查）：四张卡都写「已完成 / 100%」时分不出新旧。
                      可见文案用相对时间，title 给绝对时间与创建时间，需要精确核对时可直接看。 -->
                 <p v-if="card.anchorText" class="pcard__anchor" :title="card.anchorTitle">{{ card.anchorText }}</p>
-                <p v-if="card.designActive" class="pcard__anchor">后续课程正在准备，已就绪部分可继续学习</p>
+                <p v-if="card.designActive" class="pcard__anchor">后续课程准备中，已就绪部分可继续学习</p>
               </div>
               <div class="pcard__head-right">
                 <!-- 状态徽章常驻（原型每张卡都有，1797/1808/1817）：进行中/已完成同样渲染 -->
@@ -413,8 +413,7 @@ function normalize(p: Record<string, any>): PathCard {
   });
   return {
     id: p.id, title, desc,
-    sub: [buildSub(totalStages, lessonCount), designActive ? '后续课程准备中' : '']
-      .filter(Boolean).join(' · '),
+    sub: buildSub(totalStages, lessonCount),
     kind, stages: totalStages, stageDone: stageDoneCount,
     percent, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status,
     anchorText: anchor?.text, anchorTitle: anchor?.title, designActive
@@ -801,7 +800,9 @@ onBeforeUnmount(() => {
   display: flex; flex-direction: column; gap: 12px;
   box-shadow: var(--shadow-sm);
   cursor: pointer;
+  transition: border-color var(--mk-dur-fast, 120ms) ease;
 }
+.pcard:hover { border-color: color-mix(in srgb, var(--blue) 32%, var(--line)); }
 /* 生成中/失败是原型没有的两种状态：只留极淡底色与描边提示，颜色全部走 token */
 .pcard--generating { background: linear-gradient(180deg, color-mix(in srgb, var(--cyan) 4%, transparent), var(--surface) 55%); }
 .pcard--failed { border-color: color-mix(in srgb, var(--red) 30%, transparent); }
@@ -859,6 +860,7 @@ onBeforeUnmount(() => {
   /* 负边距外扩触诊区（视觉不变、不占布局）；不能用 min-height 撑 44——
      单行标题会被撑出一行空白，就是卡头中间那道「鸿沟」 */
   display: block; padding: 8px 10px; margin: -8px -10px;
+  transition: color var(--mk-dur-fast, 120ms) ease;
 }
 .pcard__title a:hover { color: var(--blue-deep); }
 /* 副行＝原型 wf-pathitem__sub（12px faint）：单行省略，窄卡不换行 */
@@ -943,6 +945,14 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-xl); padding: 6px;
   box-shadow: var(--shadow-md);
   display: grid; min-width: 152px;
+  transform-origin: top right;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pcard__menu { animation: pcard-menu-in var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease) both; }
+}
+@keyframes pcard-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  to { opacity: 1; transform: none; }
 }
 .pcard__menu-item {
   /* 2026-09-27 防误触重设计：两个操作原来是贴着的 33px 文本行，「重新生成」
@@ -1103,6 +1113,18 @@ onBeforeUnmount(() => {
   padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
   display: grid; gap: 8px;
   box-shadow: var(--mk-shadow-pop); /* 弹层档（上抛第四档已并入 pop，规范 §0.5） */
+}
+@media (prefers-reduced-motion: no-preference) {
+  .paths__filter-mask { animation: paths-mask-in 0.16s ease both; }
+  .paths__filter-sheet { animation: paths-sheet-in 0.2s var(--mk-ease-out, ease) both; }
+}
+@keyframes paths-mask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes paths-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: none; }
 }
 .paths__filter-head {
   display: flex; align-items: center; justify-content: space-between;

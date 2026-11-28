@@ -28,11 +28,10 @@ describe('V2LearningPathDetail 渐进式课表与 KC 胶囊', () => {
     expect(source).toContain('{{ kc.name }}');
   });
 
-  it('极速模式按 adjustability 过滤，且不会把整阶段过滤成空', () => {
-    expect(source).toContain('v-model="coreOnly"');
-    expect(source).toContain("task.adjustability !== 'flexible'");
-    expect(source).toContain('return core.length ? core : tasks');
-    expect(source).toContain('v-for="task in displayStageTasks(stage)"');
+  it('课程安排展示全部阶段与任务（不设隐藏选修的假筛选开关）', () => {
+    expect(source).not.toContain('v-model="coreOnly"');
+    expect(source).toContain('v-for="task in stageTasks(stage)"');
+    expect(source).toContain('课程安排');
   });
 
   it('终局交付物卡与拓扑徽标使用后端字段', () => {

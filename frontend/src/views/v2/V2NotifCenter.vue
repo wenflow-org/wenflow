@@ -730,6 +730,13 @@ onBeforeUnmount(() => {
   border-radius: 4px; /* 阶梯下限内芯 4 */
   background: var(--blue);
 }
+@media (prefers-reduced-motion: no-preference) {
+  .nc__tab--on::after { animation: nc-tab-in 0.15s var(--mk-ease-out, ease) both; }
+}
+@keyframes nc-tab-in {
+  from { transform: scaleX(0.4); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
 
 .nc__body { flex: 1 1 auto; min-height: 0; max-height: min(420px, 60vh); overflow-y: auto; }
 
@@ -817,6 +824,7 @@ onBeforeUnmount(() => {
   padding: 4px 6px;
   min-height: 36px;
   border-radius: var(--mk-radius-sm);
+  transition: background var(--mk-dur-fast, 120ms) ease, color var(--mk-dur-fast, 120ms) ease;
 }
 .nc__more:hover, .nc__readall:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
 
@@ -894,12 +902,20 @@ onBeforeUnmount(() => {
   transition: color 0.15s ease, background 0.15s ease;
 }
 .nc__task-expand:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, transparent); }
+.nc__task-expand svg { transition: transform var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease); }
 .nc__task-detail {
   margin-top: 8px;
   padding: 6px 4px 2px 8px;
   border-left: 2px solid color-mix(in srgb, var(--line) 80%, transparent);
   display: grid;
   gap: 3px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nc__task-detail { animation: nc-detail-in 0.14s var(--mk-ease-out, ease) both; }
+}
+@keyframes nc-detail-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
 }
 .nc__task-detail-row {
   display: flex;
@@ -966,6 +982,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   flex-shrink: 0;
+  transition: background var(--mk-dur-fast, 120ms) ease, color var(--mk-dur-fast, 120ms) ease;
 }
 .nc__task-dismiss:hover { background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red-ink); }
 .nc__feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
@@ -1034,6 +1051,7 @@ onBeforeUnmount(() => {
   min-height: 36px;
   padding: 5px 14px;
   cursor: pointer;
+  transition: background var(--mk-dur-fast, 120ms) ease;
 }
 .nc__retry:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
 

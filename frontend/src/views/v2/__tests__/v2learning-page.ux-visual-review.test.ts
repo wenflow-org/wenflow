@@ -82,7 +82,7 @@ describe('课堂页头部触控热区（#17/#21/#22/#62/#70）', () => {
   it('知识点按钮有可被读屏读到的 aria-label（走查复看未确认的点，按 #78 补上）', () => {
     // 名字要带上计数与开合状态，不能只写死一句「打开知识点」丢掉 <b> 里的进度
     const btn = /class="learn__kpbtn"[\s\S]{0,200}?aria-expanded/.exec(source)?.[0] ?? '';
-    expect(btn, '知识点按钮找不到 aria-label').toMatch(/:aria-label="`知识点 \$\{masteredCount\}\/\$\{knowledgePoints\.length\}/);
+    expect(btn, '知识点按钮找不到 aria-label').toMatch(/:aria-label="`知识点 \$\{displayMasteredCount\}\/\$\{knowledgePoints\.length\}/);
     expect(btn, 'aria-label 没有随浮窗开合变化').toMatch(/kpOpen \? '收起' : '打开'/);
   });
 });

@@ -34,6 +34,12 @@
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
+  transform-origin: top center;
+  animation: mk-pop-in var(--mk-dur-fast) var(--mk-ease-out);
+}
+@keyframes mk-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 .mk-listbox-opt {
   display: flex;
@@ -47,6 +53,7 @@
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* hover 与实际键盘焦点行（activeIndex）同一视觉：鼠标进哪行、↑↓ 停哪行，都是这块浅底 */
 .mk-listbox-opt.is-active {
@@ -149,6 +156,7 @@ html[data-theme='dark'] input:-webkit-autofill:focus {
 
 /* 减少动效：本文件是全局加载的第三块样式，兜底与 main.css / mk-primitives.css 同口径 */
 @media (prefers-reduced-motion: reduce) {
+  .mk-listbox-pop { animation: none; }
   .mk-select .mk-select__trigger,
   .mk-select__trigger > svg,
   .mk-listbox-opt { transition-property: none; }

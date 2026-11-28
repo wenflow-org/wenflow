@@ -42,7 +42,7 @@
    会把元素自身圆角抢写成 4px——胶囊 999→4、按钮 8→4、输入框 6→4，每次 Tab 聚焦形状都跳一下。
    outline 本就跟随元素自身圆角，删掉即可，视觉不变。 */
 :root :focus-visible {
-  outline: 2px solid rgba(47, 106, 224, 0.85);
+  outline: 2px solid var(--wf-border-focus);
   outline-offset: 2px;
 }
 
@@ -195,8 +195,9 @@
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
-.mk-status__action:hover { border-color: rgba(47, 106, 224, 0.4); }
+.mk-status__action:hover { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .mk-status__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .mk-status__actions .mk-status__action { margin-left: 0; }
@@ -212,7 +213,7 @@
   border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
 }
-.mk-status__meta-link:hover { color: var(--mk-blue-text); background: rgba(47, 106, 224, 0.08); }
+.mk-status__meta-link:hover { color: var(--mk-blue-text); background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }
 .mk-status__meta-link--on { color: var(--mk-meta-link-on-fg); background: var(--mk-meta-link-on-bg); }
 /* 暗色等价色：原为 LearnerCenter 页面私有补丁，收敛为全局。
    其余 5 处计数锚点此前无暗色覆盖 → rgba(47,106,224,.08) 落在深底上几乎不可见。 */
@@ -702,6 +703,8 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   border: 1px solid var(--mk-card-line);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
+  transform-origin: top right;
+  animation: mk-pop-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-menu__item {
   display: flex;
@@ -719,6 +722,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-menu__item:hover { background: var(--mk-menu-item-hover-bg); color: var(--mk-ink); }
 /* 禁用项（2026-11-11 管理台困惑测试 #42）：此前没有 disabled 样式，禁用项与可点项同色同指针。 */
@@ -754,6 +758,8 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
+  transform-origin: top right;
+  animation: mk-pop-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* 2026-11-04 390 窄屏走查：弹层锚在卡头右组内的触发钮（.mk-adv 只有按钮宽）上，right:0 +
    min-width:280 从按钮右缘（实测 x=256）向左顶出视口（popLeft=-24，标签/输入框左缘被裁，
@@ -1036,6 +1042,7 @@ html[data-density='compact'] .mk-table td.mk-num + td { padding-left: 20px; }
   height: 32px;
   box-sizing: border-box;
   line-height: 1.4;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out);
 }
 /* 下拉筛选：固定最小宽度，避免选中不同长度选项时 select 宽度跳动导致布局抖动。
    另给原生箭头留专属空档（1.75em，随字号缩放）：Chrome 的固有宽度把「文字 + 箭头」
@@ -1110,6 +1117,10 @@ html[data-density='compact'] .mk-table td.mk-num + td { padding-left: 20px; }
 .mk-pill:hover {
   color: var(--mk-blue-text);
   border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
+}
+.mk-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 /* 胶囊里的图标（多选开关激活时的勾、已应用视图的叉）：文字两侧各留 4px，
    不靠源码里的空格排版（空格在不同字宽下会挤成 0 或撑开）。
@@ -1197,7 +1208,7 @@ html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
 .mk-pill--active > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
 .mk-pillselect:hover .mk-pillselect__txt { color: var(--mk-blue-text); }
 .mk-pill--active:hover > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
-.mk-pillselect:focus-visible { outline: none; border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.mk-pillselect:focus-visible { outline: none; border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
 .mk-pillselect__pick > svg {
   position: absolute;
   right: 0;
@@ -1283,6 +1294,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   padding: 4px 8px;
   border-radius: var(--mk-radius-sm);
   white-space: nowrap;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-link:hover { background: var(--mk-hover-surface); }
 /* 2026-11-09 全站巡检 准则5（深色模式对比度）：--mk-blue 在暗色档被「主按钮蓝底白字」
@@ -1405,6 +1417,7 @@ html[data-theme='dark'] .mk-link,
   transition: color 0.14s ease, border-color 0.14s ease;
 }
 .tab:hover { color: var(--mk-ink); }
+.tab:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .tab[aria-selected='true'] { color: var(--mk-blue-text); border-bottom-color: var(--mk-blue-text); }
 .tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
 .tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
@@ -1472,8 +1485,11 @@ html[data-theme='dark'] .mk-link,
   font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out);
 }
-.mk-empty__action:hover { background: var(--mk-blue-bg-strong); }
+.mk-empty__action:hover:not(:disabled) { background: var(--mk-blue-fill-hover); }
+.mk-empty__action:active:not(:disabled) { transform: scale(0.98); }
+.mk-empty__action:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .mk-empty__action:disabled { cursor: default; opacity: 0.6; }
 
 /* 错误态空态（R3 的第三种状态）：标题用正文色、图标底色换成红系，
@@ -1604,6 +1620,7 @@ html[data-theme='dark'] .mk-link,
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-seg__item--active { background: var(--mk-pill-active-bg); color: var(--mk-ink); /* 2026-10-02：`0 1px 2px rgba(23,32,51,.1)` 是三档之外的第四档（色值 23,32,51 也不在调色板里）。激活分段要的是「轻微抬起」，正是 raised 档的职责，改引 token。 */ box-shadow: var(--mk-shadow-sm); }
 
@@ -1616,15 +1633,16 @@ html[data-theme='dark'] .mk-link,
   display: grid;
   place-items: center;
   padding: 20px;
+  animation: mk-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-modal__panel {
   width: min(var(--mk-modal-w, 480px), 100%);
   max-height: calc(100vh - 60px);
   /* 头部/底部固定，仅 body 滚动：避免内容超长时把底部主操作按钮推出视口 */
   overflow: hidden;
-  /* 入场动画（2026-09-26 弹层对齐）：与抽屉 mk-drawer-in 0.18s 同词汇（fade+位移），
+  /* 入场动画（2026-09-26 弹层对齐）：与抽屉 mk-drawer-in 同词汇（fade+位移），
      此前弹窗硬切、抽屉滑入，开合观感割裂；reduce-motion 由文件末尾全局兜底关停 */
-  animation: mk-modal-in 0.16s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+  animation: mk-modal-in var(--mk-dur) var(--mk-ease-out);
   background: var(--mk-surface, #fff);
   border-radius: var(--mk-radius-modal);
   box-shadow: var(--mk-shadow-modal);
@@ -1659,8 +1677,9 @@ html[data-theme='dark'] .mk-link,
   line-height: 1;
   flex-shrink: 0;
   font-size: var(--mk-fs-emphasis);
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
-.mk-modal__close:hover { background: var(--mk-modal-close-hover-bg); }
+.mk-modal__close:hover { background: var(--mk-modal-close-hover-bg); color: var(--mk-ink); }
 .mk-modal__body { padding: 16px 18px; display: grid; gap: 14px; overflow-y: auto; min-height: 0; }
 .mk-modal__foot {
   display: flex;
@@ -1702,6 +1721,7 @@ html[data-theme='dark'] .mk-link,
   font: inherit;
   font-size: var(--mk-fs-body);
   outline: none;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-field__input:focus,
 .mk-field__select:focus,
@@ -1726,6 +1746,7 @@ html[data-theme='dark'] .mk-link,
   font-size: var(--mk-fs-body);
   outline: none;
   box-sizing: border-box;
+  transition: border-color var(--mk-dur-fast) var(--mk-ease-out), box-shadow var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-input:focus { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-focus-ring); }
 .mk-input:disabled { background: var(--mk-input-disabled-bg); color: var(--mk-faint, #5f6f8c); cursor: not-allowed; }
@@ -1757,6 +1778,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   font-size: var(--mk-fs-body);
   font-weight: 600;
   cursor: pointer;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
 .mk-btn:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
@@ -1826,10 +1848,10 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 /* 按压反馈：按钮/状态条操作/筛选胶囊/链接按钮（SPEC §0.5：:active 只允许
    scale(0.98) 类按压反馈；原 translateY(1px) 下沉属规范外位移，已换成缩放。
    transform 不进 transition——无渐变可过渡，按下即时生效，同 .mk-kpi--clickable 先例） */
-.mk-btn:active,
-.mk-status__action:active,
-.mk-pill:active,
-.mk-link:active {
+.mk-btn:active:not(:disabled),
+.mk-status__action:active:not(:disabled),
+.mk-pill:active:not(:disabled),
+.mk-link:active:not(:disabled) {
   transform: scale(0.98);
 }
 
@@ -1875,7 +1897,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(47, 106, 224, 0.25);
+  border: 2px solid color-mix(in srgb, var(--mk-blue) 25%, transparent);
   border-top-color: var(--mk-blue, #2f6ae0);
   border-radius: 50%;
   animation: mk-spin 0.7s linear infinite;
@@ -1912,6 +1934,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   position: absolute;
   inset: 0;
   background: var(--wf-overlay);
+  animation: mk-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-drawer__panel {
   position: relative;
@@ -1923,7 +1946,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   background: var(--mk-surface, #fff);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-drawer);
-  animation: mk-drawer-in 0.18s ease;
+  animation: mk-drawer-in var(--mk-dur) var(--mk-ease-out);
   /* 子元素不得撑开面板或越界（宽内容只在 __body 内滚动） */
   min-width: 0;
   overflow: hidden;
@@ -1957,6 +1980,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   display: grid;
   place-items: center;
   line-height: 1;
+  transition: background var(--mk-dur-fast) var(--mk-ease-out), color var(--mk-dur-fast) var(--mk-ease-out);
 }
 .mk-drawer__close:hover { background: var(--mk-drawer-close-hover-bg); color: var(--mk-ink, #1a2a44); }
 .mk-drawer__body {
@@ -2312,7 +2336,7 @@ body.admin-route pre { border: 0; }
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .mk-backtop--show { opacity: 1; pointer-events: auto; transform: none; }
-.mk-backtop:hover { color: var(--mk-blue, #2f6ae0); border-color: rgba(47, 106, 224, 0.4); }
+.mk-backtop:hover { color: var(--mk-blue, #2f6ae0); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .mk-backtop__icon { font-size: var(--mk-fs-micro); line-height: 1; }
 @media (min-width: 2000px) {
   .mk-backtop { padding: 10px 16px; right: 28px; bottom: 32px; }
@@ -2362,6 +2386,15 @@ body.admin-route pre { border: 0; }
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-pop);
   font-size: var(--mk-fs-body);
+  animation: mk-bar-in var(--mk-dur) var(--mk-ease-out);
+}
+@keyframes mk-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mk-bar-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
 }
 /* 「已选 N 项」读数：正文色、常规字重；不参与按钮组，用右侧内衬与按钮拉开 */
 .mk-batchbar__count {

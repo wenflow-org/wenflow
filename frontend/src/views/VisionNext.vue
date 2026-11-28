@@ -122,7 +122,7 @@
     <footer class="vn-foot">
       <div class="vn-shell vn-foot__in">
         <div class="vn-foot__brand">
-          <img src="/favicon.png" alt="" />
+          <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" />
           <span>问流 WenFlow</span>
           <em>从问题到学习路径</em>
         </div>
@@ -140,9 +140,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { hasUserSession } from '@/utils/api'
+import { useIsDark } from '@/composables/useIsDark'
 import MarketingNav from '@/components/MarketingNav.vue'
 
 const loggedIn = ref(false)
+const isDark = useIsDark()
 
 const caps = [
   { n: '01', t: '为什么没有预置课程', d: '许多学习中途停滞，往往源于通用课程与个人当下的实际问题错位，学到一半发现难以应用。WenFlow 从具体问题出发，先澄清目标，再按需生成学习路径与单节内容。' },
@@ -243,7 +245,7 @@ onUnmounted(() => {
   text-decoration: none;
   border: 1px solid transparent;
   /* 平面化后按钮已无投影，transition 里一并去掉 box-shadow */
-  transition: transform 0.2s var(--ease);
+  transition: transform 0.2s var(--ease), background 0.2s var(--ease), border-color 0.2s var(--ease), color 0.2s var(--ease);
   width: fit-content;
 }
 /* 「友好而平」：取消 hover 上浮，悬停只允许改背景/描边/文字；
@@ -256,7 +258,6 @@ onUnmounted(() => {
 .vn-btn--primary {
   color: var(--text-on-primary);
   background: var(--blue);
-  transition: transform 0.2s var(--ease), background 0.2s var(--ease);
 }
 .vn-btn--primary:hover {
   background: var(--blue-deep);
@@ -266,6 +267,10 @@ onUnmounted(() => {
   color: var(--blue-deep);
   background: var(--surface);
   border: 1px solid var(--line);
+}
+.vn-btn--light:hover {
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 32%, var(--line));
 }
 .vn-btn--lg {
   /* 原型 wf-pbtn--lg：52 / 0 26 / 16px */

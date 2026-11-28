@@ -158,9 +158,9 @@ export function buildOpeningActionChips(
     // 没有候选时宁可不出选项，让 question 单独成一条行动线。
     if (mode === 'predict') return [];
     if (mode === 'self-assess') {
-      return [{ text: '先讲这一回合' }, { text: '拿这一回合试一小步' }, { text: '跳过自评，直接练' }];
+      return [{ text: '先讲背景和要点' }, { text: '拿个例子试一小步' }, { text: '跳过自评，直接练' }];
     }
-    return [{ text: '先看这一回合' }, { text: '我先试一小步' }, { text: '先讲要点，再拿例子练' }];
+    return [{ text: '从背景和核心概念讲起' }, { text: '先带我看本节材料' }, { text: '我有基础，直接出题测我' }];
   }
   if (mode === 'predict') {
     // 同上：这里没有 question/材料可抽，硬造只会得到空转项。
@@ -288,6 +288,10 @@ function compactOpeningChip(text: string, max = 18): string {
 }
 
 
+function hasDirectQuestionInMessage(message: string): boolean {
+  return /[?？]/.test(String(message || ''));
+}
+
 /**
  * 开场「一条行动线」契约的确定性兜底（2026-11-02 用户反馈「开场很不舒服」）：
  * - predict：选项必须是本题的具体立场/候选；流程词一律丢弃，抽不到候选就让 question 单独成线；
@@ -324,6 +328,9 @@ export function ensureOpeningActionLine(
   // 2026-11-25 实机事故：模型/兜底都可能把长概念截成「同一问题下两…」；带省略号的
   // 动作一旦被点，就会作为用户消息原样发进课堂。这里整组丢弃，改用不带名字的兜底动作。
   const hasTruncatedChip = provided.some((item) => /…|\.{3}/.test(item.text));
+  // 非 predict 模式下，只要 message 里已经直接进入主题并抛出了明确问题，
+  // 就不再在下方挂无关的开场快选按钮，让学习者直接围绕内容接话。
+  const messageHasDirectQuestion = Boolean(message) && hasDirectQuestionInMessage(message);
   let replies: Array<{ text: string }>;
   if (mode === 'predict') {
     // 预测题：选项必须是**本题的立场/候选**；流程词已在上方滤掉。
@@ -356,13 +363,17 @@ export function ensureOpeningActionLine(
       replies = [];
     }
   } else {
-    const actions = provided.length > 0 && !hasTruncatedChip ? provided : buildOpeningActionChips(context, mode);
-    replies = actions
-      // 没有 question 时，「自评」无从指代（学生没被问到任何东西）→ 剥掉那半句
-      .map((item) => ({ text: keepQuestion ? item.text : stripDanglingSelfAssess(item.text) }));
-    if (!replies.length) {
-      replies = buildOpeningActionChips(context, mode)
+    if (messageHasDirectQuestion) {
+      replies = [];
+    } else {
+      const actions = provided.length > 0 && !hasTruncatedChip ? provided : buildOpeningActionChips(context, mode);
+      replies = actions
+        // 没有 question 时，「自评」无从指代（学生没被问到任何东西）→ 剥掉那半句
         .map((item) => ({ text: keepQuestion ? item.text : stripDanglingSelfAssess(item.text) }));
+      if (!replies.length) {
+        replies = buildOpeningActionChips(context, mode)
+          .map((item) => ({ text: keepQuestion ? item.text : stripDanglingSelfAssess(item.text) }));
+      }
     }
   }
   // 非 predict 模式：有动作选项时 question 让位（两处入口会让学生无从选择）；
@@ -372,8 +383,8 @@ export function ensureOpeningActionLine(
     : '';
   const finalReplies = (questionOut ? replies : replies.map((item) => ({ text: stripDanglingSelfAssess(item.text) })))
     .filter((item) => !isMetaOpeningChip(item.text));
-  // 动作模式被流程词清空后仍有兜底：按本课内容补动作；predict 不补（选项必须来自本屏候选）。
-  const safeReplies = finalReplies.length || mode === 'predict'
+  // 动作模式被流程词清空后仍有兜底：按本课内容补动作；predict 与「message 已直出问题」不补。
+  const safeReplies = finalReplies.length || mode === 'predict' || messageHasDirectQuestion
     ? finalReplies
     : buildOpeningActionChips(context, mode)
       .map((item) => ({ text: questionOut ? item.text : stripDanglingSelfAssess(item.text) }))
@@ -621,8 +632,10 @@ export function buildDeterministicOpening(context: TeachingScenarioContext): Tea
   // 标题独立成行放在目标位，正文用自然的课堂开场话术；节奏承诺（先讲要点再练）与
   // 快选项动作对齐——学生点「先讲要点」时教师必须兑现（见 teaching-turn 节奏请求规则）。
   const goalLine = context.topic || context.taskTitle || '把本节的关键点讲清楚';
+  const desc = String(context.taskDescription || '').trim();
+  const lead = desc && desc !== goalLine ? `\n${desc}` : '';
   return {
-    message: `开始这节课。目标只有一句话：\n**${goalLine}**\n我先讲要点，再拿例子练；卡住随时打断我。`,
+    message: `这节课我们聚焦一个问题：\n**${goalLine}**${lead}\n你可以点下面一个切入方式，或者直接说说你现在想先弄明白哪一块。`,
     // 动作选项必须带本课内容（2026-11-02 用户反馈「快选没什么意义」）：此前写死的
     // "准备好了，开始 / 先讲讲目标 / 换种方式讲解" 放哪节课都成立，学生看不出点下去会得到什么。
     quickReplies: buildOpeningActionChips(context, 'example-first'),
@@ -707,7 +720,7 @@ export function buildEndWrapupFallback(session: TeachingSessionRecord, durationM
  */
 export const OPENING_GENERATION_TIMEOUT_MS = Math.max(
   5_000,
-  Number(process.env.OPENING_GENERATION_TIMEOUT_MS) || 30_000,
+  Number(process.env.OPENING_GENERATION_TIMEOUT_MS) || 60_000,
 );
 /** 收束兜底：回合数达到该值且目标集均分达标、无 pending 时放行，保证课堂不会「永不收敛」 */
 export const COMPLETION_TURNS_BACKSTOP = 8;

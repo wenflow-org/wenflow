@@ -1376,6 +1376,7 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 /* 可点线索：悬停只换边框与底色（全站判例，不做位移）。
    阶段卡不挂行尾箭头：卡间连线已经表达「下一环」，卡内再画一个同向箭头是重复（2026-11-02 评审 R4） */
 .loop__step:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); background: var(--mk-btn-hover-bg); }
+.loop__step:active { transform: scale(0.98); }
 .loop__step:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
@@ -1436,7 +1437,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .feedrow { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--mk-line); }
 .feedrow:last-child { border-bottom: 0; }
 .feedrow--bad .t { color: var(--mk-red); }
-.feedrow--link { cursor: pointer; border-radius: var(--mk-radius-sm); }
+.feedrow--link { cursor: pointer; border-radius: var(--mk-radius-sm); transition: background var(--mk-dur-fast) var(--mk-ease-out); }
 .feedrow--link:hover { background: var(--mk-btn-hover-bg); }
 .feedrow__time {
   width: 62px; flex: none; color: var(--mk-faint);

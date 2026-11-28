@@ -388,6 +388,11 @@ onMounted(() => {
   cursor: pointer;
   transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
+.filter:not(.filter--active):hover {
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  color: var(--blue-deep);
+  border-color: color-mix(in srgb, var(--blue) 30%, var(--line));
+}
 .filter--active { border-color: transparent; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue-deep); }
 /* 清除筛选：文字按钮，不参与两枚 role=group（它是两组共用的退路，不属于任一维度） */
 .filters__clear {
@@ -402,6 +407,7 @@ onMounted(() => {
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
+  transition: color var(--mk-dur-fast, 120ms) ease;
 }
 .filters__clear:hover { color: var(--blue); }
 
@@ -445,6 +451,7 @@ onMounted(() => {
   height: 100%;
   border-radius: 999px;
   background: var(--blue);
+  transition: width var(--wf-duration-slow, 0.4s) var(--mk-ease-out, ease);
 }
 
 /* ── 42×42 类型色块（原型 wf-ach__icon 853-862）──
@@ -524,17 +531,19 @@ onMounted(() => {
 }
 
 /* ── Unlock stagger animation ── */
-.ach-card--unlocked {
-  animation: ach-unlock 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+@media (prefers-reduced-motion: no-preference) {
+  .ach-card--unlocked {
+    animation: ach-unlock 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .ach-card--unlocked:nth-child(1) { animation-delay: 0ms; }
+  .ach-card--unlocked:nth-child(2) { animation-delay: 60ms; }
+  .ach-card--unlocked:nth-child(3) { animation-delay: 120ms; }
+  .ach-card--unlocked:nth-child(4) { animation-delay: 180ms; }
+  .ach-card--unlocked:nth-child(5) { animation-delay: 240ms; }
+  .ach-card--unlocked:nth-child(6) { animation-delay: 300ms; }
+  .ach-card--unlocked:nth-child(7) { animation-delay: 360ms; }
+  .ach-card--unlocked:nth-child(8) { animation-delay: 420ms; }
 }
-.ach-card--unlocked:nth-child(1) { animation-delay: 0ms; }
-.ach-card--unlocked:nth-child(2) { animation-delay: 60ms; }
-.ach-card--unlocked:nth-child(3) { animation-delay: 120ms; }
-.ach-card--unlocked:nth-child(4) { animation-delay: 180ms; }
-.ach-card--unlocked:nth-child(5) { animation-delay: 240ms; }
-.ach-card--unlocked:nth-child(6) { animation-delay: 300ms; }
-.ach-card--unlocked:nth-child(7) { animation-delay: 360ms; }
-.ach-card--unlocked:nth-child(8) { animation-delay: 420ms; }
 
 @keyframes ach-unlock {
   from { opacity: 0; transform: scale(0.92) translateY(8px); }
@@ -614,8 +623,8 @@ onMounted(() => {
   z-index: 9999;
   pointer-events: none;
 }
-.toast-enter-active { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-.toast-leave-active { transition: all 0.2s ease-in; }
+.toast-enter-active { transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+.toast-leave-active { transition: opacity 0.2s ease-in, transform 0.2s ease-in; }
 .toast-enter-from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.95); }
 .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.97); }
 </style>

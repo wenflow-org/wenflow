@@ -131,7 +131,7 @@ const isDark = useIsDark();
 const DOMAINS: { label: string; sub: string; icon: Component }[] = [
   { label: '运营', sub: '运营待办、反馈、成就与公告，以及系统设置、用户账号', icon: Megaphone },
   { label: '学习', sub: '目标对话、学习路径、教学会话、学习状态与复习积压', icon: Users },
-  { label: '仿真', sub: '虚拟学习者的运行与学习者卡库', icon: FlaskConical },
+  { label: '仿真', sub: '虚拟学习者运行、会话评审报告与学习者卡库', icon: FlaskConical },
   { label: 'Skill', sub: '字段流转、Skill 目录与插件', icon: Sparkles },
   { label: '观测与排查', sub: '执行日志、审计日志、成本分析与健康中心', icon: ScrollText }
 ]
@@ -348,6 +348,7 @@ onMounted(() => {
   font-weight: 600;
   color: var(--faint);
   text-decoration: none;
+  transition: color 0.15s ease;
 }
 
 .auth__back:hover {
@@ -452,11 +453,16 @@ onMounted(() => {
   cursor: pointer;
   display: grid;
   place-items: center;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 
 .field__eye:hover {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--mk-blue) 7%, transparent);
+}
+
+.field__eye:active {
+  transform: translateY(-50%) scale(0.94);
 }
 
 /* 审核 #31（2026-10-06）：整行 18px / 复选框 15px 低于本文件为「返回首页」定的 24px 可点下限，
@@ -491,6 +497,11 @@ onMounted(() => {
   border-radius: var(--mk-radius-md);
   padding: 9px 22px;
   font-size: var(--mk-fs-emphasis);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.btn-primary--block:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .btn-primary--block:disabled {
@@ -554,19 +565,39 @@ onMounted(() => {
 }
 .cpreview__row {
   display: grid;
-  grid-template-columns: 20px 1fr;
-  gap: 10px;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
   align-items: start;
 }
 .cpreview__ico {
   display: inline-flex;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
+  border-radius: var(--mk-radius-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
   color: var(--muted);
 }
 .cpreview__ico svg { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  .auth__card {
+    animation: admin-auth-in 0.45s var(--mk-ease-out) both;
+  }
+  .errorbar,
+  .field__error {
+    animation: admin-alert-in 0.18s var(--mk-ease-out) both;
+  }
+}
+@keyframes admin-auth-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes admin-alert-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
 .cpreview__text {
   display: grid;
   gap: 2px;

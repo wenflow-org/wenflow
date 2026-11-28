@@ -839,7 +839,7 @@ export class ProfileAggregator {
       ? ''
       // 同口径（收尾）：原为绝对阈值 `lf > 4`，与 curriculumControls 的 ACWR 判据不一致。
       : profile.preferences.sessionLength === 'short' || classifyLoad(profile.learning).fatigueRisk !== 'low'
-        ? '任务宜拆成 15-25 分钟的小闭环，优先保证完成感和理解稳定。'
+        ? '按知识结构与概念完整度自然推进，不强行按固定分钟数切碎内容，节奏由学习者实际掌握情况决定。'
         : '';
 
     return {

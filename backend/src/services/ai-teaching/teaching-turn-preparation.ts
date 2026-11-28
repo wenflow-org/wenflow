@@ -18,6 +18,7 @@ import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeaching
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { LessonReport } from './lesson-contract';
 import { parseExitTicketSubmission, type ExitTicket, type LessonContract, type LessonEvidence } from './lesson-contract';
+import { buildLessonAnchor } from './lesson-anchor';
 import { judgeCheckpointAnswer } from './teaching-checkpoint';
 
 /**
@@ -240,6 +241,7 @@ const OPENING_PRIOR_CLAIM_CONSTRAINT = '本课没有任何可核验的上一课�
 
 export async function generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
   const runtimeSignals = deriveTeachingRuntimeSignals(context);
+  const anchor = buildLessonAnchor(context);
   const openingMode: TeachingOpening['mode'] = context.taskType === 'project'
     || context.taskType === 'practice'
     || runtimeSignals.confidenceLevel === 'anxious'
@@ -284,9 +286,17 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
             taskProfile: {
               learningObjectives: context.taskProfile.learningObjectives,
               coreConcept: context.taskProfile.coreConcept,
+              milestoneTheme: context.taskProfile.coreConcept,
             },
           }
           : {}),
+        lessonAnchor: {
+          mainQuestion: anchor.mainQuestion,
+          criteria: anchor.criteria.map((c) => c.text),
+          learnerBaseline: anchor.learnerBaseline,
+          baselineNote: anchor.baselineNote,
+        },
+        scopeGuard: '开场只聚焦本节 taskTitle 与 lessonAnchor 要解决的问题，不要把所属阶段的宏大主题或后面几节课才讲的内容承诺进本节开场。',
         // #181：开场生成器此前不在输入白名单里带预测 ⇒ 预测对「学生第一印象/首轮节奏」
         // 零作用（1–2 回合的短课几乎等于没有回喂）。缺省不进载荷（与 recap 同一口径）。
         ...(context.learnerPrediction ? { learnerPrediction: context.learnerPrediction } : {}),
@@ -297,34 +307,51 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
           callerAgentId: AI_TEACHING_AGENT_ID,
         },
     };
-    /** 开场落地的统一顺序：description 编号材料 → taskMaterial 本体 → 示例口径。 */
-    const deferMaterialToBoard = process.env.LESSON_PHASE_PROTOCOL !== '0' && context.taskMode !== 'productiveFailure';
+    /** 开场落地的统一顺序：description 编号材料 → taskMaterial 本体 → 示例口径。
+     * 通用材料协议：只有 predict 预测模式才裁剪为题面首句防剧透；其余教师领读/自由学习/教材课一律保留完整材料，由前端按长短与课堂阶段优雅呈现，不再 400 字腰斩。 */
+    const deferMaterialToBoard = (opening: TeachingOpening) =>
+      process.env.LESSON_PHASE_PROTOCOL !== '0'
+      && context.taskMode !== 'productiveFailure'
+      && opening.mode === 'predict';
     const groundOpening = (opening: TeachingOpening): TeachingOpening => ensureOpeningSampleHonesty(
       ensureOpeningTaskMaterial(
         ensureOpeningMaterialGrounding(opening, context),
         context,
-        { deferToBoard: deferMaterialToBoard },
+        { deferToBoard: deferMaterialToBoard(opening) },
       ),
       context,
     );
     let parsed: any = null;
-    try {
-      const result = await withTimeoutSignal(
-        (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening'], openingInput, { abortSignal: signal }),
-        OPENING_GENERATION_TIMEOUT_MS,
-        'OPENING_GENERATION_TIMEOUT'
-      );
-      parsed = result.success && result.output ? result.output : null;
-    } catch (error) {
-    // 开场生成失败：降级为确定性开场兜底，保证开课链路在模型不可用时仍可用。
-    logger.warn('[AITeaching] 开场交互块生成失败，降级为确定性开场', {
-      error: error instanceof Error ? error.message : String(error),
-      userId: context.userId,
-      taskId: context.taskId,
-      topic: context.topic,
-    });
-    return groundOpening(buildDeterministicOpening(context));
-  }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await withTimeoutSignal(
+          (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening'], openingInput, { abortSignal: signal }),
+          OPENING_GENERATION_TIMEOUT_MS,
+          'OPENING_GENERATION_TIMEOUT'
+        );
+        if (result.success && result.output) {
+          parsed = result.output;
+          break;
+        }
+      } catch (error) {
+        if (attempt === 0) {
+          logger.warn('[AITeaching] 开场交互块生成首次失败，自动重试一次', {
+            error: error instanceof Error ? error.message : String(error),
+            userId: context.userId,
+            taskId: context.taskId,
+          });
+          continue;
+        }
+        // 开场生成两次均失败：降级为确定性开场兜底，保证开课链路在模型不可用时仍可用。
+        logger.warn('[AITeaching] 开场交互块生成失败，降级为确定性开场', {
+          error: error instanceof Error ? error.message : String(error),
+          userId: context.userId,
+          taskId: context.taskId,
+          topic: context.topic,
+        });
+        return groundOpening(buildDeterministicOpening(context));
+      }
+    }
 
   if (parsed) {
     // 「一条行动线」契约的确定性兜底（2026-11-02 用户反馈「开场很不舒服」）：

@@ -359,18 +359,30 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
     // 2026-11-27 用户口径：半途点「重新开始」就是要一张白纸，界面与开场都不该提醒
     // 「你之前开过、没走完」；只有真正完整学完（有 wrapup）才在开场半句带过。
 
-    // 回退：同路径最近完成课（排除当前任务，原行为）
-    const lastEnded = await prisma.teaching_sessions.findFirst({
+    // 回退：同路径最近完成课（限定在当前活跃任务内，排除重排后已废弃的旧任务历史）
+    const activePathTasks = await prisma.subtasks.findMany({
       where: {
+        milestoneId: { in: pathMilestones.map((m) => m.id) },
         userId,
-        learningPathId,
-        taskId: { not: currentTaskId },
-        status: 'completed',
-        wrapup: { not: null },
       },
-      orderBy: { endTime: 'desc' },
-      select: { topic: true, wrapup: true, endTime: true },
+      select: { id: true },
     });
+    const activeOtherTaskIds = activePathTasks
+      .map((t: { id: string }) => t.id)
+      .filter((id: string) => id !== currentTaskId);
+    const lastEnded = activeOtherTaskIds.length > 0
+      ? await prisma.teaching_sessions.findFirst({
+          where: {
+            userId,
+            learningPathId,
+            taskId: { in: activeOtherTaskIds },
+            status: 'completed',
+            wrapup: { not: null },
+          },
+          orderBy: { endTime: 'desc' },
+          select: { topic: true, wrapup: true, endTime: true },
+        })
+      : null;
     if (lastEnded) {
       const recap = toRecap(lastEnded, 'last-any');
       if (recap) {

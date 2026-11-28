@@ -1871,7 +1871,7 @@ function normalizeConceptMapSpec(raw: Record<string, unknown>): Record<string, u
     const from = toFigureLabel(edge.from, 24);
     const to = toFigureLabel(edge.to, 24);
     const label = toFigureLabel(edge.label, 10);
-    if (!from || !to || !label || from === to || !seen.has(from) || !seen.has(to)) continue;
+    if (!from || !to || from === to || !seen.has(from) || !seen.has(to)) continue;
     // V8（外盲评：两条边挤成一条，学生分不清 A→B 是一个关系还是两个）：同端点合并，
     // 关系名并成「A、B」——并列关系本来就是一个关系
     const key = `${from}${to}`;
@@ -1879,15 +1879,17 @@ function normalizeConceptMapSpec(raw: Record<string, unknown>): Record<string, u
     if (existing !== undefined) {
       const prev = edges[existing];
       const prevLabel = String(prev.label ?? '');
-      if (!prevLabel.split('、').includes(label) && prevLabel.length + label.length + 1 <= 10) {
+      if (label && prevLabel && !prevLabel.split('、').includes(label) && prevLabel.length + label.length + 1 <= 10) {
         prev.label = `${prevLabel}、${label}`;
+      } else if (label && !prevLabel) {
+        prev.label = label;
       }
       continue;
     }
     const tone = normalizeTone(edge.tone, ['accent', 'ok', 'warn', 'neutral']);
     const dash = normalizeDash(edge.dash);
     edgeByKey.set(key, edges.length);
-    edges.push({ from, to, label, ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) });
+    edges.push({ from, to, ...(label ? { label } : {}), ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) });
     if (edges.length >= 14) break;
   }
   if (!edges.length) return null;

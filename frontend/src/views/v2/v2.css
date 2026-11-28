@@ -97,7 +97,10 @@ html, body {
   .nc__panel,
   .figure-zoom__canvas,
   .diagram-zoom__canvas,
-  .mk-listbox-pop
+  .mk-listbox-pop,
+  .side-modal,
+  .side-modal *,
+  .boardmodal__body
 ) {
   /* 重置继承来的非 auto 值，恢复 WebKit 自绘能力；Firefox 分支（文末）会重新给出
      thin + 同色滑块，同权重后出现，覆盖这条。 */
@@ -111,7 +114,10 @@ html, body {
   .nc__panel,
   .figure-zoom__canvas,
   .diagram-zoom__canvas,
-  .mk-listbox-pop
+  .mk-listbox-pop,
+  .side-modal,
+  .side-modal *,
+  .boardmodal__body
 )::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -124,7 +130,10 @@ html, body {
   .nc__panel,
   .figure-zoom__canvas,
   .diagram-zoom__canvas,
-  .mk-listbox-pop
+  .mk-listbox-pop,
+  .side-modal,
+  .side-modal *,
+  .boardmodal__body
 )::-webkit-scrollbar-track,
 :is(
   .v2-page,
@@ -134,7 +143,10 @@ html, body {
   .nc__panel,
   .figure-zoom__canvas,
   .diagram-zoom__canvas,
-  .mk-listbox-pop
+  .mk-listbox-pop,
+  .side-modal,
+  .side-modal *,
+  .boardmodal__body
 )::-webkit-scrollbar-corner {
   background: transparent;
   border-radius: var(--mk-radius-pill);
@@ -147,7 +159,10 @@ html, body {
   .nc__panel,
   .figure-zoom__canvas,
   .diagram-zoom__canvas,
-  .mk-listbox-pop
+  .mk-listbox-pop,
+  .side-modal,
+  .side-modal *,
+  .boardmodal__body
 )::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--ink) 22%, transparent);
   border-radius: var(--mk-radius-pill);
@@ -160,7 +175,10 @@ html, body {
   .nc__panel,
   .figure-zoom__canvas,
   .diagram-zoom__canvas,
-  .mk-listbox-pop
+  .mk-listbox-pop,
+  .side-modal,
+  .side-modal *,
+  .boardmodal__body
 )::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--ink) 34%, transparent);
 }
@@ -173,7 +191,10 @@ html, body {
   .nc__panel,
   .figure-zoom__canvas,
   .diagram-zoom__canvas,
-  .mk-listbox-pop
+  .mk-listbox-pop,
+  .side-modal,
+  .side-modal *,
+  .boardmodal__body
 )::-webkit-scrollbar-button {
   display: none;
   width: 0;
@@ -191,7 +212,10 @@ html, body {
     .nc__panel,
     .figure-zoom__canvas,
     .diagram-zoom__canvas,
-    .mk-listbox-pop
+    .mk-listbox-pop,
+    .side-modal,
+    .side-modal *,
+    .boardmodal__body
   ) {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
@@ -282,32 +306,6 @@ html, body {
    的暗色块自动翻转，这条覆写与上面 :root 那条一样成了多余的半透明档，删。
    同族的 rgba(15,22,32,.88) 是第三份「暗色顶栏底色」写法（另两份见本文件
    顶部与 V2Nav.vue 注释），三份终归一处。 */
-[data-theme='dark'] .v2nav__avatar:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-[data-theme='dark'] .v2nav__menu {
-  background: var(--surface, #1e1e20);
-  border-color: var(--line, #2d2d2f);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-}
-[data-theme='dark'] .v2nav__menu a,
-[data-theme='dark'] .v2nav__menu button {
-  color: var(--ink, #efeff0);
-}
-[data-theme='dark'] .v2nav__menu a:hover,
-[data-theme='dark'] .v2nav__menu button:hover {
-  background: rgba(77, 139, 248, 0.1);
-}
-[data-theme='dark'] .v2nav__menu-danger {
-  color: #f28588 !important;
-  border-top-color: var(--line, #2d2d2f) !important;
-}
-
-/* 底部移动导航暗色适配（V2Nav 的 dock：类名 2026-09-30 由 v2nav__tabs 改 v2nav__dock） */
-[data-theme='dark'] .v2nav__dock {
-  background: rgba(15, 22, 32, 0.92);
-  border-top-color: var(--line, #2d2d2f);
-}
 
 /* ================= 暗色模式：V2GoalConversation 覆写 ================= */
 /* 以下仅保留非 scoped 元素（proposal/chat__show-proposal/scene-card）；
@@ -520,6 +518,7 @@ html, body {
   height: 100%;
   border-radius: 99px;
   background: linear-gradient(90deg, var(--blue), var(--cyan));
+  transition: width var(--wf-duration-slow) var(--mk-ease-out);
 }
 .v2-bar--lg {
   height: 8px;
@@ -588,11 +587,12 @@ html, body {
   font-weight: 700;
   color: var(--muted);
   cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease;
+  transition: transform var(--mk-dur-fast) var(--mk-ease-out), border-color var(--mk-dur) var(--mk-ease-out), color var(--mk-dur) var(--mk-ease-out), background var(--mk-dur) var(--mk-ease-out);
 }
 .v2-page .btn-ghost:not(:disabled):hover {
-  /* 原型 wf-btn--ghost:hover：边框/文字变色即可，无抬升 */
+  /* 原型 wf-btn--ghost:hover：边框/文字/浅底变色即可，无抬升 */
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
   color: var(--blue-deep);
 }
 .v2-page .btn-ghost:not(:disabled):active {
@@ -709,6 +709,8 @@ html, body {
   .v2-page.paths .paths__main > *,
   .v2-page.detail .detail__main > *,
   .v2-page.state .state__main > *,
+  .v2-page.km .km__main > *,
+  .v2-page.library .library__main > *,
   .v2-page.ach .ach__main > *,
   .v2-page.history .history__main > *,
   .v2-page.goal .entry > *,
@@ -719,6 +721,8 @@ html, body {
   .v2-page.paths .paths__main > *:nth-child(2),
   .v2-page.detail .detail__main > *:nth-child(2),
   .v2-page.state .state__main > *:nth-child(2),
+  .v2-page.km .km__main > *:nth-child(2),
+  .v2-page.library .library__main > *:nth-child(2),
   .v2-page.ach .ach__main > *:nth-child(2),
   .v2-page.history .history__main > *:nth-child(2),
   .v2-page.goal .entry > *:nth-child(2),
@@ -727,6 +731,8 @@ html, body {
   .v2-page.paths .paths__main > *:nth-child(3),
   .v2-page.detail .detail__main > *:nth-child(3),
   .v2-page.state .state__main > *:nth-child(3),
+  .v2-page.km .km__main > *:nth-child(3),
+  .v2-page.library .library__main > *:nth-child(3),
   .v2-page.ach .ach__main > *:nth-child(3),
   .v2-page.history .history__main > *:nth-child(3),
   .v2-page.goal .entry > *:nth-child(3),
@@ -735,6 +741,8 @@ html, body {
   .v2-page.paths .paths__main > *:nth-child(4),
   .v2-page.detail .detail__main > *:nth-child(4),
   .v2-page.state .state__main > *:nth-child(4),
+  .v2-page.km .km__main > *:nth-child(4),
+  .v2-page.library .library__main > *:nth-child(4),
   .v2-page.ach .ach__main > *:nth-child(4),
   .v2-page.history .history__main > *:nth-child(4),
   .v2-page.goal .entry > *:nth-child(4),
@@ -743,6 +751,8 @@ html, body {
   .v2-page.paths .paths__main > *:nth-child(n + 5),
   .v2-page.detail .detail__main > *:nth-child(n + 5),
   .v2-page.state .state__main > *:nth-child(n + 5),
+  .v2-page.km .km__main > *:nth-child(n + 5),
+  .v2-page.library .library__main > *:nth-child(n + 5),
   .v2-page.ach .ach__main > *:nth-child(n + 5),
   .v2-page.history .history__main > *:nth-child(n + 5),
   .v2-page.goal .entry > *:nth-child(n + 5),
@@ -751,6 +761,18 @@ html, body {
 @keyframes v2-rise {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes v2-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes v2-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes v2-jump-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ================= 空态占位（虚线框 + 居中说明，多页共用） ================= */
@@ -802,18 +824,18 @@ html, body {
   .v2-page.evaluation-page .evaluation-shell {
     max-width: var(--vp-container);
   }
-  /* goal 双栏对话布局不吃 1360：左右两栏各自收窄（2026-09-27 用户反馈），
-     组件内 ≥1500 档自管 1180 */
-  .v2-page.goal .work { max-width: 1180px; }
+  /* goal 双栏对话布局不吃 1360：左右两栏各自收窄（2026-09-27 用户反馈） */
+  .v2-page.goal .work { max-width: 1080px; }
   .v2-page.goal .entry { max-width: 1360px; }
   /* 2026-11-04 初始态内容列跟随容器加宽：.entry 已拓到 1360，但组件内 hero / 卡片 /
      输入框 / 最近会话仍钉在 640（初始态同列四条），2560 实测内容仅 736px、左右各空
-     约 900px，整块悬在中央。这里把同列四条一起拓到 960（仍窄于 1360 容器、留出边距，
-     行长可控），副标题的 640 上限一并放开以跟随列宽。 */
+     约 900px，整块悬在中央。这里把同列四条一起拓到 760（保持现代 AI 首页居中聚焦阅读宽度），
+     副标题的 640 上限一并放开以跟随列宽。 */
   .v2-page.goal main.entry .entry__hero,
   .v2-page.goal main.entry .entry__cards,
+  .v2-page.goal main.entry .resume,
   .v2-page.goal main.entry .composer--entry,
-  .v2-page.goal main.entry .recent { max-width: 960px; }
+  .v2-page.goal main.entry .recent { max-width: 760px; }
   .v2-page.goal main.entry .entry__hero p { max-width: none; }
   /* 入口态输入白盒/提示行跟随 960 列：组件内 ≥1101 的 760 阅读宽帽是给会话态消息列的，
      入口态列 640 时代它不生效；列拓到 960 后帽子露出来——场景卡 960 而白盒 760 居中
@@ -829,7 +851,7 @@ html, body {
 /* 2000+（2.5K / 4K@150%）：容器上限抬到 1520（× zoom1.15 ≈ 1748 渲染，占屏 68%）。
    只抬上限、不抬 zoom：字号维持 18.4px 的舒适档（用户 2026-11-07 拍板）。
    多出的 160px 由内部栅格自行消化（学习台 61/39 双栏、成就 4 列等本就流式）。 */
-@media (min-width: 2000px) {
+@media (min-width: 2400px) {
   :root { --vp-container: 1520px; }
 }
 
@@ -863,6 +885,11 @@ html, body {
 }
 @media (min-width: 3600px) {
   .v2-page { zoom: 1.3; --vp-zoom: 1.3; }
+}
+/* 带系统缩放的高分屏（Windows/macOS 125%/150% 缩放，dpr >= 1.2）：系统已完成物理像素放大，
+   不再叠加 CSS zoom，避免文字/顶栏/卡片被双重放大，同时保留各档容器宽度。 */
+@media (min-width: 1600px) and (max-width: 2799px) and (min-resolution: 1.2dppx) {
+  .v2-page { zoom: 1; --vp-zoom: 1; }
 }
 /* ⚠ zoom 会连 viewport 单位一起放大：zoom:1.15 下 height:100dvh 渲染出来是
    1.15 个视口高——锁视口的页面（goal/learn）在 2K/4K 会比屏幕高一截、输入框

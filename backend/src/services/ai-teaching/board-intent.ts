@@ -493,6 +493,15 @@ export function applyBoardIntent<T extends Record<string, unknown>>(spec: T, int
   delete out.takeaway;
   delete out.delta;
   delete out.note;
+  if (intent.askAbout === 'condition' && Array.isArray(out.edges)) {
+    out.edges = (out.edges as Array<Record<string, unknown>>).map((edge) => {
+      if (!edge || typeof edge !== 'object') return edge;
+      if (!('label' in edge) || edge.label == null) return edge;
+      const next = { ...edge };
+      delete next.label;
+      return next;
+    });
+  }
   const stripped = stripJudgmentSubs(out) as Record<string, unknown>;
   const marked = intent.hypothetical ? markHypothetical(stripped) : stripped;
   if (intent.askAbout !== 'fork') return marked as T;

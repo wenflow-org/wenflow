@@ -80,7 +80,7 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
           <div class="msg__bubble msg__bubble--html" v-html="htmlFor(m)"></div>
           <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">
             <span class="msg__chip-tag">发现卡点</span>
-            <span class="msg__chip-text">「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
+            <span class="msg__chip-text">「{{ m.confusion.join('、') }}」</span>
           </span>
           <div class="msg__meta">
             {{ aiLabel }} · {{ m.time || nowTime() }}

@@ -899,6 +899,15 @@ onMounted(async () => {
   gap: 6px;
   border-left: 2px solid var(--line);
 }
+@media (prefers-reduced-motion: no-preference) {
+  .history__subs[open] > .history__sublist {
+    animation: hist-sub-in 0.14s var(--mk-ease-out, ease) both;
+  }
+}
+@keyframes hist-sub-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
 .history__sublist li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .history__sub-time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .history__sub-min { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
@@ -1008,6 +1017,12 @@ onMounted(async () => {
   color: var(--muted);
   font-size: 16px;
   line-height: 1;
+  transition: border-color var(--mk-dur-fast, 120ms) ease, color var(--mk-dur-fast, 120ms) ease, background var(--mk-dur-fast, 120ms) ease;
+}
+.month__arrow:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--blue) 35%, var(--line));
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
 }
 .month__arrow--off { opacity: 0.35; cursor: default; }
 .month__clear {
@@ -1020,7 +1035,9 @@ onMounted(async () => {
   font-weight: 700;
   color: var(--blue-deep);
   cursor: pointer;
+  transition: color var(--mk-dur-fast, 120ms) ease;
 }
+.month__clear:hover { color: var(--blue); text-decoration: underline; }
 .month__meta {
   display: flex;
   align-items: center;
@@ -1078,6 +1095,9 @@ onMounted(async () => {
   place-items: center;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease;
+}
+.mday:not(:disabled):not(.mday--selected):hover {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
 }
 /* 热力四档：只走 token 派生（h3 用 --mk-on-fill = 白字，明暗同值；它要求底是「饱和深底」，
    故 h3 底取 --mk-blue-fill(#2f6ae0，明暗同值的实心蓝) 而非 --blue：--blue 暗色档是

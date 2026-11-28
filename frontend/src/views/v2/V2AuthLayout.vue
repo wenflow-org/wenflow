@@ -92,6 +92,8 @@ const isDark = useIsDark();
   font-size: 12.5px; font-weight: 600; color: var(--faint); text-decoration: none; justify-self: start;
   /* ≥36px 可点高度（走查 2026-09-27：19px 高的文字链触控不达标） */
   display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px;
+  border-radius: var(--mk-radius-md);
+  transition: color 0.15s ease, background 0.15s ease;
 }
 .auth__back:hover { color: var(--blue-deep); }
 .auth__back--bottom { margin-top: 4px; }

@@ -22,7 +22,7 @@
              并给「查看全部路径」退回。 -->
         <span v-if="narrowedNote" class="km__note" role="status">
           <span>{{ narrowedNote }}</span>
-          <button type="button" class="km__note-action" @click="showAllPaths">查看全部路径</button>
+          <button type="button" class="km__note-action" :disabled="loading" @click="showAllPaths">查看全部路径</button>
         </span>
       </header>
 
@@ -40,7 +40,7 @@
           :loading="loading"
           :error="error"
           height="100%"
-          empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
+          empty-hint="生成路径或完成一节课后，概念与关系会出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"
           practice-action-text="去练习这个知识点"
@@ -104,7 +104,7 @@ function connectedCount(ns: MkGraphNode[], es: MkGraphEdge[]): number {
   return (drawn.length > 0 ? drawn : ns).length
 }
 
-async function load(nextPathId: string | null = pathId.value) {
+async function load(nextPathId: string | null = pathId.value, keepLoading = false) {
   loading.value = true
   error.value = ''
   try {
@@ -124,7 +124,7 @@ async function load(nextPathId: string | null = pathId.value) {
     edges.value = []
     paths.value = []
   } finally {
-    loading.value = false
+    if (!keepLoading || error.value) loading.value = false
   }
 }
 
@@ -171,14 +171,21 @@ function onPractice(node?: MkGraphNode | null) {
 }
 
 onMounted(async () => {
-  await load(null)
+  await load(null, true)
+  if (error.value) return
   // 首次进来若「全部路径」过大，先落到最近一条路径并说明原因（用户可切回全部）
   const first = paths.value[0]
-  if (pathId.value !== null || paths.value.length < 2 || !first) return
+  if (pathId.value !== null || paths.value.length < 2 || !first) {
+    loading.value = false
+    return
+  }
   const connected = connectedCount(nodes.value, edges.value)
-  if (connected <= AUTO_NARROW_CONNECTED_NODES) return
+  if (connected <= AUTO_NARROW_CONNECTED_NODES) {
+    loading.value = false
+    return
+  }
   // 教句「想看全貌可切回全部路径」删去（2026-11-03 真机走查）：全部路径 pill 就在下面一排
-  narrowedNote.value = `共 ${paths.value.length} 条路径、${connected} 个概念，已聚焦到「${first.title ?? '最近一条路径'}」以保证标签可读。`
+  narrowedNote.value = `概念较多（${connected} 个），已先聚焦「${first.title ?? '最近一条路径'}」。`
   await applyPath(first.id)
 })
 </script>
@@ -230,6 +237,7 @@ onMounted(async () => {
   min-height: 32px;
   padding: 0 6px;
   border: 0;
+  border-radius: var(--mk-radius-sm);
   background: none;
   font: inherit;
   font-size: 12.5px;
@@ -237,8 +245,12 @@ onMounted(async () => {
   color: var(--blue-deep);
   cursor: pointer;
   white-space: nowrap;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
-.km__note-action:hover { text-decoration: underline; }
+.km__note-action:hover:not(:disabled) { text-decoration: underline; }
+.km__note-action:active:not(:disabled) { transform: scale(0.98); }
+.km__note-action:disabled { opacity: 0.55; cursor: default; }
+.km__note-action:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 /* 图卡自适应（2026-11-10 用户裁决「改成自适应」）：
    整页「导航 + 主区」两段式弹性布局，图卡直接吃掉剩余高度，不再按 DPI 推固定像素
    （100dvh − 282 这类会在 4K 缩放下差几十像素）。
@@ -344,7 +356,7 @@ onMounted(async () => {
   padding: 10px 10px 4px;
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
-  box-shadow: var(--mk-shadow-sm);
+  box-shadow: none;
   background: var(--surface);
 }
 /* 「查看学习状态」通栏 ghost 已删（2026-10-09）：入口由顶导航/底部 dock 承担。

@@ -13,6 +13,7 @@
  */
 import type { TeachingScenarioContext } from './teaching-context-types';
 import { parseSessionArtifacts } from './checkpoint-shared';
+import { buildLessonAnchor, type LessonAnchor } from './lesson-anchor';
 
 export const STUDENT_NEEDS = [
   'answer',
@@ -63,6 +64,8 @@ export interface LessonContract {
   minTurns: number;
   timeBudgetMin: number | null;
   branchBudgets: LessonBranchBudgets;
+  /** 课堂锚（2026-11-28）：以主问题与自然过关判据锚定教学与白板，KC 退回后台图谱 */
+  anchor?: LessonAnchor;
 }
 
 export interface ParkingItem {
@@ -232,6 +235,7 @@ export function buildLessonContract(context: TeachingScenarioContext): LessonCon
     ? [{ kcId: '', name: String(context.taskProfile.coreConcept) }]
     : [];
   const coreKcs = dedupeKcs(fromKcs.length > 0 ? fromKcs : fromSeeds.length > 0 ? fromSeeds : fallback);
+  const anchor = buildLessonAnchor(context);
   return {
     version: 1,
     coreKcs,
@@ -241,6 +245,7 @@ export function buildLessonContract(context: TeachingScenarioContext): LessonCon
     // 新契约恒为 null；结束条件回到「核心 KC 是否讲透」，不是「25 分钟到了」。
     timeBudgetMin: null,
     branchBudgets: { ...DEFAULT_BUDGETS },
+    anchor,
   };
 }
 

@@ -64,6 +64,7 @@
       </label>
 
       <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
+        <span v-if="loading" class="spinner spinner--sm" aria-hidden="true"></span>
         {{ loading ? '正在创建账号…' : '创建账号' }}
       </button>
 
@@ -138,7 +139,9 @@ function touch(key: 'name' | 'password' | 'confirm') {
  * （该字段此前只有 @blur 会重算）。
  */
 function revalidateWhileTyping(key: 'name' | 'password' | 'confirm') {
+  formError.value = '';
   if (errors[key]) touch(key);
+  if (key === 'password' && errors.confirm) touch('confirm');
 }
 
 const safeRedirect = computed(() => {
@@ -245,9 +248,31 @@ onMounted(loadStatus);
 
 .hint { margin: 0; font-size: 12px; color: var(--faint); }
 .rules { list-style: none; margin: 0; padding: 0; display: flex; gap: 12px; flex-wrap: wrap; }
-.rules li { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--faint); }
-.rules li.is-ok { color: var(--green); font-weight: 700; }
-.rules li i { font-style: normal; }
+.rules li {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 600; color: var(--faint);
+  transition: color 0.18s ease;
+}
+.rules li.is-ok { color: var(--green-ink); }
+.rules li i { font-style: normal; display: inline-block; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rules { animation: reg-rules-in 0.18s var(--mk-ease-out) both; }
+  .rules li.is-ok i { animation: reg-check-pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .errorbar, .field__error { animation: reg-alert-in 0.18s var(--mk-ease-out) both; }
+}
+@keyframes reg-rules-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes reg-check-pop {
+  from { transform: scale(0.75); }
+  to { transform: scale(1); }
+}
+@keyframes reg-alert-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
 
 .btn-primary--block { justify-content: center; width: 100%; padding: 12px; font-size: 14.5px; }
 .btn-primary--block:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
@@ -261,6 +286,7 @@ onMounted(loadStatus);
   padding: 5px 8px;
   min-height: 36px;
   border-radius: var(--mk-radius-md);
+  transition: color 0.15s ease;
 }
 .switch button:hover { text-decoration: underline; }
 </style>
@@ -280,6 +306,9 @@ onMounted(loadStatus);
   color: var(--faint);
   cursor: pointer;
   display: grid; place-items: center;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 .field__eye:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 7%, transparent); }
+.field__eye:active { transform: translateY(-50%) scale(0.94); }
+.v2-page .field__eye:focus-visible { outline-offset: -2px; }
 </style>

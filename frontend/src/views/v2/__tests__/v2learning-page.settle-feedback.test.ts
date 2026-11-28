@@ -193,7 +193,7 @@ describe('#115 结算进度与成功后的反馈入口', () => {
 
     const w = await mountPage();
     await w.find('.imm-menu__btn').trigger('click');
-    const item = w.findAll('.learn__menu-item').find((b) => b.text().includes('结束学习（不计入完成）'));
+    const item = w.findAll('.learn__menu-item').find((b) => b.text().includes('提前结束'));
     expect(item).toBeTruthy();
     await item!.trigger('click');
     await flushPromises();
@@ -307,11 +307,11 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     expect(gate.exists(), 'OPEN_QUESTION 409 应亮常驻门禁').toBe(true);
     expect(gate.text()).toContain('老师刚提了一个问题或请学员提交结果，先完成再结束课堂');
     const openGuide = gate.find('.gate__guide').text();
-    expect(openGuide, 'OPEN_QUESTION 应引导先回答').toContain('回答它之后就能结算');
+    expect(openGuide, 'OPEN_QUESTION 应引导先回答').toContain('回答后可结算');
     expect(openGuide, '不得再承诺「老师回应完这一轮就能结算」这个可能不来的状态').not.toContain('再来结算课堂');
-    expect(openGuide, '应如实说明可能被再拦一次').toContain('这里会再拦一次');
-    expect(openGuide, '应指出随时可用的出口（结束学习不计入完成）').toContain('结束学习');
-    expect(gate.find('.gate__end').text(), '所有门禁都应有同一颗持久出口').toContain('结束学习（不计入完成）');
+    expect(openGuide, '应如实说明可能被再拦一次').toContain('会再拦');
+    expect(openGuide, '应指出随时可用的出口（提前结束不计完成）').toContain('提前结束');
+    expect(gate.find('.gate__end').text(), '所有门禁都应有同一颗持久出口').toContain('提前结束（不计完成）');
     // 再次结算、换一种原因：引导随原因切换
     api.finalizeSessionReliably.mockRejectedValueOnce({
       message: '还有一道题没有作答，先完成这道题再结束课堂',
@@ -324,9 +324,8 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     await clickCompleteAndSettle(w);
     gate = w.find('.gate');
     expect(gate.exists(), 'PENDING_CHECKPOINT 409 应亮常驻门禁').toBe(true);
-    expect(gate.find('.gate__guide').text(), 'PENDING_CHECKPOINT 应引导答完小测、等老师讲完这轮').toContain('先答完这道小测');
-    expect(gate.find('.gate__guide').text()).toContain('再来结算课堂');
-    expect(gate.find('.gate__end').text(), 'PENDING_CHECKPOINT 门禁也要给同一颗持久出口').toContain('结束学习（不计入完成）');
+    expect(gate.find('.gate__guide').text(), 'PENDING_CHECKPOINT 应引导答完小测后再结算').toContain('答完本轮小测后再结算');
+    expect(gate.find('.gate__end').text(), 'PENDING_CHECKPOINT 门禁也要给同一颗持久出口').toContain('提前结束（不计完成）');
 
     w.unmount();
   });
@@ -417,13 +416,13 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     expect(labels.some((t) => t.includes('完成并结算任务')), '已结算不应再摆「完成并结算任务」').toBe(false);
     expect(labels.some((t) => t.includes('完成本节')), '已结算不应再摆结算入口').toBe(false);
     expect(labels.some((t) => t.includes('结束学习')), '已结算不应再摆「结束学习」').toBe(false);
-    expect(labels.some((t) => t.includes('查看本次学习反馈')), '已结算应给反馈入口').toBe(true);
+    expect(labels.some((t) => t.includes('查看学习反馈')), '已结算应给反馈入口').toBe(true);
     /* 离开课堂的出口在左上角返回钮上（.learn__back 带 aria-label「返回路径详情」），
        2026-11-06 走查把菜单里那条重复的「返回路径详情」撤了 */
     expect(w.find('.learn__back[aria-label="返回路径详情"]').exists(), '左上角应有返回出口').toBe(true);
 
     // 反馈入口：replace 到本会话的评估页（回退不该再回到终态教室）
-    const feedback = w.findAll('.learn__menu-item').find((b) => b.text().includes('查看本次学习反馈'));
+    const feedback = w.findAll('.learn__menu-item').find((b) => b.text().includes('查看学习反馈'));
     await feedback!.trigger('click');
     expect(router.replace).toHaveBeenCalledWith(expect.stringContaining('/learn/task_1/evaluation/s_settle'));
 

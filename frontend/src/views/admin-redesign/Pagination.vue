@@ -311,6 +311,15 @@ watch(
     color: var(--mk-blue-text);
   }
 }
+.mk-pagination__btn:focus-visible,
+.mk-pagination__num:focus-visible {
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
+}
+.mk-pagination__btn:active:not(:disabled),
+.mk-pagination__num:active:not(:disabled) {
+  transform: scale(0.98);
+}
 .mk-pagination__btn:disabled,
 .mk-pagination__num:disabled {
   opacity: 0.45;

@@ -22,12 +22,14 @@
               <div class="profile-name-row">
                 <template v-if="editingName">
                   <input
+                    ref="nameInputEl"
                     v-model="nameDraft"
                     class="uc-field__input profile-name-input"
                     maxlength="64"
                     placeholder="输入新用户名"
                     aria-label="用户名"
                     @keyup.enter="handleSaveName"
+                    @keyup.esc="cancelEditName"
                   />
                   <button type="button" class="uc-btn uc-btn--primary uc-btn--sm" :disabled="nameSubmitting" @click="handleSaveName">
                     {{ nameSubmitting ? '保存中…' : '保存' }}
@@ -84,12 +86,12 @@
         <!-- 口径说明：连续天数为 0 时，今天新开始、尚未产生学习时长的任务会让用户误读成
              「今天白学了」（2026-10-15 走查 #42）。给 0 值补一行可见口径，不用悬停提示。 -->
         <p v-if="!kpiLoading && kpi.streak === 0" class="profile-kpis__note">
-          当天新开始的任务在产生有效学习时长后，才计入连续天数与掌握进度。
+          产生有效学习时长后计入连续天数。
         </p>
         <!-- 「—」不能既表示 0 又表示没加载出来：失败时给明确说明与重试入口 -->
         <p v-if="!kpiLoading && kpiFailed" class="profile-kpis__note profile-kpis__note--warn" role="status">
           部分统计暂时不可用。
-          <button type="button" class="profile-kpis__retry" @click="loadKpis">重试</button>
+          <button type="button" class="profile-kpis__retry" :disabled="kpiLoading" @click="loadKpis">重试</button>
         </p>
 
         <!-- 快捷入口列表卡（原型 wf-list 同构） -->
@@ -120,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { BookOpen, ScrollText } from 'lucide-vue-next'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue'
@@ -148,11 +150,17 @@ const kpiLoading = ref(true)
 const kpiFailed = ref(false)
 
 async function loadKpis() {
+  kpiLoading.value = true
   kpiFailed.value = false
   try {
-    try {
-      const res = await request.get('/users/me/sessions', { params: { limit: 500 } })
-      const list = unwrapArray<{ startTime?: string; durationMinutes?: number }>(res)
+    const [sessionsRes, achievementsRes, graphRes] = await Promise.allSettled([
+      request.get('/users/me/sessions', { params: { limit: 500 } }),
+      request.get('/achievements/all'),
+      learningAPI.getConceptGraph(),
+    ])
+
+    if (sessionsRes.status === 'fulfilled') {
+      const list = unwrapArray<{ startTime?: string; durationMinutes?: number }>(sessionsRes.value)
       const minutesByDate = new Map<string, number>()
       for (const s of list) {
         const key = localDateKeyFromIso(typeof s.startTime === 'string' ? s.startTime : null)
@@ -160,21 +168,28 @@ async function loadKpis() {
         minutesByDate.set(key, (minutesByDate.get(key) ?? 0) + (typeof s.durationMinutes === 'number' ? s.durationMinutes : 0))
       }
       kpi.value.streak = computeStreakDays(minutesByDate)
-    } catch { kpiFailed.value = true }
-    try {
-      const res = await request.get('/achievements/all')
-      const items = unwrapArray<{ unlocked?: boolean }>(res)
+    } else {
+      kpiFailed.value = true
+    }
+
+    if (achievementsRes.status === 'fulfilled') {
+      const items = unwrapArray<{ unlocked?: boolean }>(achievementsRes.value)
       kpi.value.achievements = items.filter((a) => a.unlocked).length
-    } catch { kpiFailed.value = true }
-    try {
-      const graph = (await learningAPI.getConceptGraph()) as {
+    } else {
+      kpiFailed.value = true
+    }
+
+    if (graphRes.status === 'fulfilled') {
+      const graph = graphRes.value as {
         nodes?: Array<{ stability?: string | null; masteryScore?: number | null; extractionCount?: number }>
       } | null
       const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : []
       /* 与学习状态页/知识图谱同一判据（conceptBandOf）：只认 stability 会让
          「developing + 0.9」这类概念在这里不计数、在图谱里算已掌握 */
       kpi.value.mastery = nodes.filter((n) => conceptBandOf(n) === 'stable').length
-    } catch { kpiFailed.value = true }
+    } else {
+      kpiFailed.value = true
+    }
   } finally {
     kpiLoading.value = false
   }
@@ -244,9 +259,14 @@ async function loadUserProfile() {
 }
 
 // ---- 用户名编辑 ----
+const nameInputEl = ref<HTMLInputElement | null>(null)
 function startEditName() {
   nameDraft.value = user.value.name || ''
   editingName.value = true
+  void nextTick(() => {
+    nameInputEl.value?.focus()
+    nameInputEl.value?.select()
+  })
 }
 
 function cancelEditName() {
@@ -300,7 +320,7 @@ async function handleSaveName() {
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--blue, #2f6ae0) 12%, transparent);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
   color: var(--blue-deep);
   font-size: 21px;
   font-weight: 800;
@@ -375,7 +395,6 @@ async function handleSaveName() {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal, 16px);
-  box-shadow: var(--shadow-sm);
   padding: 13px 8px;
   display: grid;
   justify-items: center;
@@ -405,15 +424,24 @@ async function handleSaveName() {
 }
 .profile-kpis__note--warn { color: var(--amber-ink, var(--ink)); }
 .profile-kpis__retry {
-  margin-left: 6px;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin-left: 4px;
+  padding: 0 6px;
   border: 0;
+  border-radius: var(--mk-radius-sm);
   background: none;
   color: var(--blue-deep);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
+  transition: color var(--mk-dur-fast) var(--mk-ease-out), transform var(--mk-dur-fast) var(--mk-ease-out);
 }
+.profile-kpis__retry:hover:not(:disabled) { color: var(--blue); }
+.profile-kpis__retry:active:not(:disabled) { transform: scale(0.98); }
+.profile-kpis__retry:disabled { opacity: 0.55; cursor: default; }
+.profile-kpis__retry:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* 骨架态：保高与出数态一致（避免出数时卡片跳动），骨架撑满卡宽 */
 .profile-kpi--loading {
@@ -463,8 +491,10 @@ async function handleSaveName() {
   color: var(--blue-deep);
 }
 
-.profile-menu__item:hover .profile-menu__chev {
-  transform: translateX(2px);
+@media (prefers-reduced-motion: no-preference) {
+  .profile-menu__item:hover .profile-menu__chev {
+    transform: translateX(2px);
+  }
 }
 
 .profile-menu__chev {

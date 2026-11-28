@@ -44,18 +44,19 @@ const adminSession = hasAdminSession();
   margin: 0 0 12px;
   color: var(--color-primary, #2f6ae0);
   letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .not-found-title {
   font-size: 22px;
   font-weight: 600;
   margin: 0 0 8px;
-  color: var(--text-primary, #303133);
+  color: var(--ink, var(--text-primary));
 }
 
 .not-found-desc {
   font-size: 14px;
-  color: var(--text-secondary, #909399);
+  color: var(--muted, var(--text-secondary));
   margin: 0 0 28px;
 }
 
@@ -70,15 +71,15 @@ const adminSession = hasAdminSession();
   display: inline-flex;
   align-items: center;
   padding: 10px 22px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-md);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
-  transition: opacity 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
-.nf-btn:hover {
-  opacity: 0.85;
+.nf-btn:active {
+  transform: scale(0.98);
 }
 
 .nf-btn--primary {
@@ -86,27 +87,46 @@ const adminSession = hasAdminSession();
   color: var(--wf-text-on-primary);
 }
 
+.nf-btn--primary:hover {
+  background: var(--blue-deep, var(--color-primary-dark));
+}
+
 .nf-btn--ghost {
-  border: 1px solid var(--border-color, #dcdfe6);
-  color: var(--text-primary, #303133);
+  border: 1px solid var(--line, var(--border-color));
+  color: var(--ink, var(--text-primary));
   background: transparent;
 }
 
-/* 暗色模式：容器/文字/幽灵按钮随主题翻转（--canvas 亮色在 .v2-page 或 v2.css :root 定义；
-   html[data-theme='dark'] 时由 v2.css 覆写为 #0f1620，此处仅兜底无 v2 上下文时的直设） */
+.nf-btn--ghost:hover {
+  border-color: var(--blue, var(--color-primary));
+  color: var(--blue-deep, var(--color-primary-dark));
+  background: color-mix(in srgb, var(--blue, var(--color-primary)) 5%, var(--surface, transparent));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .not-found-card {
+    animation: nf-card-in 0.36s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  }
+}
+
+@keyframes nf-card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
 [data-theme='dark'] .not-found-page {
-  background: #141415;
+  background: var(--canvas);
 }
 [data-theme='dark'] .not-found-title {
-  color: #efeff0;
+  color: var(--ink);
 }
 [data-theme='dark'] .not-found-desc {
-  color: #aaacb1;
+  color: var(--muted);
 }
 [data-theme='dark'] .nf-btn--ghost {
-  border-color: rgba(230, 237, 247, 0.16);
-  color: #d7d8da;
-  background: rgba(24, 34, 48, 0.7);
+  border-color: var(--line);
+  color: var(--ink);
+  background: var(--surface);
 }
 </style>
 

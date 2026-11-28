@@ -600,3 +600,25 @@ describe('findUnmatchedBoardReferences（滞后引用判定，u17L1 reeval33 实
     }).misses).toEqual([]);
   });
 });
+
+describe('applyBoardIntent：concept-map 首轮不剧透因果边判词', () => {
+  it('askAbout=condition 时撤掉「导致/造成/产生」等因果结论边标签，保留节点与结构连线', () => {
+    const intent = decideBoardIntent({ kind: 'concept-map', taskType: 'acquire' });
+    expect(intent.askAbout).toBe('condition');
+    const out = applyBoardIntent({
+      nodes: [
+        { id: 'n1', label: '种地谋生' },
+        { id: 'n2', label: '黏着在土地上' },
+        { id: 'n3', label: '不流动' },
+      ],
+      edges: [
+        { from: 'n1', to: 'n2', label: '导致' },
+        { from: 'n2', to: 'n3', label: '造成' },
+      ],
+      takeaway: '先有种地谋生，才长出不流动与土气',
+    }, intent);
+    expect(out.takeaway).toBeUndefined();
+    expect((out.nodes as any[]).map((n) => n.label)).toEqual(['种地谋生', '黏着在土地上', '不流动']);
+    expect((out.edges as any[]).every((e) => e.label === undefined)).toBe(true);
+  });
+});

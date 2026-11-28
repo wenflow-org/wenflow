@@ -13,10 +13,8 @@
              宽屏下「主要原因…」「确认后会…」各自独立成行，一句一行的碎排版就是用户指的问题。 -->
         <p v-if="advisory.attribution?.reason" class="section-attribution">
           <span class="attribution-tag">主要原因</span>{{ advisory.attribution.reason }}
-          <span class="section-hint section-hint--inline">{{ settleReassurance }}</span>
         </p>
-        <p v-else class="section-hint">{{ settleReassurance }}</p>
-        <div v-if="advisoryKept" class="section-hint">你已选择保持原计划，这条建议不会再调整后续安排。</div>
+        <div v-if="advisoryKept" class="section-hint">已保持原计划</div>
         <div v-else class="advisory-options" :class="{ 'advisory-options--pair': advisoryOptions.length === 2 }">
           <button
             v-for="option in advisoryOptions"
@@ -181,9 +179,6 @@ const advisory = computed(() => props.advisory || null);
  * （「该调整只会调整后续阶段的课程安排，不会覆盖/不影响你已完成的内容。」），
  * 已存库的建议仍带着它——渲染时剥掉，避免同义重复和孤行；模板侧已不再生成这句。
  */
-/** 结算安抚句：有归因时并进同一段流，无归因时独立成行（文案单源，防 R6 同文件重复）
-    （2026-11-04 去「已完成的内容不会改变」这句替用户表态的安抚，只说调整动作） */
-const settleReassurance = '确认后会调整后续学习安排。';
 const advisoryBody = computed(() => (advisory.value?.ui.body || '')
   .replace(/该调整只会调整后续阶段的课程安排，(?:不会覆盖|不影响)你已完成的内容。/g, '')
   .trim());

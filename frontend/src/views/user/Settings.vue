@@ -88,7 +88,6 @@
                   {{ showKey ? '隐藏' : '显示' }}
                 </button>
               </div>
-              <span v-if="hasSavedApiKey" class="uc-field__hint">已保存密钥，留空则继续使用</span>
             </label>
 
             <div class="api-form__grid">
@@ -1290,6 +1289,7 @@ const handleDeactivate = async () => {
   align-items: center;
   padding: 6px 8px;
   border-radius: 8px;
+  transition: background var(--mk-dur-fast, 120ms) ease, color var(--mk-dur-fast, 120ms) ease;
 }
 
 .uc-field__eye:hover {
@@ -1416,6 +1416,13 @@ const handleDeactivate = async () => {
   display: grid;
   gap: 14px;
   max-width: 640px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mcp-form { animation: settings-reveal 0.15s var(--mk-ease-out, ease) both; }
+}
+@keyframes settings-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
 }
 
 .mcp-hint {

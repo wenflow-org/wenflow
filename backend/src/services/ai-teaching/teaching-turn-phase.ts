@@ -26,6 +26,7 @@ import {
   type LessonPhaseTurnView,
   type LessonSegment,
 } from './lesson-phase';
+import { segmentsFromAnchor } from './lesson-anchor';
 
 export interface TurnPhaseResolution {
   taughtSoFar: string;
@@ -67,11 +68,14 @@ export function resolveTurnPhaseView(params: TurnPhaseParams): TurnPhaseResoluti
   // 此前「持久化段优先」——板晚到或板段数与持久段数不等时，boardReveal 按教学段算、
   // 实际露板按板段算，两套坐标互相矛盾（教学 2 段 / 板 4 段时，整合阶段指令说「还有空行」、
   // 板上却已全露）。板是「一块板管一节课」的真理源，段数跟板走。
+  const anchorSegments = segmentsFromAnchor(lessonContract.anchor, context.taskTitle);
   const lessonSegments: LessonSegment[] = boardSegments.length > 0
     ? boardSegments
     : persistedPhaseState?.segments?.length
       ? persistedPhaseState.segments
-      : segmentsFromKcs(lessonContract.coreKcs.map((kc) => kc.name), context.taskTitle);
+      : anchorSegments.length > 0
+        ? anchorSegments
+        : segmentsFromKcs(lessonContract.coreKcs.map((kc) => kc.name), context.taskTitle);
   // 段数变了就把持久状态里的段列表与当前段号一起夹回来（不改阶段、不清进度）
   const phaseStateForTurn = persistedPhaseState && persistedPhaseState.segments.length !== lessonSegments.length
     ? { ...persistedPhaseState, segments: lessonSegments, segment: Math.min(persistedPhaseState.segment, lessonSegments.length) }
@@ -97,6 +101,7 @@ export function resolveTurnPhaseView(params: TurnPhaseParams): TurnPhaseResoluti
     exploratory: context.entryState === 'exploratory',
     taughtText: taughtSoFar,
     acceptanceCriteria: context.currentTaskContext.acceptanceCriteria ?? null,
+    anchor: lessonContract.anchor ?? null,
     board: board && !isDegenerateFirstBoard(board)
       ? { segmentCount: boardSegmentCount(board.figure?.maskedSpec) }
       : null,

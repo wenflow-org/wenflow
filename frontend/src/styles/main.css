@@ -184,7 +184,7 @@
   --mk-input-disabled-bg: #f4f6fa;
   --mk-btn-disabled-bg: #eceff4;
   --mk-modal-close-bg: #f0f2f5;
-  --mk-modal-close-hover-bg: #f0f2f5; /* 亮色下悬停不变（既有行为）；暗色档才加深 */
+  --mk-modal-close-hover-bg: var(--mk-drawer-close-hover-bg);
   --mk-drawer-close-bg: #f1f5fb;
   --mk-drawer-close-hover-bg: #e2eaf7;
   --mk-card-foot-bg: #fafbfe;

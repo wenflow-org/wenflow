@@ -163,7 +163,7 @@
                `## 第一章` 和 `*第一条*` 原样裸露、几千字挤成一坨。现在先清洗爬虫头、
               再按 markdown 渲染，行高 1.75，条文各自成段。 -->
           <div v-else class="lib-preview__text" v-html="previewHtml"></div>
-          <p v-if="preview.truncated" class="lib-preview__note">仅预览前 60000 字，完整正文用于路径与课堂取回。</p>
+          <p v-if="preview.truncated" class="lib-preview__note">仅预览前 60000 字，学习时会读取完整正文。</p>
         </div>
       </section>
     </div>
@@ -171,7 +171,7 @@
     <div v-if="pendingDelete" class="lib-modal" @click.self="closeDelete">
       <section class="lib-modal__card lib-modal__card--confirm" role="alertdialog" aria-modal="true" aria-labelledby="lib-delete-title">
         <h2 id="lib-delete-title">删除这份资料？</h2>
-        <p>「{{ pendingDelete.name }}」删除后不可恢复。已生成的路径不会自动重建。</p>
+        <p>「{{ pendingDelete.name }}」删除后不可恢复。</p>
         <p v-if="deleteUsageWarn" class="lib-modal__usage-warn">{{ deleteUsageWarn }}</p>
         <div class="lib-modal__actions">
           <button type="button" class="lib-action" :disabled="deleting" @click="closeDelete">取消</button>
@@ -955,6 +955,7 @@ onMounted(load);
   place-items: center;
   padding: 20px;
   background: color-mix(in srgb, var(--ink) 35%, transparent);
+  animation: v2-fade-in var(--mk-dur-fast) var(--mk-ease-out);
 }
 
 .lib-modal__card {
@@ -966,6 +967,7 @@ onMounted(load);
   background: var(--surface);
   box-shadow: var(--mk-shadow-modal);
   overflow: hidden;
+  animation: v2-modal-in var(--mk-dur) var(--mk-ease-out);
 }
 
 .lib-modal__card--confirm {

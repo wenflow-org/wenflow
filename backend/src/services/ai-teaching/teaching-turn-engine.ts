@@ -387,11 +387,18 @@ export async function processStudentMessage(
           materials: context.materials,
         }),
       },
-      scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+      scenario: {
+        subject: session.subject,
+        topic: session.topic,
+        learnerLevel: lessonContract.anchor?.learnerBaseline || 'beginner',
+      },
       studentSays: message,
       kindHint: visualOpportunity?.kindHint ?? null,
       questionIntent: intent,
       lastTeacherReply: null,
+      lessonAnchor: lessonContract.anchor
+        ? { mainQuestion: lessonContract.anchor.mainQuestion, criteria: lessonContract.anchor.criteria.map((c) => c.text) }
+        : null,
       instruction:
         BOARD_DESIGN_BASE_INSTRUCTION
         + intent.instruction
@@ -408,7 +415,17 @@ export async function processStudentMessage(
       });
     }
     if (designed.figure) {
-      board = openBoard(String(session.taskId), designed.figure, { conceal: 'takeaway', intent });
+      const actualKind = String((designed.figure as { kind?: unknown }).kind ?? '');
+      const finalIntent = !visualOpportunity?.kindHint && actualKind
+        ? decideBoardIntent({
+            taskType: context.taskType,
+            kind: actualKind,
+            studentText: message,
+            lastTeacherText: null,
+            boardNumbers: [],
+          })
+        : intent;
+      board = openBoard(String(session.taskId), designed.figure, { conceal: 'takeaway', intent: finalIntent });
     } else {
       boardDesignFailures = /^(?:teaching-board-design declined|material-paraphrase-board)/.test(String(designed.reason || ''))
         ? BOARD_DESIGN_MAX_ATTEMPTS
@@ -1329,11 +1346,18 @@ export async function processStudentMessage(
       } else {
         const designed = await designBoard({
           task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType, material: context.taskMaterialPayload || null },
-          scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+          scenario: {
+            subject: session.subject,
+            topic: session.topic,
+            learnerLevel: lessonContract.anchor?.learnerBaseline || 'beginner',
+          },
           studentSays: message,
           kindHint: board.figure?.kind ?? null,
           questionIntent: intent,
           lastTeacherReply: teachingOutput.reply,
+          lessonAnchor: lessonContract.anchor
+            ? { mainQuestion: lessonContract.anchor.mainQuestion, criteria: lessonContract.anchor.criteria.map((c) => c.text) }
+            : null,
           instruction:
             (intent.exampleChange === 'scene'
               ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
@@ -1374,11 +1398,18 @@ export async function processStudentMessage(
         // 带清除指令强制重绘一次；4b 换例守门不适用——纠正不是换数，信号更强更明确。
         const designed = await designBoard({
           task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType, material: context.taskMaterialPayload || null },
-          scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+          scenario: {
+            subject: session.subject,
+            topic: session.topic,
+            learnerLevel: lessonContract.anchor?.learnerBaseline || 'beginner',
+          },
           studentSays: message,
           kindHint: board.figure?.kind ?? null,
           questionIntent: intent,
           lastTeacherReply: teachingOutput.reply,
+          lessonAnchor: lessonContract.anchor
+            ? { mainQuestion: lessonContract.anchor.mainQuestion, criteria: lessonContract.anchor.criteria.map((c) => c.text) }
+            : null,
           instruction: '老师本轮纠正了学生的一个错误理解。把板面改成**老师本轮纠正后的正确口径**；'
             + '不得保留学生被纠正前的错误版本。结构、图型、副标注写法不变。'
             + intent.instruction + correctionDirective,

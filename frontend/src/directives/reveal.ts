@@ -50,6 +50,9 @@ function getObserver(): IntersectionObserver {
 
 export const vReveal: Directive<HTMLElement, RevealOptions | number | undefined> = {
   mounted(el, binding) {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      return
+    }
     el.classList.add('rv')
     const delay = typeof binding.value === 'number' ? binding.value : binding.value?.delay
     if (delay) el.style.transitionDelay = `${delay}ms`
